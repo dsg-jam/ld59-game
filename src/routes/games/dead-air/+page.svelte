@@ -111,7 +111,7 @@
     <p>{$endState.winner === 'researchers' ? 'The outpost reconnects to the world.' : 'The relay falls silent in the storm.'}</p>
     <ul>
       {#each $endState.roles as r}
-        <li>{r.name} — {r.role}</li>
+        <li>{r.name} — {r.role.toUpperCase()}</li>
       {/each}
     </ul>
     <button onclick={() => location.reload()}>PLAY AGAIN</button>
