@@ -101,17 +101,17 @@ import {
   // ── PEER DATA CONNECTIONS ─────────────────────────────────────────────────────
   function resetNet() {
     for (const c of conns.values()) {
-      try { c.close(); } catch { // ignore
+      try { c.close(); } catch { /* ignore */ }
     }
     conns.clear();
     for (const call of mediaCalls.values()) {
-      try { call.close(); } catch { // ignore
+      try { call.close(); } catch { /* ignore */ }
     }
     mediaCalls.clear();
     incomingRawStreams.clear();
     voicePipelines.clear();
     if (peer) {
-      try { peer.destroy(); } catch { // ignore
+      try { peer.destroy(); } catch { /* ignore */ }
       peer = null;
     }
     updateNetDot(false);
@@ -718,8 +718,8 @@ import {
       }
       src.start();
       noiseSrc.start();
-      src.onended = () => { try { noiseSrc.stop(); } catch { // ignore };
-    } catch { // ignore
+      src.onended = () => { try { noiseSrc.stop(); } catch { /* ignore */ } };
+    } catch { /* ignore */ }
   }
 
   function handleMimicPlayback(msg) {
