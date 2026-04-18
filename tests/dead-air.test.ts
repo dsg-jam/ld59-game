@@ -288,9 +288,25 @@ test.describe("Dead Air engine – isIsolatedInDark", () => {
     // Place target far from everything
     const towers = createDefaultTowers();
     const players = playersMap([
-      { id: "r1", name: "R1", color: "#0f0", x: WORLD_W, y: WORLD_H, alive: true, spectator: false },
+      {
+        id: "r1",
+        name: "R1",
+        color: "#0f0",
+        x: WORLD_W,
+        y: WORLD_H,
+        alive: true,
+        spectator: false,
+      },
       { id: "r2", name: "R2", color: "#0f0", x: 0, y: 0, alive: true, spectator: false },
-      { id: "m1", name: "M", color: "#f00", x: WORLD_W - 5, y: WORLD_H - 5, alive: true, spectator: false },
+      {
+        id: "m1",
+        name: "M",
+        color: "#f00",
+        x: WORLD_W - 5,
+        y: WORLD_H - 5,
+        alive: true,
+        spectator: false,
+      },
     ]);
     const roles = new Map<string, Role>([
       ["r1", "researcher"],
@@ -303,7 +319,15 @@ test.describe("Dead Air engine – isIsolatedInDark", () => {
   test("dead target returns false", () => {
     const towers = createDefaultTowers();
     const players = playersMap([
-      { id: "r1", name: "R1", color: "#0f0", x: WORLD_W, y: WORLD_H, alive: false, spectator: true },
+      {
+        id: "r1",
+        name: "R1",
+        color: "#0f0",
+        x: WORLD_W,
+        y: WORLD_H,
+        alive: false,
+        spectator: true,
+      },
     ]);
     const roles = new Map<string, Role>([["r1", "researcher"]]);
     expect(isIsolatedInDark("r1", players, roles, towers)).toBe(false);
@@ -574,7 +598,15 @@ test.describe("Dead Air engine – full game round simulation", () => {
     const towers = createDefaultTowers();
     const tA = towers[0]!;
     const players = playersMap([
-      { id: "m1", name: "M", color: "#f00", x: tA.x + 5, y: tA.y + 5, alive: true, spectator: false },
+      {
+        id: "m1",
+        name: "M",
+        color: "#f00",
+        x: tA.x + 5,
+        y: tA.y + 5,
+        alive: true,
+        spectator: false,
+      },
       { id: "r1", name: "R", color: "#0f0", x: tA.x, y: tA.y, alive: true, spectator: false },
     ]);
 
@@ -589,7 +621,15 @@ test.describe("Dead Air engine – full game round simulation", () => {
     const towers = createDefaultTowers();
     // r1 is at the far corner — far from all towers and no other researcher nearby
     const players = playersMap([
-      { id: "m1", name: "M", color: "#f00", x: WORLD_W - 1, y: WORLD_H - 1, alive: true, spectator: false },
+      {
+        id: "m1",
+        name: "M",
+        color: "#f00",
+        x: WORLD_W - 1,
+        y: WORLD_H - 1,
+        alive: true,
+        spectator: false,
+      },
       { id: "r1", name: "R", color: "#0f0", x: WORLD_W, y: WORLD_H, alive: true, spectator: false },
     ]);
 
@@ -659,7 +699,7 @@ test.describe("Dead Air page – browser", () => {
     // Wait for room to open
     await page.waitForFunction(
       () => document.getElementById("room-code")?.textContent !== "-----",
-      { timeout: 10_000 },
+      { timeout: 10_000 }
     );
 
     // The end screen must NOT be visible — the old bug would show it instantly

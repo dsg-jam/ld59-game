@@ -39,14 +39,7 @@ export interface VoteResult {
 export const WORLD_W = 1400;
 export const WORLD_H = 900;
 export const PLAYER_SPEED = 150;
-export const PLAYER_COLORS = [
-  "#ffb800",
-  "#66d9ff",
-  "#ff66cc",
-  "#95ff66",
-  "#ff8a66",
-  "#b19dff",
-];
+export const PLAYER_COLORS = ["#ffb800", "#66d9ff", "#ff66cc", "#95ff66", "#ff8a66", "#b19dff"];
 export const MAX_PLAYERS = 6;
 export const TOWER_REQUIRED = 30;
 export const REPAIR_RADIUS = 40;
@@ -81,11 +74,7 @@ export function createDefaultTowers(): Tower[] {
   return DEFAULT_TOWERS.map((t) => ({ ...t }));
 }
 
-export function createPlayer(
-  id: string,
-  name: string,
-  index: number,
-): Player {
+export function createPlayer(id: string, name: string, index: number): Player {
   return {
     id,
     name,
@@ -105,7 +94,7 @@ export function createPlayer(
  */
 export function assignRoles(
   playerIds: readonly string[],
-  rng: () => number = Math.random,
+  rng: () => number = Math.random
 ): Map<string, Role> {
   if (playerIds.length === 0) {
     return new Map();
@@ -137,18 +126,16 @@ export function assignRoles(
 export function checkWinConditions(
   players: ReadonlyMap<string, Player>,
   roles: ReadonlyMap<string, Role>,
-  towers: readonly Tower[],
+  towers: readonly Tower[]
 ): Winner | null {
   const towersDone = towers.every((t) => t.progress >= TOWER_REQUIRED);
   if (towersDone) return "researchers";
 
-  const mimicAlive = [...players.values()].some(
-    (p) => p.alive && roles.get(p.id) === "mimic",
-  );
+  const mimicAlive = [...players.values()].some((p) => p.alive && roles.get(p.id) === "mimic");
   if (!mimicAlive) return "researchers";
 
   const researchersAlive = [...players.values()].filter(
-    (p) => p.alive && roles.get(p.id) === "researcher",
+    (p) => p.alive && roles.get(p.id) === "researcher"
   ).length;
   if (researchersAlive === 0) return "mimic";
 
@@ -166,7 +153,7 @@ export function updateTowers(
   towers: Tower[],
   players: ReadonlyMap<string, Player>,
   roles: ReadonlyMap<string, Role>,
-  dt: number,
+  dt: number
 ): number {
   let repairing = 0;
   for (const tower of towers) {
@@ -195,7 +182,7 @@ export function isIsolatedInDark(
   targetId: string,
   players: ReadonlyMap<string, Player>,
   roles: ReadonlyMap<string, Role>,
-  towers: readonly Tower[],
+  towers: readonly Tower[]
 ): boolean {
   const target = players.get(targetId);
   if (!target || !target.alive) return false;
@@ -203,7 +190,7 @@ export function isIsolatedInDark(
     if (dist(target.x, target.y, t.x, t.y) <= DARK_CHECK_RADIUS) return false;
   }
   const others = [...players.values()].filter(
-    (p) => p.id !== targetId && p.alive && roles.get(p.id) !== "mimic",
+    (p) => p.id !== targetId && p.alive && roles.get(p.id) !== "mimic"
   );
   for (const p of others) {
     if (dist(target.x, target.y, p.x, p.y) <= DARK_CHECK_RADIUS) return false;
@@ -220,7 +207,7 @@ export function isIsolatedInDark(
 export function resolveVote(
   vote: VoteState,
   players: ReadonlyMap<string, Player>,
-  roles: ReadonlyMap<string, Role>,
+  roles: ReadonlyMap<string, Role>
 ): VoteResult {
   const tally = new Map<string, number>();
   for (const target of Object.values(vote.votes)) {
@@ -260,7 +247,7 @@ export function applyMovement(
   dx: number,
   dy: number,
   dt: number,
-  speed: number = PLAYER_SPEED,
+  speed: number = PLAYER_SPEED
 ): { x: number; y: number } {
   if (dx === 0 && dy === 0) return { x, y };
   const len = Math.hypot(dx, dy) || 1;
