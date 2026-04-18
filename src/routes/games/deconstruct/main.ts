@@ -43,6 +43,8 @@ const TABLE_RADIUS = 8;
 const BLOCK_SIZE = 1;
 const GAP = 0.08;
 const TOTAL_ROUNDS = 10;
+const MAX_INITIATIVE = 30;
+const WINNER_TIED = -2;
 
 // ---- Network state ----
 let peer = null;
@@ -265,7 +267,10 @@ function animateBlockRemoval(sel) {
         let stack = meshGrid[bx] ? meshGrid[bx][by] : null;
         if (stack && stack.length > 0) {
             let obj = stack.pop();
-            sceneAnims.push({ type: 'blockRise', mesh: obj.mesh, edge: obj.edge, vel: 0.015 + Math.random() * 0.025, rot: (Math.random() - 0.5) * 0.12, opacity: 1, t: 0 });
+            let clonedMat = obj.mesh.material.clone();
+            clonedMat.transparent = true;
+            obj.mesh.material = clonedMat;
+            sceneAnims.push({ type: 'blockRise', mesh: obj.mesh, edge: obj.edge, clonedMat: clonedMat, vel: 0.015 + Math.random() * 0.025, rot: (Math.random() - 0.5) * 0.12, opacity: 1, t: 0 });
         }
     });
 }
@@ -415,7 +420,7 @@ function generateHand() {
     let h = [];
     const inits = new Set();
     while (h.length < 5) {
-        const init = 1 + Math.floor(rand() * 30);
+        const init = 1 + Math.floor(rand() * MAX_INITIATIVE);
         if (inits.has(init)) continue;
         inits.add(init);
         const maxIdx = Math.min(SHAPES.length - 1, Math.floor(init / 4));
@@ -566,7 +571,7 @@ function hostResolveTurn() {
         }
         let tiedCount = 0;
         for (let i = 0; i < n; i++) { if ((HS.scores[i] || 0) === best) tiedCount++; }
-        if (tiedCount > 1) winnerSlot = -2;
+        if (tiedCount > 1) winnerSlot = WINNER_TIED;
     }
     const scores = [];
     for (let i = 0; i < n; i++) scores.push({ slot: i, score: HS.scores[i] || 0 });
@@ -636,7 +641,7 @@ function onTurnResult(data) {
         const totalDelay = data.results.length * 450 + 1200;
         setTimeout(function () {
             let msg;
-            if (data.winnerSlot === -2) msg = 'Signal split — tied transmission!';
+            if (data.winnerSlot === WINNER_TIED) msg = 'Signal split — tied transmission!';
             else if (data.winnerSlot === mySlot) msg = 'You intercepted the transmission!';
             else msg = slotName(data.winnerSlot) + ' intercepted the transmission.';
             const scoreText = data.scores.map(function (s) { return slotName(s.slot) + ': ' + s.score; }).join('  |  ');
@@ -995,14 +1000,12 @@ function animate() {
             a.edge.position.copy(a.mesh.position);
             a.edge.rotation.copy(a.mesh.rotation);
             a.opacity -= dt * 1.0;
-            a.mesh.material = a.mesh.material.clone();
-            a.mesh.material.transparent = true;
-            a.mesh.material.opacity = Math.max(0, a.opacity);
+            a.clonedMat.opacity = Math.max(0, a.opacity);
             a.edge.material.opacity = Math.max(0, a.opacity * 0.2);
             if (a.opacity <= 0) {
                 constructGroup.remove(a.mesh);
                 constructGroup.remove(a.edge);
-                a.mesh.material.dispose();
+                a.clonedMat.dispose();
                 sceneAnims.splice(i, 1);
             }
         }
