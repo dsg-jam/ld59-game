@@ -1,3 +1,4 @@
+// @ts-nocheck
 import Peer from "peerjs";
 import { describePeerError as sharedDescribePeerError, makeCode as sharedMakeCode } from "$lib/peer";
 

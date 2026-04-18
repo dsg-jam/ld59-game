@@ -3,6 +3,7 @@ run-name: Deploy Pages (${{ github.event_name }})
 
 on:
   pull_request:
+  merge_group:
   push:
     branches: [main]
   workflow_dispatch:

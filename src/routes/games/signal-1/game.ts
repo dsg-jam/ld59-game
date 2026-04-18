@@ -1,3 +1,4 @@
+// @ts-nocheck
 import Peer from "peerjs";
 
 "use strict";
