@@ -61,12 +61,7 @@
           <span class="arrow">↗</span>
         </div>
         <div class="game-body">
-          {#if game.id === "DECONSTRUCT_SIKU2"}
-            <div class="title">Deconstruct<br />Siku2</div>
-          {:else}
-            <div class="title">{game.title}</div>
-          {/if}
-          <div class="desc">{game.path}</div>
+          <div class="title">{game.title}</div>
           {#if game.description}
             <div class="desc">{game.description}</div>
           {/if}

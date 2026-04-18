@@ -35,7 +35,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: .cache
-          key: ${{ runner.os }}-deploy-cache-${{ hashFiles('package-lock.json', 'vite.config.js', 'tsconfig*.json') }}
+          key: ${{ runner.os }}-deploy-cache-${{ hashFiles('package-lock.json', 'vite.config.ts', 'tsconfig*.json') }}
           restore-keys: |
             ${{ runner.os }}-deploy-cache-
 

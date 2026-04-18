@@ -58,7 +58,7 @@
         <button id="btn-clear" class="btn warn">⌫ CLEAR</button>
         <div class="spacer"></div>
         <div class="speed">
-          <label>SPEED</label>
+          <label for="speed">SPEED</label>
           <input id="speed" type="range" min="1" max="20" value="6">
         </div>
       </div>

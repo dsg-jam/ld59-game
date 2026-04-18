@@ -12,7 +12,7 @@ export default tseslint.config(
       "src/routes/games/**/*.ts",
       "src/routes/games/**/*.js",
       "svelte.config.js",
-      "vite.config.js",
+      "vite.config.ts",
     ],
   },
   js.configs.recommended,
