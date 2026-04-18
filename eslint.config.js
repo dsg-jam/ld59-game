@@ -19,7 +19,7 @@ export default tseslint.config(
           "ts-nocheck": true,
           "ts-ignore": "allow-with-description",
           "ts-expect-error": "allow-with-description",
-          minimumDescriptionLength: 3,
+          "minimumDescriptionLength": 3,
         },
       ],
     },
