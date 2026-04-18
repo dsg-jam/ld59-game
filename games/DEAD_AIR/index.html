@@ -292,6 +292,11 @@
   const WORLD_H = 900;
   const PLAYER_SPEED = 150;
   const PLAYER_COLORS = ['#ffb800', '#66d9ff', '#ff66cc', '#95ff66', '#ff8a66', '#b19dff'];
+  const VOICE_FREQ_NEAR = 3500;
+  const VOICE_FREQ_MID = 800;
+  const VOICE_FREQ_FAR = 200;
+  const MIME_OPUS_WEBM = 'audio/webm;codecs=opus';
+  const MIME_WEBM = 'audio/webm';
   const TOWERS = [
     { id: 'A', x: WORLD_W * 0.5, y: 140, progress: 0 },
     { id: 'B', x: 250, y: WORLD_H - 200, progress: 0 },
@@ -576,7 +581,13 @@
 
   function assignRoles() {
     const ids = [...players.keys()];
-    const shuffled = ids.slice().sort(() => Math.random() - 0.5);
+    const shuffled = ids.slice();
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = (Math.random() * (i + 1)) | 0;
+      const tmp = shuffled[i];
+      shuffled[i] = shuffled[j];
+      shuffled[j] = tmp;
+    }
     const mimicId = shuffled[0];
     for (const id of ids) {
       rolesById.set(id, id === mimicId ? 'mimic' : 'researcher');
@@ -820,7 +831,7 @@
       case 'mimicPlaybackRequest': {
         if (!gameStarted) return;
         if (rolesById.get(fromId) !== 'mimic') return;
-        if (!msg.buffer || !(msg.buffer instanceof ArrayBuffer)) return;
+        if (!msg.buffer || typeof msg.buffer.byteLength !== 'number') return;
         const now = Date.now();
         if (now - lastPlaybackAt < 8000) return;
         const mimic = players.get(fromId);
@@ -930,7 +941,7 @@
     const source = audioCtx.createMediaStreamSource(stream);
     const filter = audioCtx.createBiquadFilter();
     filter.type = 'lowpass';
-    filter.frequency.value = 3500;
+    filter.frequency.value = VOICE_FREQ_NEAR;
     const gain = audioCtx.createGain();
     gain.gain.value = 1.0;
 
@@ -951,17 +962,17 @@
   }
 
   function applyDistanceNodes(filter, gain, noiseGain, dist, wobbleT) {
-    let f = 3500;
+    let f = VOICE_FREQ_NEAR;
     let g = 1;
     let n = 0.01;
     if (dist > 350) {
-      f = 200;
+      f = VOICE_FREQ_FAR;
       g = 0.1;
       n = 0.24;
       filter.detune.value = 0;
     } else if (dist > 150) {
       const t = (dist - 150) / 200;
-      f = 3500 + (800 - 3500) * t;
+      f = VOICE_FREQ_NEAR + (VOICE_FREQ_MID - VOICE_FREQ_NEAR) * t;
       g = 1 + (0.5 - 1) * t;
       n = 0.05 + 0.12 * t;
       filter.detune.value = Math.sin(wobbleT * 8) * 35;
@@ -981,7 +992,7 @@
       src.buffer = decoded;
       const filter = audioCtx.createBiquadFilter();
       filter.type = 'lowpass';
-      filter.frequency.value = 2600;
+      filter.frequency.value = VOICE_FREQ_NEAR;
       const gain = audioCtx.createGain();
       gain.gain.value = 1;
       const noiseSrc = audioCtx.createBufferSource();
@@ -1042,7 +1053,7 @@
     const stream = incomingRawStreams.get(fromId);
     if (!stream || activeCapture) return;
     const person = players.get(fromId);
-    const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
+    const mime = MediaRecorder.isTypeSupported(MIME_OPUS_WEBM) ? MIME_OPUS_WEBM : MIME_WEBM;
     const rec = new MediaRecorder(stream, { mimeType: mime });
     const chunks = [];
     activeCapture = rec;
@@ -1388,7 +1399,7 @@
     const dt = Math.min(0.06, (now - lastFrame) / 1000);
     lastFrame = now;
 
-    if (gameStarted && !endState) {
+    if ((gameStarted && !endState)) {
       const me = myPlayer();
       if (me && me.alive && !me.spectator) {
         let dx = 0;
