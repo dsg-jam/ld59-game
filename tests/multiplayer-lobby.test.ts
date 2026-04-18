@@ -8,7 +8,10 @@ test.describe("Multiplayer lobby coverage", () => {
     const guestPage = await browser.newPage();
 
     try {
-      await Promise.all([hostPage.goto("/games/signal-weave/"), guestPage.goto("/games/signal-weave/")]);
+      await Promise.all([
+        hostPage.goto("/games/signal-weave/"),
+        guestPage.goto("/games/signal-weave/"),
+      ]);
 
       await hostPage.locator("#host-btn").click();
       await expect(hostPage.locator("#room-wrap")).toBeVisible();
