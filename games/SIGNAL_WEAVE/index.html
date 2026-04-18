@@ -122,6 +122,8 @@
   (() => {
     const PEER_PREFIX = 'sigweave-';
     const MAX_PLAYERS = 2;
+    const PULSE_X_MIN = 0.2;
+    const PULSE_X_SPAN = 0.6;
     const $ = (id) => document.getElementById(id);
     const canvas = $('canvas');
     const ctx = canvas.getContext('2d');
@@ -266,7 +268,10 @@
     }
 
     function resetNet() {
-      if (peer) { try { peer.destroy(); } catch (_) {} }
+      if (peer) {
+        try { peer.destroy(); }
+        catch (err) { console.warn('Failed to destroy peer cleanly:', err); }
+      }
       peer = null; conn = null; conns = [null];
       isHost = false; mySlot = -1;
     }
@@ -287,7 +292,13 @@
       peer = new Peer(PEER_PREFIX + roomCode);
       peer.on('open', () => setLobbyStatus('Channel open. Waiting for operator 2.'));
       peer.on('connection', c => {
-        if (state.players >= MAX_PLAYERS || state.running) { c.close(); return; }
+        if (state.players >= MAX_PLAYERS || state.running) {
+          c.on('open', () => {
+            c.send({ t: 'reject', reason: state.running ? 'Game already in progress.' : 'Room is full.' });
+            c.close();
+          });
+          return;
+        }
         conns[1] = c;
         c.on('open', () => {
           state.players = 2;
@@ -347,6 +358,8 @@
         msg(d.good ? 'Synchronized constructive pulse.' : 'Pulse collided out of phase.', d.good ? 'good' : 'bad');
       } else if (d.t === 'end') {
         msg('Weave complete. Harmony: ' + d.harmony);
+      } else if (d.t === 'reject') {
+        setLobbyStatus(d.reason || 'Unable to join room.');
       }
     }
 
@@ -430,9 +443,11 @@
       drawWave((t) => Math.sin(t * 2.7 + offs[1]), '#6bb4ff', 1.2, 0.35);
 
       const pulses = s.pulses || [];
+      const playerDenom = Math.max(1, (s.players || 1) - 1);
       for (const p of pulses) {
         const age = now - p.t;
-        const x = w * (0.2 + 0.6 * ((p.owner || 0) / 1));
+        const ownerNorm = (p.owner || 0) / playerDenom;
+        const x = w * (PULSE_X_MIN + PULSE_X_SPAN * ownerNorm);
         const r = 20 + age * 120;
         ctx.beginPath();
         ctx.arc(x, midY, r, 0, Math.PI * 2);
