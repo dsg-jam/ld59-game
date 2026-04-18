@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Signal Weave — Multiplayer Waveform Game</title>
+  <title>Signal Weave – Multiplayer Waveform Game</title>
   <style>
     :root{
       --bg:#06080f; --ink:#d7e5ff; --dim:#7d8cb1; --line:#1b2340;
@@ -275,10 +275,22 @@
     function resetNet() {
       if (peer) {
         try { peer.destroy(); }
-        catch (err) { console.warn('Failed to destroy peer cleanly:', err); }
+        catch (err) { console.warn('Failed to destroy peer during network reset:', err); }
       }
       peer = null; conn = null; conns = [null];
       isHost = false; mySlot = -1;
+    }
+
+    function describePeerError(err) {
+      const type = err && err.type ? err.type : 'unknown';
+      const hint = ({
+        'peer-unavailable': 'Room not found or offline.',
+        'network': 'Network unavailable.',
+        'disconnected': 'Connection dropped.',
+        'server-error': 'Peer relay issue.'
+      })[type] || 'Connection issue.';
+      const detail = err && err.message ? ` (${err.message})` : '';
+      return `${hint} [${type}]${detail}`;
     }
 
     function hostGame() {
@@ -321,7 +333,7 @@
           msg('Peer disconnected.', 'bad');
         });
       });
-      peer.on('error', e => setLobbyStatus('Peer error: ' + e.type));
+      peer.on('error', e => setLobbyStatus('Host peer error: ' + describePeerError(e)));
     }
 
     function joinGame() {
@@ -337,7 +349,7 @@
         conn.on('data', onGuestMessage);
         conn.on('close', () => setLobbyStatus('Disconnected from host.'));
       });
-      peer.on('error', e => setLobbyStatus('Peer error: ' + e.type));
+      peer.on('error', e => setLobbyStatus('Join peer error: ' + describePeerError(e)));
     }
 
     function onHostMessage(d, slot) {
