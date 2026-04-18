@@ -297,6 +297,11 @@
   const VOICE_FREQ_FAR = 200;
   const MIME_OPUS_WEBM = 'audio/webm;codecs=opus';
   const MIME_WEBM = 'audio/webm';
+  const DEFAULT_OPERATIVE_RANGE = MAX_PLAYERS;
+  const VOTE_DURATION_MS = 30000;
+  const ELIM_COOLDOWN_MS = 20000;
+  const PLAYBACK_COOLDOWN_MS = 8000;
+  const SNIPPET_DURATION_MS = 3000;
   const TOWERS = [
     { id: 'A', x: WORLD_W * 0.5, y: 140, progress: 0 },
     { id: 'B', x: 250, y: WORLD_H - 200, progress: 0 },
@@ -367,7 +372,7 @@
   }
 
   function defaultName() {
-    return `OPERATIVE-${1 + Math.floor(Math.random() * 6)}`;
+    return `OPERATIVE-${1 + Math.floor(Math.random() * DEFAULT_OPERATIVE_RANGE)}`;
   }
 
   $('name').value = defaultName();
@@ -795,7 +800,7 @@
         const caller = players.get(fromId);
         if (!caller || !caller.alive) return;
         if (rolesById.get(fromId) === 'mimic') return;
-        voteState = { active: true, endsAt: Date.now() + 30000, votes: {}, caller: fromId };
+        voteState = { active: true, endsAt: Date.now() + VOTE_DURATION_MS, votes: {}, caller: fromId };
         broadcast({ t: 'voteStarted', vote: voteState });
         renderVotePanel();
       } break;
@@ -814,7 +819,7 @@
         if (!gameStarted) return;
         if (rolesById.get(fromId) !== 'mimic') return;
         const now = Date.now();
-        if (now - lastElimAt < 20000) return;
+        if (now - lastElimAt < ELIM_COOLDOWN_MS) return;
         const targetId = msg.target;
         if (!targetId || !players.has(targetId)) return;
         const target = players.get(targetId);
@@ -833,7 +838,7 @@
         if (rolesById.get(fromId) !== 'mimic') return;
         if (!msg.buffer || typeof msg.buffer.byteLength !== 'number') return;
         const now = Date.now();
-        if (now - lastPlaybackAt < 8000) return;
+        if (now - lastPlaybackAt < PLAYBACK_COOLDOWN_MS) return;
         const mimic = players.get(fromId);
         if (!mimic || !mimic.alive) return;
         lastPlaybackAt = now;
@@ -1043,7 +1048,7 @@
       const b = document.createElement('button');
       b.className = 'snippet';
       b.textContent = `[${s.name}] 3s snippet`;
-      b.disabled = Date.now() - lastPlaybackAt < 8000;
+      b.disabled = Date.now() - lastPlaybackAt < PLAYBACK_COOLDOWN_MS;
       b.onclick = () => playSnippet(i);
       snippetList.appendChild(b);
     }
@@ -1067,13 +1072,13 @@
       renderMimicPanel();
     };
     rec.start();
-    setTimeout(() => { if (rec.state !== 'inactive') rec.stop(); }, 3000);
+    setTimeout(() => { if (rec.state !== 'inactive') rec.stop(); }, SNIPPET_DURATION_MS);
   }
 
   function playSnippet(index) {
     const me = myPlayer();
     if (!me) return;
-    if (Date.now() - lastPlaybackAt < 8000) return;
+    if (Date.now() - lastPlaybackAt < PLAYBACK_COOLDOWN_MS) return;
     const snippet = capturedSnippets[index];
     if (!snippet) return;
     lastPlaybackAt = Date.now();
@@ -1321,7 +1326,7 @@
     }
 
     if (localRole === 'mimic') {
-      const e = Math.max(0, Math.ceil((lastElimAt + 20000 - Date.now()) / 1000));
+      const e = Math.max(0, Math.ceil((lastElimAt + ELIM_COOLDOWN_MS - Date.now()) / 1000));
       $('cooldown-pill').textContent = e > 0 ? `ELIM: ${e}s` : 'ELIM: READY';
     } else {
       $('cooldown-pill').textContent = 'ELIM: N/A';
