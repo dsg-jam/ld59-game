@@ -1,4 +1,5 @@
 // @ts-nocheck
+// Legacy game logic migrated from JavaScript; keep no-check until this file is incrementally typed.
 import Peer from "peerjs";
 import { describePeerError as sharedDescribePeerError, makeCode as sharedMakeCode } from "$lib/peer";
 

@@ -1,7 +1,7 @@
 // @ts-nocheck
+// Legacy game logic migrated from JavaScript; keep no-check until this file is incrementally typed.
 import Peer from "peerjs";
 
-"use strict";
 
 /* ============================================================
    SIGNAL CROSS — LDJAM59  (co-op, multiplayer via PeerJS)
