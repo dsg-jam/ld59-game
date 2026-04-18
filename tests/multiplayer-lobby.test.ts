@@ -14,13 +14,13 @@ test.describe("Multiplayer lobby coverage", () => {
       await expect(hostPage.locator("#room-wrap")).toBeVisible();
 
       const roomCode = (await hostPage.locator("#room-code").textContent())?.trim() ?? "";
-      expect(roomCode).toMatch(/^[A-Z2-9]{5}$/);
+      expect(roomCode).toMatch(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{5}$/);
       await expect(hostPage.locator("#start-btn")).toBeDisabled();
 
       await guestPage.locator("#join-code").fill(roomCode);
       await guestPage.locator("#join-btn").click();
 
-      await expect(hostPage.locator("#lobby-status")).toContainText("Operator connected.", {
+      await expect(hostPage.locator("#lobby-status")).toContainText("Ready to begin.", {
         timeout: 30_000,
       });
       await expect(hostPage.locator("#start-btn")).toBeEnabled({ timeout: 30_000 });

@@ -26,16 +26,16 @@ test.describe("Peer utility coverage", () => {
 
   test("resetNet destroys active peers and always returns null", () => {
     const peer = {
-      destroyCalled: false,
+      destroyed: false,
       destroy() {
-        this.destroyCalled = true;
+        this.destroyed = true;
       },
     };
 
     const result = resetNet(peer);
 
     expect(result).toBeNull();
-    expect(peer.destroyCalled).toBeTruthy();
+    expect(peer.destroyed).toBeTruthy();
   });
 
   test("resetNet reports destroy errors through callback", () => {
