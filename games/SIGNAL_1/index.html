@@ -5,10 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SIGNAL CROSS — LDJAM59</title>
 <link rel="stylesheet" href="styles.css">
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 </head>
 <body>
   <div class="scanlines"></div>
 
+  <!-- ================= TITLE ================= -->
   <div id="title-screen" class="screen active">
     <div class="title-stack">
       <div class="signal-wave">
@@ -17,15 +19,50 @@
       <h1>SIGNAL<span class="cross">CROSS</span></h1>
       <p class="subtitle">Bell Exchange #47 &mdash; Night Shift</p>
       <p class="blurb">
-        It&rsquo;s 1962. You&rsquo;re the switchboard operator.<br>
-        Calls come in. You decide who talks to whom.<br>
-        Try not to connect the Pope to a ghost.
+        1962. A switchboard. Calls come in. <em>You</em> decide who talks to whom.<br>
+        Invite up to 7 other operators. Try not to connect the Pope to a ghost.
       </p>
-      <button id="start-btn" class="big-btn">PUNCH IN &#9654;</button>
-      <p class="tip">click a caller, then click the recipient &middot; esc to skip dialogue</p>
+
+      <label class="field">
+        <span class="field-label">OPERATOR NAME</span>
+        <input id="name-input" type="text" maxlength="14" placeholder="MARGE" />
+      </label>
+
+      <div class="button-row">
+        <button id="host-btn" class="big-btn">HOST NEW SHIFT</button>
+        <div class="divider"><span>OR</span></div>
+        <label class="field inline">
+          <span class="field-label">ROOM CODE</span>
+          <input id="room-input" type="text" maxlength="12" placeholder="SIG-XXXX" autocomplete="off" />
+        </label>
+        <button id="join-btn" class="big-btn secondary">JOIN</button>
+      </div>
+
+      <p id="net-status" class="net-status"></p>
+      <p class="tip">click caller, then recipient &middot; right-click to release</p>
     </div>
   </div>
 
+  <!-- ================= LOBBY ================= -->
+  <div id="lobby-screen" class="screen">
+    <div class="title-stack lobby-stack">
+      <h2 class="lobby-title">READY ROOM</h2>
+      <div class="room-code-wrap">
+        <span class="hud-label">SHARE THIS CODE</span>
+        <div id="room-code" class="room-code">...</div>
+        <button id="copy-btn" class="mini-btn">COPY</button>
+      </div>
+
+      <div class="panel-head">OPERATORS ON DUTY</div>
+      <div id="lobby-players" class="lobby-players"></div>
+
+      <button id="lobby-start-btn" class="big-btn host-only">START SHIFT ▸</button>
+      <div id="lobby-wait" class="lobby-wait">Waiting for host to begin...</div>
+      <button id="lobby-leave-btn" class="mini-btn">LEAVE</button>
+    </div>
+  </div>
+
+  <!-- ================= GAME ================= -->
   <div id="game-screen" class="screen">
     <header class="hud">
       <div class="hud-item">
@@ -37,23 +74,14 @@
         <div class="timer-bar"><div id="timer-fill"></div></div>
       </div>
       <div class="hud-item">
-        <span class="hud-label">ROUTED</span>
-        <span id="score-val" class="hud-val">0</span>
-      </div>
-      <div class="hud-item">
-        <span class="hud-label">CHAOS</span>
-        <span id="chaos-val" class="hud-val">0</span>
-      </div>
-      <div class="hud-item">
         <span class="hud-label">SHIFT GOAL</span>
         <span id="goal-val" class="hud-val">0 / 0</span>
       </div>
+      <div class="hud-item">
+        <span class="hud-label">ROOM</span>
+        <span id="hud-room" class="hud-val small">---</span>
+      </div>
     </header>
-
-    <section class="call-queue">
-      <div class="queue-label">INCOMING</div>
-      <div id="queue" class="queue"></div>
-    </section>
 
     <section class="switchboard">
       <div class="panel-label">EXCHANGE 47</div>
@@ -64,40 +92,43 @@
       </div>
     </section>
 
-    <div id="cable-layer"></div>
-
-    <div id="dialogue" class="dialogue hidden">
-      <div class="bubble">
-        <div class="portraits">
-          <div id="dlg-a" class="portrait"></div>
-          <div class="bolt">&#9889;</div>
-          <div id="dlg-b" class="portrait"></div>
-        </div>
-        <div id="dlg-lines" class="lines"></div>
-        <button id="dlg-next" class="dlg-btn">NEXT &#9654;</button>
+    <aside class="side-panel">
+      <div class="panel panel-queue">
+        <div class="panel-head">INCOMING</div>
+        <div id="queue" class="queue-vertical"></div>
       </div>
-    </div>
 
+      <div class="panel panel-ops">
+        <div class="panel-head">OPERATORS</div>
+        <div id="operators" class="operators"></div>
+      </div>
+
+      <div class="panel panel-log">
+        <div class="panel-head">CALL LOG</div>
+        <div id="log" class="log"></div>
+      </div>
+    </aside>
+
+    <div id="cable-layer"></div>
     <div id="floater-layer"></div>
+    <div id="toast" class="toast hidden"></div>
   </div>
 
+  <!-- ================= END ================= -->
   <div id="end-screen" class="screen">
     <div class="title-stack">
       <h1 id="end-title">SHIFT OVER</h1>
       <p id="end-blurb" class="subtitle"></p>
-      <div class="tally">
-        <div><span class="hud-label">ROUTED CORRECTLY</span><span id="end-score">0</span></div>
-        <div><span class="hud-label">CHAOS BONUS</span><span id="end-chaos">0</span></div>
-        <div class="final"><span class="hud-label">TOTAL</span><span id="end-total">0</span></div>
+      <div class="panel-head">LEADERBOARD</div>
+      <div id="leaderboard" class="leaderboard"></div>
+      <div class="button-row tight">
+        <button id="next-btn" class="big-btn host-only">NEXT SHIFT ▸</button>
+        <button id="replay-btn" class="big-btn secondary host-only">REPLAY</button>
       </div>
-      <button id="next-btn" class="big-btn">NEXT SHIFT &#9654;</button>
-      <button id="replay-btn" class="big-btn secondary">REPLAY SHIFT</button>
+      <div id="end-wait" class="lobby-wait">Waiting for host...</div>
+      <button id="end-leave-btn" class="mini-btn">LEAVE ROOM</button>
     </div>
   </div>
-
-  <audio id="sfx-connect" preload="auto"></audio>
-  <audio id="sfx-wrong" preload="auto"></audio>
-  <audio id="sfx-ring" preload="auto"></audio>
 
   <script src="game.js"></script>
 </body>
