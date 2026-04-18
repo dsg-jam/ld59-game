@@ -79,8 +79,8 @@ jobs:
             while IFS=: read -r pr_number pr_sha; do
               [ -n "${pr_number}" ] || continue
               echo "Building preview for PR #${pr_number} (${pr_sha})"
-              git fetch --no-tags origin "${pr_sha}"
-              git checkout --detach "${pr_sha}"
+              git fetch --no-tags origin "refs/pull/${pr_number}/head"
+              git checkout --detach FETCH_HEAD
               ensure_dependencies
               VITE_BASE_PATH="/${{ github.event.repository.name }}/pr-preview/pr-${pr_number}" npm run build
               mkdir -p "${main_dist}/pr-preview/pr-${pr_number}"
