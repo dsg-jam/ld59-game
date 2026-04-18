@@ -117,7 +117,10 @@
     </div>
   </div>
 
-  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script
+    src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"
+    integrity="sha384-OLBgp1GsljhM2TJ+sbHjaiH9txEUvgdDTAzHv2P24donTt6/529l+9Ua0vFImLlb"
+    crossorigin="anonymous"></script>
   <script>
   (() => {
     const PEER_PREFIX = 'sigweave-';
@@ -128,6 +131,10 @@
     const NETWORK_TICK_RATE = 0.05;
     const COMBO_TIMEOUT_SECONDS = 4;
     const PULSE_SYNC_WINDOW_SECONDS = 0.8;
+    const OFFSET_MIN = 0;
+    const OFFSET_MAX = 628;
+    const OFFSET_SCALE = 100;
+    const ARROW_KEY_STEP = 6;
     const $ = (id) => document.getElementById(id);
     const canvas = $('canvas');
     const ctx = canvas.getContext('2d');
@@ -170,7 +177,7 @@
     }
 
     function makeCode() {
-      // Omit ambiguous glyphs (I/O/0/1) to reduce room-code entry mistakes.
+      // Omit ambiguous glyphs (I/O/1) to reduce room-code entry mistakes.
       const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
       let c = '';
       for (let i = 0; i < 5; i++) c += chars[(Math.random() * chars.length) | 0];
@@ -275,7 +282,7 @@
     function resetNet() {
       if (peer) {
         try { peer.destroy(); }
-        catch (err) { console.warn('Failed to destroy peer during network reset:', err); }
+        catch (err) { console.warn('Peer cleanup warning during network reset:', err); }
       }
       peer = null; conn = null; conns = [null];
       isHost = false; mySlot = -1;
@@ -385,7 +392,7 @@
     $('start-btn').onclick = () => { if (isHost && state.players >= 2) startRound(); };
 
     $('offset').addEventListener('input', () => {
-      const v = Number($('offset').value) / 100;
+      const v = Number($('offset').value) / OFFSET_SCALE;
       $('offset-label').textContent = v.toFixed(2) + ' rad';
       if (mySlot < 0 && isHost) mySlot = 0;
       if (isHost) {
@@ -402,8 +409,8 @@
     $('pulse-btn').onclick = doPulse;
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Space') { e.preventDefault(); doPulse(); }
-      if (e.code === 'ArrowLeft') { $('offset').value = Math.max(0, Number($('offset').value) - 6); $('offset').dispatchEvent(new Event('input')); }
-      if (e.code === 'ArrowRight') { $('offset').value = Math.min(628, Number($('offset').value) + 6); $('offset').dispatchEvent(new Event('input')); }
+      if (e.code === 'ArrowLeft') { $('offset').value = Math.max(OFFSET_MIN, Number($('offset').value) - ARROW_KEY_STEP); $('offset').dispatchEvent(new Event('input')); }
+      if (e.code === 'ArrowRight') { $('offset').value = Math.min(OFFSET_MAX, Number($('offset').value) + ARROW_KEY_STEP); $('offset').dispatchEvent(new Event('input')); }
     });
 
     let last = performance.now();
@@ -460,7 +467,7 @@
       drawWave((t) => Math.sin(t * 2.7 + offs[1]), '#6bb4ff', 1.2, 0.35);
 
       const pulses = s.pulses || [];
-      const playerDenom = Math.max(1, (s.players || 1) - 1);
+      const playerDenom = Math.max(1, ((s.players ?? 1) - 1));
       for (const p of pulses) {
         const age = now - p.t;
         const ownerNorm = (p.owner || 0) / playerDenom;
@@ -479,6 +486,8 @@
       if (mySlot >= 0) $('slot').textContent = 'P' + (mySlot + 1);
     }
 
+    $('offset').min = String(OFFSET_MIN);
+    $('offset').max = String(OFFSET_MAX);
     $('offset').dispatchEvent(new Event('input'));
     requestAnimationFrame(loop);
   })();
