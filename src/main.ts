@@ -1,4 +1,3 @@
-import "./style.css";
 import { games } from "./games";
 
 function getEl<T extends HTMLElement>(selector: string): T {
