@@ -1,17 +1,29 @@
 <script lang="ts">
-  export let title = "";
+  import type { Snippet } from "svelte";
+
+  let {
+    title = "",
+    hud,
+    children,
+    sidebar,
+  }: {
+    title?: string;
+    hud?: Snippet;
+    children?: Snippet;
+    sidebar?: Snippet;
+  } = $props();
 </script>
 
 <div id="app-layout">
   <header>
     <h1>{title}</h1>
-    <slot name="hud" />
+    {@render hud?.()}
   </header>
   <main>
-    <slot />
+    {@render children?.()}
   </main>
   <aside>
-    <slot name="sidebar" />
+    {@render sidebar?.()}
   </aside>
 </div>
 

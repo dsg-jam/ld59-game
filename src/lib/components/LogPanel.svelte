@@ -1,6 +1,11 @@
 <script lang="ts">
-  export let entries: { text: string; kind?: "ok" | "bad" | "" }[] = [];
-  export let maxEntries = 20;
+  let {
+    entries = [],
+    maxEntries = 20,
+  }: {
+    entries: { text: string; kind?: "ok" | "bad" | "" }[];
+    maxEntries?: number;
+  } = $props();
 </script>
 
 <div class="log">
