@@ -22,7 +22,7 @@
   const onPass = (): void => (window as GameWindow).onPass?.();
 
   onMount(() => {
-    void import("./main");
+    void import("$lib/games/deconstruct/main");
   });
 </script>
 

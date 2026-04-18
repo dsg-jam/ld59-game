@@ -2,6 +2,7 @@
 // Legacy game logic migrated from JavaScript; keep no-check until this file is incrementally typed.
 import Peer from "peerjs";
 import { describePeerError as sharedDescribePeerError, makeCode as sharedMakeCode } from "$lib/peer";
+import { endState as endStateStore } from "$lib/games/dead-air/endState";
 
 (() => {
   // ── CONSTANTS ────────────────────────────────────────────────────────────────
@@ -904,18 +905,11 @@ import { describePeerError as sharedDescribePeerError, makeCode as sharedMakeCod
   }
 
   function showEnd(winner, roles) {
-    $('end').style.display = 'flex';
-    $('end-title').textContent = winner === 'researchers' ? 'SIGNAL RESTORED' : 'THE MIMIC WINS';
-    $('end-title').style.color = winner === 'researchers' ? 'var(--ok)' : 'var(--danger)';
-    $('end-sub').textContent = winner === 'researchers' ? 'The outpost reconnects to the world.' : 'The relay falls silent in the storm.';
     $('status-pill').textContent = 'TRANSMISSION LOST';
-    const ul = $('reveal');
-    ul.innerHTML = '';
-    for (const r of roles) {
-      const li = document.createElement('li');
-      li.textContent = `${r.name} — ${String(r.role || '').toUpperCase()}`;
-      ul.appendChild(li);
-    }
+    endStateStore.set({
+      winner,
+      roles: roles.map(r => ({ name: r.name, role: String(r.role || '').toUpperCase() })),
+    });
   }
 
   // ── RENDERING ────────────────────────────────────────────────────────────────
@@ -1175,8 +1169,6 @@ import { describePeerError as sharedDescribePeerError, makeCode as sharedMakeCod
     const selected = targets.find(p => isHost ? isIsolatedInDark(p.id) : true) || targets[0];
     sendToHost({ t: 'mimicElim', target: selected.id });
   });
-
-  $('play-again').addEventListener('click', () => location.reload());
 
   window.addEventListener('keydown', e => {
     if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight'].includes(e.code)) {

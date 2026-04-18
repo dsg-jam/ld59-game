@@ -9,7 +9,7 @@ export default tseslint.config(
       "dist/",
       "node_modules/",
       ".svelte-kit/",
-      "src/routes/games/**/*.ts",
+      "src/lib/games/**/*.ts",
       "svelte.config.ts",
       "vite.config.ts",
     ],

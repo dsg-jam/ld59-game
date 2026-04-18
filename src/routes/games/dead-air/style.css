@@ -153,7 +153,7 @@
     position: fixed;
     inset: 0;
     background: rgba(2, 2, 2, 0.92);
-    display: none;
+    display: flex;
     align-items: center;
     justify-content: center;
     z-index: 50;
@@ -167,7 +167,7 @@
     padding: 20px;
   }
   #end h2 { margin: 0 0 10px; font-family: 'Major Mono Display', monospace; color: var(--accent); }
-  #reveal li { margin: 6px 0; }
+  #end ul li { margin: 6px 0; }
   #warn { color: #ffd4a8; min-height: 18px; }
 
   @media (max-width: 900px) {

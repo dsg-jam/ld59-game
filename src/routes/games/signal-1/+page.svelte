@@ -3,7 +3,7 @@
   import "./styles.css";
 
   onMount(() => {
-    void import("./game");
+    void import("$lib/games/signal-1/game");
   });
 </script>
 
