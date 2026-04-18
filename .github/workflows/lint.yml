@@ -25,6 +25,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-ci-cache-
       - run: npm ci
+      - run: npm run check
       - run: npm run typecheck
       - run: npm run lint
       - run: npx prettier --check .
