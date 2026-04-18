@@ -1,6 +1,8 @@
-name: Build & Deploy
+name: Deploy Pages
+run-name: Deploy Pages (${{ github.event_name }})
 
 on:
+  pull_request:
   push:
     branches: [main]
   workflow_dispatch:
@@ -9,22 +11,18 @@ permissions:
   contents: read
   pages: write
   id-token: write
-  pull-requests: read
 
 concurrency:
-  group: pages
+  group: pages-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build-and-deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  build:
+    name: Build static site
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
 
       - uses: actions/setup-node@v6
         with:
@@ -32,73 +30,8 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
-      - uses: actions/cache@v5
-        with:
-          path: .cache
-          key: ${{ runner.os }}-deploy-cache-${{ hashFiles('package-lock.json', 'vite.config.ts', 'tsconfig*.json') }}
-          restore-keys: |
-            ${{ runner.os }}-deploy-cache-
-
-      - name: List open PRs
-        id: open_prs
-        uses: actions/github-script@v9
-        with:
-          script: |
-            const pulls = await github.paginate(github.rest.pulls.list, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: "open",
-              per_page: 100
-            });
-            core.setOutput("entries", pulls.map((pr) => `${pr.number}:${pr.head.sha}`).join("\n"));
-            core.info(`Found ${pulls.length} open PR(s).`);
-
-      - name: Build main and PR previews
-        env:
-          OPEN_PRS: ${{ steps.open_prs.outputs.entries }}
-        run: |
-          set -euo pipefail
-
-          ensure_dependencies() {
-            current_lock_hash="$(sha256sum package-lock.json | awk '{print $1}')"
-            if [ "${current_lock_hash}" != "${last_lock_hash}" ]; then
-              npm ci
-              last_lock_hash="${current_lock_hash}"
-            else
-              echo "package-lock.json unchanged; reusing existing node_modules"
-            fi
-          }
-
-          main_sha="$(git rev-parse HEAD)"
-          last_lock_hash=""
-          ensure_dependencies
-
-          VITE_BASE_PATH="/${{ github.event.repository.name }}" npm run build
-
-          main_dist="${RUNNER_TEMP}/dist-main"
-          rm -rf "${main_dist}"
-          mkdir -p "${main_dist}"
-          cp -a dist/. "${main_dist}/"
-
-          if [ -n "${OPEN_PRS}" ]; then
-            while IFS=: read -r pr_number pr_sha; do
-              [ -n "${pr_number}" ] || continue
-              echo "Building preview for PR #${pr_number} (${pr_sha})"
-              git fetch --no-tags origin "refs/pull/${pr_number}/head"
-              git checkout --detach FETCH_HEAD
-              ensure_dependencies
-              VITE_BASE_PATH="/${{ github.event.repository.name }}/pr-preview/pr-${pr_number}" npm run build
-              mkdir -p "${main_dist}/pr-preview/pr-${pr_number}"
-              cp -a dist/. "${main_dist}/pr-preview/pr-${pr_number}/"
-            done <<< "${OPEN_PRS}"
-          else
-            echo "No open PRs found."
-          fi
-
-          git checkout --detach "${main_sha}"
-          rm -rf dist
-          mkdir -p dist
-          cp -a "${main_dist}"/. dist/
+      - run: npm ci
+      - run: VITE_BASE_PATH=/${{ github.event.repository.name }} npm run build
 
       - uses: actions/configure-pages@v6
 
@@ -106,5 +39,28 @@ jobs:
         with:
           path: dist
 
+  deploy-main:
+    name: Deploy production Pages
+    if: github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
         uses: actions/deploy-pages@v5
+
+  deploy-pr-preview:
+    name: Deploy PR preview Pages
+    if: github.event_name == 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pr-${{ github.event.pull_request.number }}-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
+        with:
+          preview: true

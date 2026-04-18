@@ -3,7 +3,7 @@
   import "./style.css";
 
   onMount(() => {
-    void import("./main.js");
+    void import("./main");
   });
 </script>
 

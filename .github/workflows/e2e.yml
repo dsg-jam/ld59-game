@@ -1,15 +1,22 @@
 name: E2E Tests
+run-name: E2E Tests (${{ github.event_name }})
 
 on:
   pull_request:
+  merge_group:
   push:
     branches: [main]
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   e2e:
+    name: Playwright E2E
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

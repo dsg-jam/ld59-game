@@ -1,9 +1,9 @@
 import adapter from "@sveltejs/adapter-static";
+import type { Config } from "@sveltejs/kit";
 
 const base = process.env.VITE_BASE_PATH ?? "";
 
-/** @type {import('@sveltejs/kit').Config} */
-const config = {
+const config: Config = {
   kit: {
     adapter: adapter({
       pages: "dist",

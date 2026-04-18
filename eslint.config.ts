@@ -10,8 +10,7 @@ export default tseslint.config(
       "node_modules/",
       ".svelte-kit/",
       "src/routes/games/**/*.ts",
-      "src/routes/games/**/*.js",
-      "svelte.config.js",
+      "svelte.config.ts",
       "vite.config.ts",
     ],
   },
@@ -19,7 +18,7 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   ...svelte.configs["flat/recommended"],
   {
-    files: ["src/lib/**/*.ts", "src/routes/**/*.svelte"],
+    files: ["src/**/*.ts", "src/routes/**/*.svelte"],
     languageOptions: {
       globals: {
         ...globals.browser,
@@ -37,7 +36,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["src/lib/**/*.ts"],
+    files: ["src/**/*.ts"],
     rules: {
       "@typescript-eslint/explicit-function-return-type": "error",
     },
