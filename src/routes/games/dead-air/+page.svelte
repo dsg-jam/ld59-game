@@ -103,6 +103,7 @@
 
 <div id="end">
   <div class="inner">
+    <!-- svelte-ignore a11y_missing_content -- content is set imperatively by game.ts at round end -->
     <h2 id="end-title" aria-live="polite"></h2>
     <p id="end-sub"></p>
     <ul id="reveal"></ul>
