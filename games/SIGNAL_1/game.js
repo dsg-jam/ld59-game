@@ -323,14 +323,18 @@ function unlockAudio() {
 /* ---------- DOM refs ---------- */
 const $ = id => document.getElementById(id);
 const screens = {
-  title: $("title-screen"),
-  lobby: $("lobby-screen"),
-  game:  $("game-screen"),
-  end:   $("end-screen"),
+  get title() { return $("title-screen"); },
+  get lobby() { return $("lobby-screen"); },
+  get game()  { return $("game-screen");  },
+  get end()   { return $("end-screen");   },
 };
 function showScreen(name) {
-  Object.values(screens).forEach(s => s.classList.remove("active"));
-  screens[name].classList.add("active");
+  ["title","lobby","game","end"].forEach(k => {
+    const el = screens[k];
+    if (el) el.classList.remove("active");
+  });
+  const target = screens[name];
+  if (target) target.classList.add("active");
 }
 
 /* ============================================================
@@ -715,73 +719,94 @@ Net.onMessage = (peerId, msg) => {
    UI HOOKS
    ============================================================ */
 
-/* Title */
-$("host-btn").addEventListener("click", () => {
-  unlockAudio();
-  const name = readName();
-  Net.status("opening host channel...", "");
-  Net.host(name, () => {
-    // add self as first player
-    state.players = [{ id: Net.myId, name: name.toUpperCase().slice(0,14), color: PLAYER_COLORS[0], score: 0, chaos: 0, completed: 0, selected: null }];
-    Net.myColor = PLAYER_COLORS[0];
-    $("room-code").textContent = Net.roomCode;
-    $("hud-room").textContent = Net.roomCode;
-    showScreen("lobby");
-    renderLobby();
-  });
-});
-
-$("join-btn").addEventListener("click", () => {
-  unlockAudio();
-  const name = readName();
-  const code = $("room-input").value.trim().toUpperCase();
-  if (!code) { Net.status("enter a room code first", "err"); return; }
-  Net.status("connecting...", "");
-  Net.join(code, name, () => {
-    $("room-code").textContent = code;
-    $("hud-room").textContent = code;
-    showScreen("lobby");
-    renderLobby();
-  });
-});
+function on(id, ev, fn) {
+  const el = $(id);
+  if (el) el.addEventListener(ev, fn);
+}
 
 function readName() {
-  let n = ($("name-input").value || "").trim();
-  if (!n) { n = "OP-" + Math.floor(100 + Math.random()*900); $("name-input").value = n; }
+  const inp = $("name-input");
+  let n = (inp?.value || "").trim();
+  if (!n) { n = "OP-" + Math.floor(100 + Math.random()*900); if (inp) inp.value = n; }
   return n;
 }
 
-/* Lobby */
-$("lobby-start-btn").addEventListener("click", () => {
-  if (!Net.isHost) return;
-  hostStartLevel(0);
-  showScreen("game");
-});
-$("copy-btn").addEventListener("click", () => {
-  const code = $("room-code").textContent;
-  if (!code) return;
-  navigator.clipboard?.writeText(code).catch(()=>{});
-  showToast("copied " + code);
-});
-$("lobby-leave-btn").addEventListener("click", leaveRoom);
-$("end-leave-btn").addEventListener("click", leaveRoom);
+function bindUI() {
+  /* Title */
+  on("host-btn", "click", () => {
+    unlockAudio();
+    const name = readName();
+    Net.status("opening host channel...", "");
+    Net.host(name, () => {
+      state.players = [{ id: Net.myId, name: name.toUpperCase().slice(0,14), color: PLAYER_COLORS[0], score: 0, chaos: 0, completed: 0, selected: null }];
+      Net.myColor = PLAYER_COLORS[0];
+      if ($("room-code")) $("room-code").textContent = Net.roomCode;
+      if ($("hud-room"))  $("hud-room").textContent  = Net.roomCode;
+      showScreen("lobby");
+      renderLobby();
+    });
+  });
 
-/* End-of-shift */
-$("next-btn").addEventListener("click", () => {
-  if (!Net.isHost) return;
-  if (state.levelIdx + 1 >= LEVELS.length) {
-    // loop back to first shift
+  on("join-btn", "click", () => {
+    unlockAudio();
+    const name = readName();
+    const code = ($("room-input")?.value || "").trim().toUpperCase();
+    if (!code) { Net.status("enter a room code first", "err"); return; }
+    Net.status("connecting...", "");
+    Net.join(code, name, () => {
+      if ($("room-code")) $("room-code").textContent = code;
+      if ($("hud-room"))  $("hud-room").textContent  = code;
+      showScreen("lobby");
+      renderLobby();
+    });
+  });
+
+  /* Lobby */
+  on("lobby-start-btn", "click", () => {
+    if (!Net.isHost) return;
     hostStartLevel(0);
-  } else {
-    hostStartLevel(state.levelIdx + 1);
-  }
-  showScreen("game");
-});
-$("replay-btn").addEventListener("click", () => {
-  if (!Net.isHost) return;
-  hostStartLevel(state.levelIdx);
-  showScreen("game");
-});
+    showScreen("game");
+  });
+  on("copy-btn", "click", () => {
+    const code = $("room-code")?.textContent;
+    if (!code) return;
+    navigator.clipboard?.writeText(code).catch(()=>{});
+    showToast("copied " + code);
+  });
+  on("lobby-leave-btn", "click", leaveRoom);
+  on("end-leave-btn",   "click", leaveRoom);
+
+  /* End-of-shift */
+  on("next-btn", "click", () => {
+    if (!Net.isHost) return;
+    if (state.levelIdx + 1 >= LEVELS.length) hostStartLevel(0);
+    else hostStartLevel(state.levelIdx + 1);
+    showScreen("game");
+  });
+  on("replay-btn", "click", () => {
+    if (!Net.isHost) return;
+    hostStartLevel(state.levelIdx);
+    showScreen("game");
+  });
+
+  /* Inputs / global */
+  on("room-input", "input", (e) => { e.target.value = e.target.value.toUpperCase(); });
+
+  document.addEventListener("contextmenu", (e) => {
+    if (state.phase === "playing" && screens.game?.classList.contains("active")) {
+      const me = myPlayer();
+      if (me && me.selected) { e.preventDefault(); sendAction({ type: "deselect" }); }
+    }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && state.phase === "playing") {
+      const me = myPlayer();
+      if (me && me.selected) sendAction({ type: "deselect" });
+    }
+  });
+
+  showScreen("title");
+}
 
 function leaveRoom() {
   Net.leave();
@@ -1111,23 +1136,8 @@ function loop() {
    ============================================================ */
 function escape(s) { return String(s).replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c])); }
 
-// Uppercase room-input as user types
-$("room-input").addEventListener("input", (e) => { e.target.value = e.target.value.toUpperCase(); });
-
-// Global right-click on board deselects
-document.addEventListener("contextmenu", (e) => {
-  if (state.phase === "playing" && screens.game.classList.contains("active")) {
-    const me = myPlayer();
-    if (me && me.selected) { e.preventDefault(); sendAction({ type: "deselect" }); }
-  }
-});
-
-// Keyboard: Esc deselects
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && state.phase === "playing") {
-    const me = myPlayer();
-    if (me && me.selected) sendAction({ type: "deselect" });
-  }
-});
-
-showScreen("title");
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", bindUI);
+} else {
+  bindUI();
+}
