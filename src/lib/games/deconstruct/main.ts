@@ -54,7 +54,7 @@ let conns = [];
 let isSolo = false;
 
 // Host-authoritative state
-let HS = {
+const HS = {
     seed: 0,
     grid: [],          // grid[x][y] = array of color keys (stack bottom to top)
     hands: {},         // hands[slot] = array of cards
@@ -68,7 +68,7 @@ let HS = {
 };
 
 // Local display state
-let S = {
+const S = {
     grid: [],          // same structure as HS.grid
     myHand: [],
     selectedCardIdx: null,
@@ -142,7 +142,7 @@ const tableSides = 8;
 for (let i = 0; i <= tableSides; i++) {
     const a = (i / tableSides) * Math.PI * 2 - Math.PI / tableSides;
     const x = TABLE_RADIUS * Math.cos(a), z = TABLE_RADIUS * Math.sin(a);
-    i === 0 ? tableShape.moveTo(x, z) : tableShape.lineTo(x, z);
+    if (i === 0) { tableShape.moveTo(x, z); } else { tableShape.lineTo(x, z); }
 }
 const tableTopGeo = new THREE.ExtrudeGeometry(tableShape, { depth: 0.18, bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.06, bevelSegments: 3 });
 const tableTopMat = new THREE.MeshStandardMaterial({ color: 0x1a3a2a, roughness: 0.55, metalness: 0.05 });
@@ -199,7 +199,7 @@ tableGroup.add(constructGroup);
 
 let meshGrid = [];     // meshGrid[x][y] = array of { mesh, edge }
 let antennaTips = [];
-let sceneAnims = [];
+const sceneAnims = [];
 const antennaRodGeo = new THREE.CylinderGeometry(0.015, 0.015, 0.32, 6);
 const antennaRodMat = new THREE.MeshStandardMaterial({ color: 0x999999, roughness: 0.5, metalness: 0.7 });
 const antennaTipGeo = new THREE.SphereGeometry(0.055, 10, 10);
@@ -262,11 +262,11 @@ function buildGrid() {
 
 function animateBlockRemoval(sel) {
     sel.forEach(function (pos) {
-        let bx = pos[0], by = pos[1];
-        let stack = meshGrid[bx] ? meshGrid[bx][by] : null;
+        const bx = pos[0], by = pos[1];
+        const stack = meshGrid[bx] ? meshGrid[bx][by] : null;
         if (stack && stack.length > 0) {
-            let obj = stack.pop();
-            let clonedMat = obj.mesh.material.clone();
+            const obj = stack.pop();
+            const clonedMat = obj.mesh.material.clone();
             clonedMat.transparent = true;
             obj.mesh.material = clonedMat;
             sceneAnims.push({ type: 'blockRise', mesh: obj.mesh, edge: obj.edge, clonedMat: clonedMat, vel: 0.015 + Math.random() * 0.025, rot: (Math.random() - 0.5) * 0.12, opacity: 1, t: 0 });
@@ -276,12 +276,12 @@ function animateBlockRemoval(sel) {
 
 function spawnSignalRipples(sel, colorKey) {
     sel.forEach(function (pos) {
-        let bx = pos[0], by = pos[1];
-        let curCount = (meshGrid[bx] && meshGrid[bx][by]) ? meshGrid[bx][by].length : 0;
-        let wpos = gridToWorld(bx, by, curCount);
-        let ringGeo2 = new THREE.RingGeometry(0.16, 0.22, 32);
-        let ringMat2 = new THREE.MeshBasicMaterial({ color: COLORS_HEX[colorKey], transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending });
-        let ring2 = new THREE.Mesh(ringGeo2, ringMat2);
+        const bx = pos[0], by = pos[1];
+        const curCount = (meshGrid[bx] && meshGrid[bx][by]) ? meshGrid[bx][by].length : 0;
+        const wpos = gridToWorld(bx, by, curCount);
+        const ringGeo2 = new THREE.RingGeometry(0.16, 0.22, 32);
+        const ringMat2 = new THREE.MeshBasicMaterial({ color: COLORS_HEX[colorKey], transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending });
+        const ring2 = new THREE.Mesh(ringGeo2, ringMat2);
         ring2.rotation.x = -Math.PI / 2;
         ring2.position.copy(wpos);
         constructGroup.add(ring2);
@@ -401,11 +401,11 @@ function validates(sel, card) {
 
 function generateGrid(seed) {
     if (seed != null) setSeed(seed);
-    let g = [];
+    const g = [];
     for (let x = 0; x < W; x++) {
         g[x] = [];
         for (let y = 0; y < H; y++) {
-            let col = [];
+            const col = [];
             for (let z = 0; z < D; z++) {
                 col.push(COLKEYS[Math.floor(rand() * COLKEYS.length)]);
             }
@@ -416,7 +416,7 @@ function generateGrid(seed) {
 }
 
 function generateHand() {
-    let h = [];
+    const h = [];
     const inits = new Set();
     while (h.length < 5) {
         const init = 1 + Math.floor(rand() * MAX_INITIATIVE);
@@ -583,27 +583,6 @@ function hostResolveTurn() {
     if (!gameOver) {
         setTimeout(function () { hostStartRound(); }, 2400);
     }
-}
-
-// We need to validate on the host side using the host's grid
-function hostValidates(sel, card) {
-    if (!sel || sel.length !== card.shape.cells.length) return false;
-    for (const pos of sel) {
-        const stack = HS.grid[pos[0]] ? HS.grid[pos[0]][pos[1]] : [];
-        if (!stack.length || stack[stack.length - 1] !== card.color) return false;
-    }
-    const norm = function (a) {
-        const mx = Math.min.apply(null, a.map(function (p) { return p[0]; }));
-        const my = Math.min.apply(null, a.map(function (p) { return p[1]; }));
-        return a.map(function (p) { return [p[0] - mx, p[1] - my]; }).sort(function (a2, b) { return a2[0] - b[0] || a2[1] - b[1]; });
-    };
-    const s = JSON.stringify(norm(sel));
-    let cells = card.shape.cells.slice();
-    for (let r = 0; r < 4; r++) {
-        if (JSON.stringify(norm(cells)) === s) return true;
-        cells = cells.map(function (c) { return [-c[1], c[0]]; });
-    }
-    return false;
 }
 
 // ---- Client-side handlers ----
@@ -857,8 +836,8 @@ window.hostGame = function () {
             if (!HS.started) {
                 HS.playerIds.splice(slot, 1);
                 conns.splice(slot, 1);
-                delete HS.scores[slot];
-                delete HS.playerNames[slot];
+                HS.scores = Object.fromEntries(Object.entries(HS.scores).filter(([k]) => k !== String(slot)));
+                HS.playerNames = Object.fromEntries(Object.entries(HS.playerNames).filter(([k]) => k !== String(slot)));
                 updatePlayerList();
             }
         });

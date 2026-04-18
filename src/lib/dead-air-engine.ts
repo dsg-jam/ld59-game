@@ -78,7 +78,7 @@ export function createPlayer(id: string, name: string, index: number): Player {
   return {
     id,
     name,
-    color: PLAYER_COLORS[index % PLAYER_COLORS.length]!,
+    color: PLAYER_COLORS[index % PLAYER_COLORS.length] ?? "#ffffff",
     x: WARM_X + Math.cos(index * 1.7) * 30,
     y: WARM_Y + Math.sin(index * 1.7) * 30,
     alive: true,
@@ -102,9 +102,12 @@ export function assignRoles(
   const shuffled = [...playerIds];
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = (rng() * (i + 1)) | 0;
-    [shuffled[i], shuffled[j]] = [shuffled[j]!, shuffled[i]!];
+    const tmp = shuffled[i] ?? "";
+    shuffled[i] = shuffled[j] ?? "";
+    shuffled[j] = tmp;
   }
-  const mimicId = shuffled[0]!;
+  const mimicId = shuffled[0] ?? playerIds[0];
+  if (mimicId === undefined) return new Map();;
   const roles = new Map<string, Role>();
   for (const id of playerIds) {
     roles.set(id, id === mimicId ? "mimic" : "researcher");

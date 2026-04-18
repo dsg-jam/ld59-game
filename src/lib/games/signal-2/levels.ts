@@ -22,7 +22,7 @@ const SRC = (x: number, y: number, dir: number, seq: number[], period = 3, offse
   ({ kind: 'source', x, y, dir, seq, period, offset, loop });
 const SNK = (x: number, y: number, dir: number, expected: number[]): Sink =>
   ({ kind: 'sink', x, y, dir, expected });
-const WALL = (x: number, y: number): Wall => ({ kind: "wall", x, y });
+export const WALL = (x: number, y: number): Wall => ({ kind: "wall", x, y });
 
 export const LEVELS: Level[] = [
   {

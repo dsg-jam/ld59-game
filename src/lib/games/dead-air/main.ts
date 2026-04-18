@@ -4,7 +4,7 @@ import { describePeerError as sharedDescribePeerError, makeCode as sharedMakeCod
 import { endState as endStateStore } from "$lib/games/dead-air/endState";
 import {
   WORLD_W, WORLD_H, PLAYER_SPEED, PLAYER_COLORS, MAX_PLAYERS,
-  TOWER_REQUIRED, REPAIR_RADIUS, WARM_X, WARM_Y, WARM_R, DARK_CHECK_RADIUS,
+  TOWER_REQUIRED, WARM_X, WARM_Y, WARM_R,
   VOTE_DURATION_MS, ELIM_COOLDOWN_MS, PLAYBACK_COOLDOWN_MS, SNIPPET_DURATION_MS,
   createDefaultTowers,
   assignRoles as engineAssignRoles,
@@ -101,17 +101,17 @@ import {
   // ── PEER DATA CONNECTIONS ─────────────────────────────────────────────────────
   function resetNet() {
     for (const c of conns.values()) {
-      try { c.close(); } catch (_) {}
+      try { c.close(); } catch { // ignore
     }
     conns.clear();
     for (const call of mediaCalls.values()) {
-      try { call.close(); } catch (_) {}
+      try { call.close(); } catch { // ignore
     }
     mediaCalls.clear();
     incomingRawStreams.clear();
     voicePipelines.clear();
     if (peer) {
-      try { peer.destroy(); } catch (_) {}
+      try { peer.destroy(); } catch { // ignore
       peer = null;
     }
     updateNetDot(false);
@@ -586,7 +586,7 @@ import {
     try {
       micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       outgoingStream = micStream;
-    } catch (_) {
+    } catch {
       micDenied = true;
       outgoingStream = null;
       return;
@@ -718,8 +718,8 @@ import {
       }
       src.start();
       noiseSrc.start();
-      src.onended = () => { try { noiseSrc.stop(); } catch (_) {} };
-    } catch (_) {}
+      src.onended = () => { try { noiseSrc.stop(); } catch { // ignore };
+    } catch { // ignore
   }
 
   function handleMimicPlayback(msg) {

@@ -445,7 +445,7 @@ function placeToolAt(x, y, fromDir) {
 }
 
 // Drag state
-let drag = { active: false, button: -1, last: null, placed: false };
+const drag = { active: false, button: -1, last: null, placed: false };
 
 function dirFromTo(from, to) {
   if (to.x === from.x && to.y === from.y - 1) return N;

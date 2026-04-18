@@ -1,11 +1,10 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import { base } from "$app/paths";
+  import { resolve } from "$app/paths";
   import { games } from "$lib/games";
   import "./index.css";
 
   const clockPad = (n: number): string => String(n).padStart(2, "0");
-  const formatPath = (path: string): string => `${base}${path}`;
 
   let clock = "--:--:--";
   const timer = setInterval(() => {
@@ -54,8 +53,8 @@
   </div>
 
   <div class="games">
-    {#each games as game, index}
-      <a class="game" href={formatPath(game.path)} aria-label={game.title}>
+    {#each games as game, index (game.id)}
+      <a class="game" href={resolve(game.path)} aria-label={game.title}>
         <div class="game-top">
           <span class="game-num">{String(index + 1).padStart(2, "0")}</span>
           <span class="arrow">↗</span>

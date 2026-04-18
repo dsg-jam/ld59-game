@@ -2,7 +2,7 @@ import { blip as sharedBlip, getAudioContext } from "$lib/audio";
 
 // Tiny WebAudio bleeps for SIGNAL
 export const Audio = (() => {
-  let ctx = null;
+  let ctx: AudioContext | null = null;
   let muted = false;
 
   function ensure() {
@@ -16,7 +16,7 @@ export const Audio = (() => {
     sharedBlip(freq, dur, type as OscillatorType, vol);
   }
 
-  function chord(freqs, dur = 0.18, type = 'sine', vol = 0.05) {
+  function chord(freqs: number[], dur = 0.18, type = 'sine', vol = 0.05) {
     freqs.forEach((f, i) => setTimeout(() => blip(f, dur, type, vol), i * 70));
   }
 
@@ -41,7 +41,7 @@ export const Audio = (() => {
     remove: () => blip(220, 0.05, 'square', 0.05),
     click: () => blip(880, 0.02, 'square', 0.04),
     tick: () => blip(900, 0.015, 'sine', 0.025),
-    pulse: (v) => blip(420 + (v||0)*40, 0.03, 'triangle', 0.04),
+    pulse: (v: number) => blip(420 + (v||0)*40, 0.03, 'triangle', 0.04),
     hit: () => blip(160, 0.08, 'sawtooth', 0.05),
     bad: () => { blip(120, 0.18, 'sawtooth', 0.07); noise(0.2, 0.03); },
     win: () => chord([523, 659, 784, 1046], 0.22, 'sine', 0.06),

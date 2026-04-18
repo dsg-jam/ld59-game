@@ -110,7 +110,7 @@
     </h2>
     <p>{$endState.winner === 'researchers' ? 'The outpost reconnects to the world.' : 'The relay falls silent in the storm.'}</p>
     <ul>
-      {#each $endState.roles as r}
+      {#each $endState.roles as r (r.name)}
         <li>{r.name} — {r.role.toUpperCase()}</li>
       {/each}
     </ul>
