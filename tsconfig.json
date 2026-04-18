@@ -1,18 +1,10 @@
 {
-  "extends": "./tsconfig.base.json",
+  "extends": "./.svelte-kit/tsconfig.json",
   "compilerOptions": {
-    "composite": true,
     "strict": true,
-    "noUncheckedIndexedAccess": true
+    "noUncheckedIndexedAccess": true,
+    "allowJs": true,
+    "checkJs": false
   },
-  "include": ["src"],
-  "exclude": [
-    "src/games/DECONSTRUCT/main.ts",
-    "src/games/DECONSTRUCT_SIKU2/main.ts",
-    "src/games/SIGNAL_1/main.ts",
-    "src/games/SIGNAL_2/main.ts",
-    "src/games/SIGNAL_2/audio.ts",
-    "src/games/SIGNAL_2/levels.ts",
-    "src/games/SIGNAL_WEAVE/main.ts"
-  ]
+  "include": ["src/app.d.ts", "src/vite-env.d.ts", "src/lib/**/*.ts", "src/routes/**/*.svelte"]
 }

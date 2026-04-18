@@ -1,41 +1,45 @@
 import js from "@eslint/js";
+import svelte from "eslint-plugin-svelte";
 import tseslint from "typescript-eslint";
+import globals from "globals";
 
 export default tseslint.config(
+  {
+    ignores: [
+      "dist/",
+      "node_modules/",
+      ".svelte-kit/",
+      "src/routes/games/**/*.ts",
+      "src/routes/games/**/*.js",
+      "svelte.config.js",
+      "vite.config.js",
+    ],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
+  ...svelte.configs["flat/recommended"],
   {
-    files: ["src/**/*.ts"],
+    files: ["src/lib/**/*.ts", "src/routes/**/*.svelte"],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+      },
+    },
     rules: {
-      "no-console": "off",
       eqeqeq: "error",
       "no-var": "error",
-      "prefer-const": "warn",
-      "@typescript-eslint/no-explicit-any": "warn",
-      "@typescript-eslint/explicit-function-return-type": "off",
-      "@typescript-eslint/ban-ts-comment": [
-        "error",
-        {
-          "ts-nocheck": true,
-          "ts-ignore": "allow-with-description",
-          "ts-expect-error": "allow-with-description",
-          minimumDescriptionLength: 3,
-        },
-      ],
+      "prefer-const": "error",
+      "@typescript-eslint/no-explicit-any": "error",
+      "@typescript-eslint/no-unused-vars": "error",
+      "no-console": "warn",
+      "svelte/no-at-html-tags": "off",
     },
   },
   {
-    files: ["src/games/**/*.ts"],
+    files: ["src/lib/**/*.ts"],
     rules: {
-      eqeqeq: "off",
-      "no-var": "off",
-      "@typescript-eslint/no-unused-vars": "off",
-      "@typescript-eslint/no-unused-expressions": "off",
-      "prefer-const": "off",
-      "no-empty": "off",
+      "@typescript-eslint/explicit-function-return-type": "error",
     },
-  },
-  {
-    ignores: ["dist/", "node_modules/"],
   }
 );
