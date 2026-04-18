@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Tiny WebAudio bleeps for SIGNAL
 export const Audio = (() => {
   let ctx = null;

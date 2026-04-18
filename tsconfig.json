@@ -1,14 +1,18 @@
 {
+  "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
+    "composite": true,
     "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "lib": ["ES2022", "DOM"],
-    "outDir": "dist",
-    "rootDir": "src",
-    "skipLibCheck": true
+    "noUncheckedIndexedAccess": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": [
+    "src/games/DECONSTRUCT/main.ts",
+    "src/games/DECONSTRUCT_SIKU2/main.ts",
+    "src/games/SIGNAL_1/main.ts",
+    "src/games/SIGNAL_2/main.ts",
+    "src/games/SIGNAL_2/audio.ts",
+    "src/games/SIGNAL_2/levels.ts",
+    "src/games/SIGNAL_WEAVE/main.ts"
+  ]
 }
