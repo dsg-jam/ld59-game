@@ -37,56 +37,77 @@ const CHARS = {
   traveler:  { name: "Time Traveler", emoji: "⏳" },
   pope:      { name: "The Pope",      emoji: "⛪" },
   dog:       { name: "Tired Dog",     emoji: "🐕" },
+  agency:    { name: "The Agency",    emoji: "🕴" },
 };
 
 /* ---------- Levels ---------- */
 const LEVELS = [
   {
     title: "FIRST SHIFT",
-    subtitle: "Tuesday. 7:02pm. Everyone wants the butcher.",
-    duration: 110,
+    subtitle: "Tuesday. 7:02pm. The board will not wait.",
+    duration: 95,
+    ringTimeoutSec: 20,
+    lineIntervalMs: 1500,
     chars: ["mom","butcher","mayor","quack","henderson","dog"],
     calls: [
       { from: "henderson", to: "butcher",   note: "re: pot roast",          at: 1 },
-      { from: "mayor",     to: "quack",     note: "re: the duck situation", at: 16 },
-      { from: "mom",       to: "dog",       note: "good boy check",         at: 36 },
-      { from: "butcher",   to: "henderson", note: "return call",            at: 58 },
-      { from: "quack",     to: "mom",       note: "vet bill",               at: 82 },
+      { from: "mayor",     to: "quack",     note: "re: the duck situation", at: 8 },
+      { from: "mom",       to: "dog",       note: "good boy check",         at: 18 },
+      { from: "butcher",   to: "henderson", note: "return call",            at: 26 },
+      { from: "quack",     to: "mom",       note: "vet bill",               at: 38 },
+      { from: "dog",       to: "butcher",   note: "scraps plz",             at: 52 },
+      { from: "henderson", to: "quack",     note: "bird advice",            at: 66 },
     ],
-    goal: 3,
+    goal: 5,
+    restricted: [],
   },
   {
     title: "RUSH HOUR",
     subtitle: "Everyone wants to talk. Nobody wants to wait.",
-    duration: 150,
+    duration: 135,
+    ringTimeoutSec: 16,
+    lineIntervalMs: 1300,
     chars: ["mom","butcher","mayor","quack","spy","elvis","henderson","dog"],
     calls: [
       { from: "henderson", to: "mayor",     note: "a complaint",        at: 1 },
-      { from: "spy",       to: "mom",       note: "URGENT",             at: 14 },
-      { from: "elvis",     to: "quack",     note: "it's for the pet",   at: 32 },
-      { from: "butcher",   to: "henderson", note: "return call",        at: 52 },
-      { from: "mayor",     to: "spy",       note: "off the record",     at: 76 },
-      { from: "dog",       to: "mom",       note: "woof",               at: 98 },
-      { from: "quack",     to: "butcher",   note: "re: scraps",         at: 122 },
+      { from: "spy",       to: "mom",       note: "URGENT",             at: 8 },
+      { from: "elvis",     to: "quack",     note: "it's for the pet",   at: 16 },
+      { from: "butcher",   to: "henderson", note: "return call",        at: 22 },
+      { from: "mayor",     to: "spy",       note: "off the record",     at: 32 },
+      { from: "dog",       to: "mom",       note: "woof",               at: 42 },
+      { from: "quack",     to: "butcher",   note: "re: scraps",         at: 54 },
+      { from: "henderson", to: "butcher",   note: "ANOTHER roast",      at: 66 },
+      { from: "elvis",     to: "mom",       note: "wrong ma?",          at: 80 },
+      { from: "spy",       to: "mayor",     note: "abort abort",        at: 94 },
+      { from: "mom",       to: "dog",       note: "dinner time",        at: 108 },
     ],
-    goal: 5,
+    goal: 8,
+    restricted: ["spy"],
   },
   {
     title: "GRAVEYARD SHIFT",
     subtitle: "After midnight, the signals get… weird.",
-    duration: 180,
+    duration: 165,
+    ringTimeoutSec: 13,
+    lineIntervalMs: 1100,
     chars: ["mom","butcher","mayor","quack","spy","elvis","moon","henderson","ghost","traveler","pope","dog"],
     calls: [
       { from: "ghost",     to: "henderson", note: "unfinished business", at: 1 },
-      { from: "moon",      to: "pope",      note: "theological query",   at: 18 },
-      { from: "traveler",  to: "mayor",     note: "don't eat the clams", at: 38 },
-      { from: "elvis",     to: "mom",       note: "yes, THAT Elvis",     at: 58 },
-      { from: "dog",       to: "butcher",   note: "woof",                at: 82 },
-      { from: "spy",       to: "ghost",     note: "classified",          at: 106 },
-      { from: "pope",      to: "quack",     note: "the swan is ill",     at: 130 },
-      { from: "henderson", to: "mayor",     note: "another complaint",   at: 154 },
+      { from: "moon",      to: "pope",      note: "theological query",   at: 8 },
+      { from: "traveler",  to: "mayor",     note: "don't eat the clams", at: 16 },
+      { from: "elvis",     to: "mom",       note: "yes, THAT Elvis",     at: 24 },
+      { from: "dog",       to: "butcher",   note: "woof",                at: 34 },
+      { from: "spy",       to: "ghost",     note: "classified",          at: 44 },
+      { from: "pope",      to: "quack",     note: "the swan is ill",     at: 54 },
+      { from: "henderson", to: "mayor",     note: "another complaint",   at: 66 },
+      { from: "ghost",     to: "spy",       note: "message from beyond", at: 80 },
+      { from: "moon",      to: "mom",       note: "are you eating",      at: 94 },
+      { from: "traveler",  to: "butcher",   note: "clams again",         at: 108 },
+      { from: "elvis",     to: "henderson", note: "hound help",          at: 122 },
+      { from: "pope",      to: "moon",      note: "correction",          at: 136 },
     ],
-    goal: 6,
+    goal: 10,
+    restricted: ["ghost","spy","moon"],
   },
 ];
 
@@ -324,14 +345,63 @@ const CLOSERS = [
 const PLAYER_COLORS = ["#68c6ff","#6fe07a","#ffd561","#ff8fc8","#c792ea","#7fe0c4","#ffae6c","#ff5a4e"];
 
 /* ---------- Tunables ---------- */
-const CABLES_PER_PLAYER = 3;
-const LINE_INTERVAL_MS  = 2100;
-const LINE_FIRST_DELAY  = 700;
-const RING_TIMEOUT_MS   = 38000;
+const CABLES_PER_PLAYER = 2;
+const LINE_INTERVAL_MS  = 1500;
+const LINE_FIRST_DELAY  = 500;
+const RING_TIMEOUT_MS   = 22000;   // baseline; overridden per level
 const SCORE_CORRECT     = 10;
 const SCORE_CHAOS       = 4;
-const PENALTY_EARLY     = 15;
-const PENALTY_TIMEOUT   = 10;
+const PENALTY_EARLY     = 22;
+const PENALTY_TIMEOUT   = 16;
+const PENALTY_TIMEOUT_STEP = 4;    // +4 per subsequent timeout this shift
+const SCORE_DENY_RIGHT  = 14;
+const PENALTY_DENY_WRONG = 14;
+const PENALTY_APPROVE_BAD = 14;
+const DIRTY_SLIP_CHANCE = 0.42;
+const FORGED_NAME_CHANCE = 0.18;   // slip caller name lies (verify/supervisor)
+
+/* Agency check-ins: operators are spies, Agency pops in to quiz them on past calls */
+const AGENCY_FIRST_DELAY_SEC  = 45;
+const AGENCY_MIN_INTERVAL_SEC = 38;
+const AGENCY_MAX_INTERVAL_SEC = 65;
+const AGENCY_TIMEOUT_MS       = 17000;
+const SCORE_AGENCY            = 22;
+const PENALTY_AGENCY          = 26;
+
+/* ---------- Papers-Please helpers ---------- */
+const PHONE_PREFIXES = ["KL5","MU6","AT3","EX1","HE4","PE9","RI2","OL7"];
+function makePhone() {
+  const p = PHONE_PREFIXES[Math.floor(Math.random() * PHONE_PREFIXES.length)];
+  return `${p}-${String(Math.floor(Math.random() * 10000)).padStart(4,"0")}`;
+}
+function makeSlip(call, levelIdx) {
+  const lvl = LEVELS[levelIdx];
+  const restricted = lvl.restricted || [];
+  const flagged = restricted.includes(call.from) || restricted.includes(call.to);
+  const dirtyReq = Math.random() < DIRTY_SLIP_CHANCE;
+  const forgedName = Math.random() < FORGED_NAME_CHANCE;
+  const dirty = !flagged && (dirtyReq || forgedName);
+
+  let requestId = call.to;
+  if (dirtyReq) {
+    const pool = lvl.chars.filter(c => c !== call.to && c !== call.from);
+    if (pool.length) requestId = pool[Math.floor(Math.random() * pool.length)];
+  }
+  let callerName = CHARS[call.from].name;
+  if (forgedName) {
+    const pool = lvl.chars.filter(c => c !== call.from);
+    if (pool.length) callerName = CHARS[pool[Math.floor(Math.random() * pool.length)]].name;
+  }
+  return {
+    slipNum: String(100 + Math.floor(Math.random() * 900)),
+    callerName,
+    line: makePhone(),
+    requestId,
+    requestName: CHARS[requestId].name,
+    dirty,
+    flagged,
+  };
+}
 
 /* ---------- Audio ---------- */
 let audioCtx;
@@ -357,7 +427,16 @@ const sfx = {
   line:     () => beep(720 + Math.random()*250, 0.02,"square",0.025),
   tick:     () => beep(1200,0.02,"square",0.03),
   denied:   () => beep(160,0.15,"triangle",0.05),
+  stamp:    () => { beep(200,0.04,"square",0.08); setTimeout(()=>beep(90,0.12,"sawtooth",0.07), 50); },
+  agency:   () => { beep(140,0.22,"triangle",0.09); setTimeout(()=>beep(180,0.22,"triangle",0.08), 240); setTimeout(()=>beep(110,0.30,"sawtooth",0.07), 500); },
 };
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
 function unlockAudio() {
   try { const c = ac(); if (c.state === "suspended") c.resume(); beep(1,0.001,"sine",0.0001); } catch(e){}
 }
@@ -502,11 +581,16 @@ const state = {
   teamPenalty: 0,
   correctCount: 0,
   players: [],      // {id,name,color,cables,maxCables,selected}
-  tickets: [],      // {id,from,to,note,status,ringingSince,timeoutAt,connection?}
+  tickets: [],      // {id,from,to,note,status,ringingSince,timeoutAt,connection?,slip,approval,reviewer}
   log: [],          // {ticketId,from,actual,intended,byPlayer,correct,lines,status,result}
   levelTitle: "",
   levelSubtitle: "",
+  gameMode: "classic",   // "classic" | "verify" | "supervisor"
+  supervisorId: null,
 };
+let lobbyMode = "classic";
+let lobbySupervisorId = null;
+let slipModalTicketId = null;
 let _nextTicketId = 1;
 let lastTick = 0;
 let timerHandle = null;
@@ -554,10 +638,22 @@ function hostStartLevel(idx) {
   state.correctCount = 0;
   state.levelTitle = lvl.title;
   state.levelSubtitle = lvl.subtitle;
+  state._timeoutCount = 0;
+  state._agencyNextAt = Date.now() + AGENCY_FIRST_DELAY_SEC * 1000;
+  state.gameMode = lobbyMode;
+  // Validate supervisor choice
+  if (state.gameMode === "supervisor") {
+    const pickedExists = state.players.some(p => p.id === lobbySupervisorId);
+    state.supervisorId = pickedExists ? lobbySupervisorId : (state.players[0]?.id || null);
+  } else {
+    state.supervisorId = null;
+  }
   _nextTicketId = 1;
   state.players.forEach(p => {
-    p.maxCables = CABLES_PER_PLAYER;
-    p.cables = CABLES_PER_PLAYER;
+    // Supervisor gets no cables in supervisor mode
+    const isSupervisor = state.gameMode === "supervisor" && p.id === state.supervisorId;
+    p.maxCables = isSupervisor ? 0 : CABLES_PER_PLAYER;
+    p.cables = p.maxCables;
     p.selected = null;
   });
   resetRenderCaches();
@@ -591,6 +687,13 @@ function hostEndLevel() {
 
 function hostSpawnTicket(call) {
   const now = Date.now();
+  const slip = state.gameMode === "classic" ? null : makeSlip(call, state.levelIdx);
+  const approval =
+    state.gameMode === "classic" ? "none" :
+    state.gameMode === "verify"  ? "pending" :
+    /* supervisor */               "awaiting-stamp";
+  const lvl = LEVELS[state.levelIdx];
+  const ringMs = (lvl.ringTimeoutSec ? lvl.ringTimeoutSec * 1000 : RING_TIMEOUT_MS);
   state.tickets.push({
     id: _nextTicketId++,
     from: call.from,
@@ -598,11 +701,149 @@ function hostSpawnTicket(call) {
     note: call.note,
     status: "ringing",
     ringingSince: now,
-    timeoutAt: now + RING_TIMEOUT_MS,
+    ringDurationMs: ringMs,
+    timeoutAt: now + ringMs,
     connection: null,
+    slip,
+    approval,
+    reviewer: null,     // verify mode: player currently viewing slip
   });
   broadcastState();
   broadcastEvent({ type: "ring" });
+}
+
+/* ---------- Agency check-ins ---------- */
+function hostSpawnAgency() {
+  const q = buildAgencyQuestion();
+  if (!q) return false;
+  const now = Date.now();
+  state.tickets.push({
+    id: _nextTicketId++,
+    kind: "agency",
+    from: "agency",
+    to: null,
+    note: "AGENCY CHECK-IN",
+    status: "ringing",
+    ringingSince: now,
+    ringDurationMs: AGENCY_TIMEOUT_MS,
+    timeoutAt: now + AGENCY_TIMEOUT_MS,
+    connection: null,
+    slip: null,
+    approval: "none",
+    reviewer: null,
+    agencyQ: q,
+    agencyPickedBy: null,
+  });
+  broadcastState();
+  broadcastEvent({ type: "agencyRing" });
+  return true;
+}
+
+function buildAgencyQuestion() {
+  const lvl = LEVELS[state.levelIdx];
+  // Log is newest-first; include only completed entries with a result
+  const ended = state.log.filter(e =>
+    e.status === "ended" && (e.result === "routed" || e.result === "chaos" || e.result === "cut")
+  );
+  const types = shuffle(["whoSpokeTo","crossedCount","whoRoutedByOp","whoCutEarly","lastCallerTo"]);
+  for (const t of types) {
+    const q = _buildAgencyQ(t, ended, lvl);
+    if (q) return q;
+  }
+  return null;
+}
+
+function _buildAgencyQ(type, ended, lvl) {
+  const pickChars = (except, n) => {
+    const pool = lvl.chars.filter(c => !except.includes(c) && c !== "agency");
+    shuffle(pool);
+    return pool.slice(0, n);
+  };
+
+  if (type === "whoSpokeTo") {
+    // Ask about a caller who had a completed (not-cut) call
+    const ref = ended.find(e => e.result !== "cut");
+    if (!ref) return null;
+    const callerId = ref.from, actualId = ref.actual;
+    if (!CHARS[callerId] || !CHARS[actualId]) return null;
+    const distractors = pickChars([callerId, actualId], 3);
+    if (distractors.length < 2) return null;
+    const choices = shuffle([actualId, ...distractors]).map(id => ({ label: CHARS[id].name, tag: id }));
+    const correctIdx = choices.findIndex(c => c.tag === actualId);
+    return {
+      text: `"${CHARS[callerId].name.toUpperCase()} — who did you put them through to?"`,
+      choices, correctIdx,
+    };
+  }
+
+  if (type === "crossedCount") {
+    const count = state.log.filter(e => e.status === "ended" && e.result === "chaos").length;
+    const opts = new Set([count, Math.max(0, count - 1), count + 1, count + 2]);
+    const arr = shuffle([...opts]).slice(0, 4);
+    while (arr.length < 4) arr.push(arr[arr.length - 1] + 1);
+    const choices = arr.map(n => ({ label: String(n), tag: n }));
+    const correctIdx = choices.findIndex(c => c.tag === count);
+    return {
+      text: `"How many crossed wires slipped through tonight?"`,
+      choices, correctIdx,
+    };
+  }
+
+  if (type === "whoRoutedByOp") {
+    // Pick an operator with at least one routed call
+    const byOp = new Map();
+    for (const e of ended) {
+      if (e.result === "routed" && !byOp.has(e.byPlayer)) byOp.set(e.byPlayer, e);
+    }
+    if (!byOp.size) return null;
+    const picks = [...byOp.entries()];
+    const [opId, entry] = picks[Math.floor(Math.random() * picks.length)];
+    const op = state.players.find(p => p.id === opId);
+    if (!op) return null;
+    const callerId = entry.from;
+    if (!CHARS[callerId]) return null;
+    const distractors = pickChars([callerId], 3);
+    if (distractors.length < 2) return null;
+    const choices = shuffle([callerId, ...distractors]).map(id => ({ label: CHARS[id].name, tag: id }));
+    const correctIdx = choices.findIndex(c => c.tag === callerId);
+    return {
+      text: `"Operator ${op.name} — who was the last caller you routed?"`,
+      choices, correctIdx,
+    };
+  }
+
+  if (type === "whoCutEarly") {
+    const cut = ended.find(e => e.result === "cut");
+    if (!cut) return null;
+    const actualId = cut.actual;
+    if (!CHARS[actualId]) return null;
+    const distractors = pickChars([actualId], 3);
+    if (distractors.length < 2) return null;
+    const choices = shuffle([actualId, ...distractors]).map(id => ({ label: CHARS[id].name, tag: id }));
+    const correctIdx = choices.findIndex(c => c.tag === actualId);
+    return {
+      text: `"A line was CUT EARLY. Which recipient was mid-call?"`,
+      choices, correctIdx,
+    };
+  }
+
+  if (type === "lastCallerTo") {
+    // Find the most recent completed call with a known actual, then ask "who called X?"
+    const ref = ended.find(e => e.result !== "cut");
+    if (!ref) return null;
+    const actualId = ref.actual, callerId = ref.from;
+    if (!CHARS[callerId]) return null;
+    const distractors = pickChars([callerId, actualId], 3);
+    if (distractors.length < 2) return null;
+    const choices = shuffle([callerId, ...distractors]).map(id => ({ label: CHARS[id].name, tag: id }));
+    const correctIdx = choices.findIndex(c => c.tag === callerId);
+    return {
+      text: `"Who most recently called ${CHARS[actualId].name.toUpperCase()}?"`,
+      choices, correctIdx,
+    };
+  }
+
+  return null;
 }
 
 /* ---------- Dialogue selection ---------- */
@@ -642,15 +883,106 @@ function hostHandleAction(playerId, msg) {
     if (isPlugBusy(msg.plugId)) return;
     const other = state.players.find(x => x.selected === msg.plugId);
     if (other) return;
-    const ticket = state.tickets.find(t => t.from === msg.plugId && t.status === "ringing");
+    const ticket = state.tickets.find(t => t.from === msg.plugId && t.status === "ringing" && t.kind !== "agency");
     if (!ticket) return;
     if (p.cables <= 0) return;
+    // Mode gating
+    if (state.gameMode === "supervisor" && ticket.approval !== "approved") return;
+    if (state.gameMode === "verify" && ticket.approval !== "approved") {
+      // Selecting a not-yet-approved ticket opens review (reviewer = this player)
+      if (ticket.reviewer && ticket.reviewer !== p.id) return;
+      p.selected = msg.plugId;
+      ticket.reviewer = p.id;
+      broadcastState();
+      return;
+    }
     p.selected = msg.plugId;
     broadcastState();
   }
 
+  else if (msg.type === "verifyDecision") {
+    // Verify mode: player who selected the ticket submits a decision
+    if (state.gameMode !== "verify") return;
+    const ticket = state.tickets.find(t => t.id === msg.ticketId && t.status === "ringing");
+    if (!ticket) return;
+    if (ticket.reviewer !== p.id) return;
+    if (msg.decision === "approve") {
+      ticket.approval = "approved";
+      ticket.reviewer = null;
+      // Player already has selected = ticket.from; they now proceed to pick recipient
+      // If they approved a flagged/dirty slip, penalize now.
+      if (ticket.slip && (ticket.slip.dirty || ticket.slip.flagged)) {
+        state.teamPenalty += PENALTY_APPROVE_BAD;
+        broadcastEvent({ type: "badApprove", fromId: ticket.from });
+      }
+      broadcastState();
+    } else if (msg.decision === "deny") {
+      const correctDeny = !!(ticket.slip && (ticket.slip.dirty || ticket.slip.flagged));
+      if (correctDeny) state.teamScore += SCORE_DENY_RIGHT;
+      else state.teamPenalty += PENALTY_DENY_WRONG;
+      ticket.status = "done";
+      ticket.approval = "denied";
+      ticket.reviewer = null;
+      p.selected = null;
+      broadcastEvent({ type: "denied", ticketId: ticket.id, fromId: ticket.from, correct: correctDeny });
+      broadcastState();
+    } else if (msg.decision === "cancel") {
+      // Abandon review without a stamp
+      ticket.reviewer = null;
+      p.selected = null;
+      broadcastState();
+    }
+  }
+
+  else if (msg.type === "agencyAnswer") {
+    const ticket = state.tickets.find(t => t.id === msg.ticketId && t.status === "ringing" && t.kind === "agency");
+    if (!ticket) return;
+    if (ticket.agencyPickedBy) return;
+    ticket.agencyPickedBy = p.id;
+    const correct = Number(msg.choiceIdx) === ticket.agencyQ.correctIdx;
+    if (correct) state.teamScore += SCORE_AGENCY;
+    else state.teamPenalty += PENALTY_AGENCY;
+    ticket.status = "done";
+    broadcastEvent({
+      type: correct ? "agencyCorrect" : "agencyWrong",
+      score: correct ? SCORE_AGENCY : 0,
+      penalty: correct ? 0 : PENALTY_AGENCY,
+      operatorName: p.name,
+    });
+    broadcastState();
+  }
+
+  else if (msg.type === "stamp") {
+    if (state.gameMode !== "supervisor") return;
+    if (p.id !== state.supervisorId) return;
+    const ticket = state.tickets.find(t => t.id === msg.ticketId && t.status === "ringing");
+    if (!ticket) return;
+    if (ticket.approval !== "awaiting-stamp") return;
+    if (msg.decision === "approve") {
+      ticket.approval = "approved";
+      if (ticket.slip && (ticket.slip.dirty || ticket.slip.flagged)) {
+        state.teamPenalty += PENALTY_APPROVE_BAD;
+        broadcastEvent({ type: "badApprove", fromId: ticket.from });
+      }
+      broadcastEvent({ type: "stamp", approved: true });
+      broadcastState();
+    } else if (msg.decision === "deny") {
+      const correctDeny = !!(ticket.slip && (ticket.slip.dirty || ticket.slip.flagged));
+      if (correctDeny) state.teamScore += SCORE_DENY_RIGHT;
+      else state.teamPenalty += PENALTY_DENY_WRONG;
+      ticket.status = "done";
+      ticket.approval = "denied";
+      broadcastEvent({ type: "denied", ticketId: ticket.id, fromId: ticket.from, correct: correctDeny });
+      broadcastEvent({ type: "stamp", approved: false });
+      broadcastState();
+    }
+  }
+
   else if (msg.type === "deselect") {
     if (!p.selected) return;
+    // Release verify-reviewer if this player was reviewing a pending ticket
+    const reviewing = state.tickets.find(t => t.reviewer === p.id && t.approval === "pending");
+    if (reviewing) reviewing.reviewer = null;
     p.selected = null;
     broadcastState();
   }
@@ -661,6 +993,7 @@ function hostHandleAction(playerId, msg) {
     if (p.cables <= 0) return;
     const ticket = state.tickets.find(t => t.from === p.selected && t.status === "ringing");
     if (!ticket) return;
+    if (state.gameMode !== "classic" && ticket.approval !== "approved") return;
     if (isPlugBusy(msg.toId) || isPlugBusy(ticket.from)) return;
 
     const correct = ticket.to === msg.toId;
@@ -738,6 +1071,7 @@ function buildSnapshot() {
     correctCount: state.correctCount,
     tickets: state.tickets, players: state.players, log: state.log,
     levelTitle: state.levelTitle, levelSubtitle: state.levelSubtitle,
+    gameMode: state.gameMode, supervisorId: state.supervisorId,
   };
 }
 function broadcastState() {
@@ -757,10 +1091,14 @@ function applyStateLocally(snap) {
     correctCount: snap.correctCount,
     tickets: snap.tickets, players: snap.players, log: snap.log,
     levelTitle: snap.levelTitle, levelSubtitle: snap.levelSubtitle,
+    gameMode: snap.gameMode || "classic",
+    supervisorId: snap.supervisorId || null,
   });
   snapTimeLeft = snap.timeLeft;
   snapTakenAt = performance.now();
   render();
+  reconcileSlipModal();
+  reconcileAgencyModal();
   ensureClientLoop();
 }
 function applyEventLocally(ev) {
@@ -784,16 +1122,44 @@ function applyEventLocally(ev) {
   } else if (ev.type === "timeout") {
     sfx.penalty();
     const rect = plugRect(ev.fromId);
-    if (rect) floater(`−${PENALTY_TIMEOUT} TIMEOUT`, rect.x, rect.y - 20, "chaos");
+    if (rect) floater(`−${ev.penalty ?? PENALTY_TIMEOUT} TIMEOUT`, rect.x, rect.y - 20, "chaos");
   } else if (ev.type === "tick") {
     sfx.tick();
+  } else if (ev.type === "stamp") {
+    sfx.stamp();
+  } else if (ev.type === "denied") {
+    sfx.stamp();
+    const rect = plugRect(ev.fromId);
+    if (rect) {
+      if (ev.correct) floater(`+${SCORE_DENY_RIGHT} DENIED`, rect.x, rect.y - 20, "score");
+      else floater(`−${PENALTY_DENY_WRONG} WRONG DENY`, rect.x, rect.y - 20, "chaos");
+    }
+  } else if (ev.type === "badApprove") {
+    sfx.penalty();
+    const rect = plugRect(ev.fromId);
+    if (rect) floater(`−${PENALTY_APPROVE_BAD} BAD APPROVE`, rect.x, rect.y - 20, "chaos");
+  } else if (ev.type === "agencyRing") {
+    sfx.agency();
+    showToast("☎ THE AGENCY IS ON THE LINE");
+  } else if (ev.type === "agencyCorrect") {
+    sfx.connect();
+    showToast(`+${ev.score} AGENCY • ${ev.operatorName} HELD COVER`);
+  } else if (ev.type === "agencyWrong") {
+    sfx.penalty();
+    showToast(`−${ev.penalty} AGENCY • ${ev.operatorName} FUMBLED`);
+  } else if (ev.type === "agencyMiss") {
+    sfx.penalty();
+    showToast(`−${ev.penalty} AGENCY • NO ANSWER`);
   }
 }
 
 /* ============================================================
    CLIENT / HOST MESSAGE HANDLERS
    ============================================================ */
-Net.onClientConnect = () => {};
+Net.onClientConnect = (conn) => {
+  // Send lobby mode to new connection so their picker reflects host's choice.
+  try { conn.send({ type: "lobby", mode: lobbyMode, supervisorId: lobbySupervisorId }); } catch(e){}
+};
 Net.onClientDisconnect = (peerId) => {
   if (Net.isHost) {
     const idx = state.players.findIndex(p => p.id === peerId);
@@ -827,6 +1193,7 @@ Net.onMessage = (peerId, msg) => {
           selected: null,
         });
         broadcastState();
+        broadcastLobbyState();
       }
     } else {
       hostHandleAction(peerId, msg);
@@ -834,6 +1201,11 @@ Net.onMessage = (peerId, msg) => {
   } else {
     if (msg.type === "state") applyStateLocally(msg);
     else if (msg.type === "event") applyEventLocally(msg.event);
+    else if (msg.type === "lobby") {
+      lobbyMode = msg.mode || "classic";
+      lobbySupervisorId = msg.supervisorId || null;
+      renderLobby();
+    }
   }
 };
 
@@ -866,6 +1238,26 @@ function onPlugClick(plugId) {
   // Try to claim ringing plug
   const ticket = state.tickets.find(t => t.from === plugId && t.status === "ringing");
   if (!ticket) { sfx.denied(); return; }
+
+  // Supervisor mode: supervisor clicks to open stamp modal; non-supervisors blocked on pending
+  if (state.gameMode === "supervisor") {
+    if (ticket.approval === "awaiting-stamp") {
+      if (me.id === state.supervisorId) { openSlipModal(ticket, "supervisor"); sfx.select(); }
+      else { sfx.denied(); showToast("awaiting supervisor stamp"); }
+      return;
+    }
+    if (me.id === state.supervisorId) { sfx.denied(); showToast("supervisors do not patch"); return; }
+  }
+
+  // Verify mode: opening a pending ticket begins review (select is also the review claim)
+  if (state.gameMode === "verify" && ticket.approval === "pending") {
+    if (ticket.reviewer && ticket.reviewer !== me.id) { sfx.denied(); showToast("another op reviewing"); return; }
+    if (me.cables <= 0) { sfx.denied(); showToast("no cables free"); return; }
+    sendAction({ type: "select", plugId });
+    sfx.select();
+    return;
+  }
+
   if (me.cables <= 0) { sfx.denied(); showToast("no cables free"); return; }
   sendAction({ type: "select", plugId });
   sfx.select();
@@ -908,6 +1300,8 @@ function bindUI() {
         selected: null,
       }];
       Net.myColor = PLAYER_COLORS[0];
+      lobbyMode = "classic";
+      lobbySupervisorId = Net.myId;
       if ($("room-code")) $("room-code").textContent = Net.roomCode;
       if ($("hud-room"))  $("hud-room").textContent  = Net.roomCode;
       showScreen("lobby");
@@ -957,6 +1351,53 @@ function bindUI() {
 
   on("room-input", "input", (e) => { e.target.value = e.target.value.toUpperCase(); });
 
+  // Mode picker (host only — everyone else's clicks ignored)
+  const modeDescs = {
+    classic:    "Classic switchboard. Ring → patch → hang up.",
+    verify:     "Every call comes with a call slip. Before patching, review caller, line, and request. Deny forged or flagged slips.",
+    supervisor: "One operator becomes Supervisor: no cables, stamps APPROVE/DENY. Patchers only see calls after they're approved.",
+  };
+  ["classic","verify","supervisor"].forEach(mode => {
+    on(`mode-${mode}`, "click", () => {
+      if (!Net.isHost) return;
+      lobbyMode = mode;
+      renderLobby();
+      broadcastLobbyState();
+    });
+  });
+  on("supervisor-select", "change", (e) => {
+    if (!Net.isHost) return;
+    lobbySupervisorId = e.target.value || null;
+    broadcastLobbyState();
+  });
+
+  // Slip modal buttons
+  on("slip-approve", "click", () => {
+    const tid = slipModalTicketId;
+    if (!tid) return;
+    if (state.gameMode === "verify") sendAction({ type: "verifyDecision", ticketId: tid, decision: "approve" });
+    else if (state.gameMode === "supervisor") sendAction({ type: "stamp", ticketId: tid, decision: "approve" });
+    sfx.stamp();
+    closeSlipModal();
+  });
+  on("slip-deny", "click", () => {
+    const tid = slipModalTicketId;
+    if (!tid) return;
+    if (state.gameMode === "verify") sendAction({ type: "verifyDecision", ticketId: tid, decision: "deny" });
+    else if (state.gameMode === "supervisor") sendAction({ type: "stamp", ticketId: tid, decision: "deny" });
+    sfx.stamp();
+    closeSlipModal();
+  });
+  on("slip-cancel", "click", () => {
+    const tid = slipModalTicketId;
+    if (!tid) { closeSlipModal(); return; }
+    if (state.gameMode === "verify") sendAction({ type: "verifyDecision", ticketId: tid, decision: "cancel" });
+    closeSlipModal();
+  });
+
+  // Store mode descs for renderLobby
+  window._modeDescs = modeDescs;
+
   document.addEventListener("contextmenu", (e) => {
     if (state.phase === "playing" && screens.game?.classList.contains("active")) {
       const me = myPlayer();
@@ -991,6 +1432,14 @@ function resetLocal() {
   state.teamChaos = 0;
   state.teamPenalty = 0;
   state.correctCount = 0;
+  state.gameMode = "classic";
+  state.supervisorId = null;
+  state._agencyNextAt = 0;
+  state._timeoutCount = 0;
+  lobbyMode = "classic";
+  lobbySupervisorId = null;
+  closeSlipModal();
+  closeAgencyModal();
   if (timerHandle) { cancelAnimationFrame(timerHandle); timerHandle = null; }
   if (clientHandle) { cancelAnimationFrame(clientHandle); clientHandle = null; }
   ["board","queue","operators","log","leaderboard"].forEach(id => { const el = $(id); if (el) el.innerHTML = ""; });
@@ -1023,17 +1472,64 @@ function renderLobby() {
   if (!el) return;
   el.innerHTML = "";
   state.players.forEach(p => {
+    const isSv = lobbyMode === "supervisor" && lobbySupervisorId === p.id;
     const row = document.createElement("div");
     row.className = "lobby-player";
     row.innerHTML = `
       <div class="dot" style="background:${p.color};color:${p.color}"></div>
-      <div class="name">${escape(p.name)}</div>
+      <div class="name">${escape(p.name)}${isSv ? ' <span class="sv-badge">SV</span>' : ''}</div>
       <div class="tag">${p.id === Net.myId ? (Net.isHost ? "HOST / YOU" : "YOU") : "OPERATOR"}</div>
     `;
     el.appendChild(row);
   });
   if ($("lobby-start-btn")) $("lobby-start-btn").style.display = Net.isHost ? "" : "none";
   if ($("lobby-wait")) $("lobby-wait").style.display = Net.isHost ? "none" : "";
+
+  // Mode buttons
+  ["classic","verify","supervisor"].forEach(m => {
+    const b = $(`mode-${m}`);
+    if (!b) return;
+    b.classList.toggle("active", lobbyMode === m);
+    b.disabled = !Net.isHost;
+    if (m === "supervisor") b.disabled = b.disabled || state.players.length < 2;
+  });
+  const desc = $("mode-desc");
+  if (desc) {
+    const base = (window._modeDescs && window._modeDescs[lobbyMode]) || "";
+    desc.textContent = lobbyMode === "supervisor" && state.players.length < 2
+      ? "Supervisor mode requires 2+ operators."
+      : base;
+  }
+
+  // Supervisor picker
+  const pick = $("supervisor-pick");
+  if (pick) pick.style.display = lobbyMode === "supervisor" ? "" : "none";
+  const sel = $("supervisor-select");
+  if (sel) {
+    const prev = lobbySupervisorId || state.players[0]?.id || "";
+    sel.innerHTML = "";
+    state.players.forEach(p => {
+      const opt = document.createElement("option");
+      opt.value = p.id;
+      opt.textContent = p.name;
+      if (p.id === prev) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.disabled = !Net.isHost;
+    // Ensure lobbySupervisorId is one of the current players
+    if (!state.players.some(p => p.id === lobbySupervisorId)) {
+      lobbySupervisorId = state.players[0]?.id || null;
+    }
+  }
+
+  // Disable Start if supervisor mode with <2 players
+  const startBtn = $("lobby-start-btn");
+  if (startBtn) startBtn.disabled = lobbyMode === "supervisor" && state.players.length < 2;
+}
+
+function broadcastLobbyState() {
+  if (!Net.isHost) return;
+  Net.broadcast({ type: "lobby", mode: lobbyMode, supervisorId: lobbySupervisorId });
 }
 
 function updateHud() {
@@ -1045,6 +1541,13 @@ function updateHud() {
   const free = state.players.reduce((s,p) => s + p.cables, 0);
   if ($("cables-free"))  $("cables-free").textContent = `${free} / ${totalMax}`;
   if ($("hud-room"))     $("hud-room").textContent = Net.roomCode || "---";
+  if ($("hud-mode")) {
+    const m = state.gameMode || "classic";
+    const iAmSv = m === "supervisor" && Net.myId === state.supervisorId;
+    $("hud-mode").textContent = m === "classic" ? "CLASSIC"
+                                : m === "verify" ? "VERIFY"
+                                : (iAmSv ? "SUPERVISOR (YOU)" : "SUPERVISOR");
+  }
   const pct = Math.max(0, state.duration > 0 ? (state.timeLeft / state.duration) : 0) * 100;
   if ($("timer-fill"))   $("timer-fill").style.width = pct + "%";
 }
@@ -1122,7 +1625,8 @@ function renderQueue() {
   if (!el) return;
 
   const want = new Set();
-  const ringing = state.tickets.filter(t => t.status === "ringing");
+  const ringing = state.tickets.filter(t => t.status === "ringing" && t.kind !== "agency");
+  const agencyRinging = state.tickets.filter(t => t.status === "ringing" && t.kind === "agency");
   const live = state.tickets.filter(t => t.status === "live");
 
   // Ensure a "LIVE" header exists only when we have live items
@@ -1145,22 +1649,52 @@ function renderQueue() {
     want.add(key);
     let div = queueEls.get(key);
     const from = CHARS[t.from], to = CHARS[t.to];
+    const slip = t.slip;
+    const showSlipPreview = (state.gameMode === "supervisor") || (state.gameMode === "verify" && t.approval !== "approved");
+    const requestName = (showSlipPreview && slip) ? slip.requestName : to.name;
+    const requestEmoji = (showSlipPreview && slip) ? (CHARS[slip.requestId]?.emoji || to.emoji) : to.emoji;
     if (!div) {
       div = document.createElement("div");
       div.className = "ticket";
       div.dataset.tid = t.id;
+      const slipExtra = slip ? `
+        <div class="slip-mini">
+          <span class="slip-k">LINE</span> <b>${escape(slip.line)}</b>
+          ${slip.flagged ? '<span class="slip-flag-mini">⚠ FLAGGED</span>' : ''}
+        </div>` : "";
       div.innerHTML = `
         <span class="num">#${String(t.id).padStart(3,"0")}</span>
         <div class="row"><span class="emoji">${from.emoji}</span><b>${escape(from.name)}</b></div>
         <div class="arrow">│ WANTS ▼</div>
-        <div class="row"><span class="emoji">${to.emoji}</span><b>${escape(to.name)}</b></div>
+        <div class="row"><span class="emoji">${requestEmoji}</span><b class="req-name">${escape(requestName)}</b></div>
         <div class="note">${escape(t.note || "")}</div>
+        ${slipExtra}
         <div class="ring-bar"><div class="ring-bar-fill" style="width:100%"></div></div>
       `;
-      // Insert before liveHead if present, else append
+      // Supervisor: click a pending ticket in the queue to stamp it
+      div.addEventListener("click", () => {
+        if (state.phase !== "playing") return;
+        if (state.gameMode === "supervisor" && Net.myId === state.supervisorId
+            && t.approval === "awaiting-stamp") {
+          openSlipModal(t, "supervisor");
+          sfx.select();
+        }
+      });
       if (liveHead) el.insertBefore(div, liveHead); else el.appendChild(div);
       queueEls.set(key, div);
+    } else {
+      // Reconcile requested-party display if approval flips
+      const reqB = div.querySelector(".req-name");
+      if (reqB && reqB.textContent !== requestName) reqB.textContent = requestName;
     }
+    // Approval class reconciliation
+    const wantAwaiting = state.gameMode === "supervisor" && t.approval === "awaiting-stamp";
+    const wantApprovedStamp = state.gameMode === "supervisor" && t.approval === "approved";
+    const wantReview = state.gameMode === "verify" && t.approval === "pending" && t.reviewer === Net.myId;
+    div.classList.toggle("awaiting-stamp", wantAwaiting);
+    div.classList.toggle("approved-stamp", wantApprovedStamp);
+    div.classList.toggle("pending-review", wantReview);
+    div.style.cursor = wantAwaiting && Net.myId === state.supervisorId ? "pointer" : "";
   });
 
   // Live tickets
@@ -1192,9 +1726,33 @@ function renderQueue() {
     if (!want.has(key)) { node.remove(); queueEls.delete(key); }
   }
 
-  // Reorder DOM: ringing first (in state order), liveHead, then live (in state order)
+  // Agency tickets
+  agencyRinging.forEach(t => {
+    const key = "a" + t.id;
+    want.add(key);
+    let div = queueEls.get(key);
+    if (!div) {
+      div = document.createElement("div");
+      div.className = "ticket agency";
+      div.dataset.tid = t.id;
+      div.innerHTML = `
+        <span class="num">🕴 AGENCY</span>
+        <div class="agency-row">CHECK-IN CALL</div>
+        <div class="row"><span class="emoji">☎</span><b>ENCRYPTED LINE</b></div>
+        <div class="agency-row mono">CLICK TO ANSWER</div>
+        <div class="ring-bar"><div class="ring-bar-fill" style="width:100%"></div></div>
+      `;
+      div.addEventListener("click", () => openAgencyModal(t));
+      el.appendChild(div);
+      queueEls.set(key, div);
+    }
+  });
+
+  // Reorder DOM: agency first (most urgent), ringing, liveHead, then live
+  const fragAgency = agencyRinging.map(t => queueEls.get("a" + t.id)).filter(Boolean);
   const fragRinging = ringing.map(t => queueEls.get("r" + t.id)).filter(Boolean);
   const fragLive = live.map(t => queueEls.get("l" + t.id)).filter(Boolean);
+  fragAgency.forEach(n => el.appendChild(n));
   fragRinging.forEach(n => el.appendChild(n));
   if (liveHead) el.appendChild(liveHead);
   fragLive.forEach(n => el.appendChild(n));
@@ -1206,11 +1764,13 @@ function tickRingBars() {
   const now = Date.now();
   state.tickets.forEach(t => {
     if (t.status !== "ringing") return;
-    const div = queueEls.get("r" + t.id);
+    const prefix = t.kind === "agency" ? "a" : "r";
+    const div = queueEls.get(prefix + t.id);
     if (!div) return;
     const fill = div.querySelector(".ring-bar-fill");
     if (!fill) return;
-    const pct = Math.max(0, (t.timeoutAt - now) / RING_TIMEOUT_MS);
+    const dur = t.ringDurationMs || RING_TIMEOUT_MS;
+    const pct = Math.max(0, (t.timeoutAt - now) / dur);
     fill.style.width = (pct * 100).toFixed(1) + "%";
   });
 }
@@ -1446,6 +2006,95 @@ function showToast(msg) {
 }
 
 /* ============================================================
+   SLIP MODAL
+   ============================================================ */
+function openSlipModal(ticket, role) {
+  const m = $("slip-modal");
+  if (!m || !ticket.slip) return;
+  slipModalTicketId = ticket.id;
+  m.dataset.role = role; // "verify" or "supervisor"
+  $("slip-num").textContent = "#" + ticket.slip.slipNum;
+  $("slip-caller").textContent = ticket.slip.callerName;
+  $("slip-line").textContent = ticket.slip.line;
+  $("slip-req").textContent = ticket.slip.requestName;
+  $("slip-flag").style.display = ticket.slip.flagged ? "" : "none";
+  $("slip-hint").textContent = role === "supervisor"
+    ? "Cross-check against INCOMING. Stamp carefully."
+    : "Double-check caller's request. Approve or deny.";
+  m.classList.remove("hidden");
+}
+function closeSlipModal() {
+  const m = $("slip-modal");
+  if (!m) return;
+  m.classList.add("hidden");
+  slipModalTicketId = null;
+}
+/* ---------- Agency modal ---------- */
+let agencyModalTicketId = null;
+function openAgencyModal(ticket) {
+  const m = $("agency-modal");
+  if (!m || !ticket || !ticket.agencyQ) return;
+  if (ticket.status !== "ringing") return;
+  agencyModalTicketId = ticket.id;
+  $("agency-q").textContent = ticket.agencyQ.text;
+  const row = $("agency-choices");
+  row.innerHTML = "";
+  ticket.agencyQ.choices.forEach((c, i) => {
+    const b = document.createElement("button");
+    b.className = "agency-choice";
+    b.textContent = c.label;
+    b.addEventListener("click", () => {
+      sendAction({ type: "agencyAnswer", ticketId: ticket.id, choiceIdx: i });
+      closeAgencyModal();
+    });
+    row.appendChild(b);
+  });
+  m.classList.remove("hidden");
+  sfx.select();
+}
+function closeAgencyModal() {
+  const m = $("agency-modal");
+  if (!m) return;
+  m.classList.add("hidden");
+  agencyModalTicketId = null;
+}
+function tickAgencyModal() {
+  if (agencyModalTicketId == null) return;
+  const t = state.tickets.find(x => x.id === agencyModalTicketId);
+  if (!t || t.status !== "ringing") { closeAgencyModal(); return; }
+  const fill = $("agency-timer-fill");
+  if (!fill) return;
+  const dur = t.ringDurationMs || AGENCY_TIMEOUT_MS;
+  const pct = Math.max(0, (t.timeoutAt - Date.now()) / dur);
+  fill.style.width = (pct * 100).toFixed(1) + "%";
+}
+function reconcileAgencyModal() {
+  if (agencyModalTicketId == null) return;
+  const t = state.tickets.find(x => x.id === agencyModalTicketId);
+  if (!t || t.status !== "ringing" || t.agencyPickedBy) closeAgencyModal();
+}
+
+function reconcileSlipModal() {
+  // Auto-open for verify reviewer
+  if (state.phase === "playing" && state.gameMode === "verify" && slipModalTicketId == null) {
+    const mine = state.tickets.find(t =>
+      t.status === "ringing" && t.approval === "pending" && t.reviewer === Net.myId
+    );
+    if (mine) openSlipModal(mine, "verify");
+  }
+  // If modal's ticket is gone / resolved / approval changed away from need-decision, close it.
+  if (slipModalTicketId == null) return;
+  const t = state.tickets.find(x => x.id === slipModalTicketId);
+  if (!t || t.status !== "ringing") { closeSlipModal(); return; }
+  if (state.gameMode === "verify") {
+    if (t.approval !== "pending" || t.reviewer !== Net.myId) { closeSlipModal(); return; }
+  }
+  if (state.gameMode === "supervisor") {
+    if (t.approval !== "awaiting-stamp" || Net.myId !== state.supervisorId) { closeSlipModal(); return; }
+  }
+}
+
+/* ============================================================
    LOOP (host-authoritative streaming + timer)
    ============================================================ */
 function loop() {
@@ -1483,23 +2132,41 @@ function loop() {
         c.completed = true;
         c.completedAt = nowMs;
       } else {
-        c.nextLineAt = nowMs + LINE_INTERVAL_MS;
+        const lvlNow = LEVELS[state.levelIdx];
+        c.nextLineAt = nowMs + (lvlNow.lineIntervalMs || LINE_INTERVAL_MS);
       }
       dirty = true;
       broadcastEvent({ type: "line", ticketId: t.id });
     }
   });
 
-  // Ring timeouts
+  // Ring timeouts (escalating) / agency miss
   state.tickets.forEach(t => {
     if (t.status !== "ringing") return;
-    if (nowMs >= t.timeoutAt) {
-      state.teamPenalty += PENALTY_TIMEOUT;
+    if (nowMs < t.timeoutAt) return;
+    if (t.kind === "agency") {
+      state.teamPenalty += PENALTY_AGENCY;
       t.status = "done";
-      broadcastEvent({ type: "timeout", ticketId: t.id, fromId: t.from });
-      dirty = true;
+      broadcastEvent({ type: "agencyMiss", penalty: PENALTY_AGENCY });
+    } else {
+      const pen = PENALTY_TIMEOUT + PENALTY_TIMEOUT_STEP * (state._timeoutCount || 0);
+      state.teamPenalty += pen;
+      state._timeoutCount = (state._timeoutCount || 0) + 1;
+      t.status = "done";
+      broadcastEvent({ type: "timeout", ticketId: t.id, fromId: t.from, penalty: pen });
     }
+    dirty = true;
   });
+
+  // Agency scheduling
+  if (!state._agencyNextAt) state._agencyNextAt = nowMs + AGENCY_FIRST_DELAY_SEC * 1000;
+  const agencyPending = state.tickets.some(t => t.kind === "agency" && t.status === "ringing");
+  if (!agencyPending && nowMs >= state._agencyNextAt) {
+    const ok = hostSpawnAgency();
+    const gap = (AGENCY_MIN_INTERVAL_SEC + Math.random() * (AGENCY_MAX_INTERVAL_SEC - AGENCY_MIN_INTERVAL_SEC)) * 1000;
+    state._agencyNextAt = nowMs + (ok ? gap : 9000);
+    if (ok) dirty = true;
+  }
 
   // Tick sfx last 10s
   if (Math.floor(prevTime) !== Math.floor(state.timeLeft) && state.timeLeft < 10 && state.timeLeft > 0) {
@@ -1513,6 +2180,7 @@ function loop() {
   } else {
     updateHud();
     tickRingBars();
+    tickAgencyModal();
   }
 
   if (state.timeLeft <= 0 && state.phase === "playing") hostEndLevel();
@@ -1536,6 +2204,7 @@ function clientLoop() {
   }
   updateHud();
   tickRingBars();
+  tickAgencyModal();
 }
 
 /* ============================================================

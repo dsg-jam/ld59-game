@@ -61,6 +61,20 @@
     <div class="panel-head">OPERATORS ON DUTY</div>
     <div id="lobby-players" class="lobby-players"></div>
 
+    <div class="mode-picker">
+      <span class="hud-label">SHIFT MODE</span>
+      <div class="mode-buttons">
+        <button class="mode-btn host-only active" data-mode="classic" id="mode-classic">CLASSIC</button>
+        <button class="mode-btn host-only" data-mode="verify" id="mode-verify">VERIFY CARDS</button>
+        <button class="mode-btn host-only" data-mode="supervisor" id="mode-supervisor">SUPERVISOR</button>
+      </div>
+      <div id="mode-desc" class="mode-desc">Classic switchboard. Ring → patch → hang up.</div>
+      <div id="supervisor-pick" class="supervisor-pick" style="display:none">
+        <span class="hud-label">SUPERVISOR</span>
+        <select id="supervisor-select" class="sv-select host-only"></select>
+      </div>
+    </div>
+
     <button id="lobby-start-btn" class="big-btn host-only">START SHIFT ▸</button>
     <div id="lobby-wait" class="lobby-wait">Waiting for host to begin...</div>
     <button id="lobby-leave-btn" class="mini-btn">LEAVE</button>
@@ -98,6 +112,10 @@
       <span class="hud-label">ROOM</span>
       <span id="hud-room" class="hud-val small">---</span>
     </div>
+    <div class="hud-item" id="hud-mode-wrap">
+      <span class="hud-label">MODE</span>
+      <span id="hud-mode" class="hud-val small">CLASSIC</span>
+    </div>
   </header>
 
   <section class="switchboard">
@@ -129,6 +147,41 @@
   <div id="cable-layer"></div>
   <div id="floater-layer"></div>
   <div id="toast" class="toast hidden"></div>
+
+  <!-- Slip modal: verify mode (player reviews own pickup) + supervisor mode (supervisor stamps) -->
+  <div id="slip-modal" class="slip-modal hidden">
+    <div class="slip">
+      <div class="slip-head">
+        <span>CALL SLIP</span>
+        <span id="slip-num">#000</span>
+      </div>
+      <div class="slip-body">
+        <div class="slip-row"><span class="slip-k">CALLER</span><b id="slip-caller">—</b></div>
+        <div class="slip-row"><span class="slip-k">LINE</span><b id="slip-line">—</b></div>
+        <div class="slip-row"><span class="slip-k">REQUESTS</span><b id="slip-req">—</b></div>
+        <div id="slip-flag" class="slip-flag" style="display:none">⚠ FLAGGED LINE</div>
+        <div id="slip-hint" class="slip-hint"></div>
+      </div>
+      <div class="slip-actions">
+        <button id="slip-approve" class="big-btn">APPROVE ▸</button>
+        <button id="slip-deny" class="big-btn secondary">DENY ✖</button>
+      </div>
+      <button id="slip-cancel" class="mini-btn">CANCEL</button>
+    </div>
+  </div>
+
+  <!-- Agency interrogation modal -->
+  <div id="agency-modal" class="agency-modal hidden">
+    <div class="dossier">
+      <div class="dossier-head">
+        <span class="dossier-tag">🕴 THE AGENCY</span>
+        <span class="dossier-sub">ENCRYPTED — ANSWER CAREFULLY</span>
+      </div>
+      <div id="agency-q" class="agency-q">—</div>
+      <div id="agency-choices" class="agency-choices"></div>
+      <div class="agency-timer"><div id="agency-timer-fill"></div></div>
+    </div>
+  </div>
 </div>
 
 <!-- ================= END ================= -->
