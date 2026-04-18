@@ -3,8 +3,7 @@ name: Build & Deploy
 on:
   push:
     branches: [main]
-  pull_request:
-    types: [opened, synchronize, reopened, closed]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -14,7 +13,7 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build-and-deploy:
@@ -25,7 +24,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
           fetch-depth: 0
 
       - uses: actions/setup-node@v4
@@ -33,6 +31,13 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: package-lock.json
+
+      - uses: actions/cache@v4
+        with:
+          path: .cache
+          key: ${{ runner.os }}-deploy-cache-${{ hashFiles('package-lock.json', 'vite.config.js', 'tsconfig*.json') }}
+          restore-keys: |
+            ${{ runner.os }}-deploy-cache-
 
       - name: List open PRs
         id: open_prs
