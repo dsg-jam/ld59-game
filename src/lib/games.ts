@@ -12,14 +12,7 @@ export const games: GameEntry[] = [
     title: "Deconstruct",
     tag: "Play",
     path: "/games/deconstruct/",
-    description: "3D signal puzzle with solo and multiplayer modes.",
-  },
-  {
-    id: "deconstruct-siku2",
-    title: "Deconstruct Siku2",
-    tag: "Variant",
-    path: "/games/deconstruct-siku2/",
-    description: "Signal-themed multiplayer tabletop variant.",
+    description: "3D tabletop signal puzzle with solo and multiplayer modes.",
   },
   {
     id: "signal-1",
