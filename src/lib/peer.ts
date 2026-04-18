@@ -5,6 +5,10 @@ export interface PeerErrorLike {
   message?: string;
 }
 
+/**
+ * Generates human-readable room codes.
+ * Defaults to 5 characters to match the existing multiplayer lobbies.
+ */
 export function makeCode(length = 5): string {
   let code = "";
   for (let i = 0; i < length; i += 1) {
