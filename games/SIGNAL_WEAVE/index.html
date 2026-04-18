@@ -93,7 +93,7 @@
       <div class="panel">
         <h3>CONTROL</h3>
         <div>PHASE OFFSET</div>
-        <input id="offset" type="range" min="0" max="628" value="0">
+        <input id="offset" type="range" value="0">
         <div id="offset-label">0.00 rad</div>
         <div class="row" style="margin-top:8px">
           <button id="pulse-btn">TRANSMIT PULSE [SPACE]</button>
@@ -135,6 +135,9 @@
     const OFFSET_MAX = 628;
     const OFFSET_SCALE = 100;
     const ARROW_KEY_STEP = 6;
+    const ROOM_CODE_LENGTH = 5;
+    const HARMONY_THRESHOLD = 0.18;
+    const HARMONY_GAIN_RATE = 12;
     const $ = (id) => document.getElementById(id);
     const canvas = $('canvas');
     const ctx = canvas.getContext('2d');
@@ -180,7 +183,7 @@
       // Omit ambiguous glyphs (I/O/1) to reduce room-code entry mistakes.
       const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
       let c = '';
-      for (let i = 0; i < 5; i++) c += chars[(Math.random() * chars.length) | 0];
+      for (let i = 0; i < ROOM_CODE_LENGTH; i++) c += chars[(Math.random() * chars.length) | 0];
       return c;
     }
 
@@ -207,7 +210,7 @@
       const comboFactor = 1 + Math.min(5, state.combo) * 0.15;
       const diff = Math.abs(signalValue(state.t, state.offsets) - targetValue(state.t));
 
-      if (diff < 0.18) state.harmony += dt * 12 * comboFactor;
+      if (diff < HARMONY_THRESHOLD) state.harmony += dt * HARMONY_GAIN_RATE * comboFactor;
       else state.harmony = Math.max(0, state.harmony - dt * 5);
 
       if (state.combo > 0 && state.t - Math.max(state.lastPing[0], state.lastPing[1]) > COMBO_TIMEOUT_SECONDS) state.combo = 0;
@@ -467,6 +470,7 @@
       drawWave((t) => Math.sin(t * 2.7 + offs[1]), '#6bb4ff', 1.2, 0.35);
 
       const pulses = s.pulses || [];
+      // Keep denominator at least 1 so solo snapshots still place pulse origins safely.
       const playerDenom = Math.max(1, ((s.players ?? 1) - 1));
       for (const p of pulses) {
         const age = now - p.t;
