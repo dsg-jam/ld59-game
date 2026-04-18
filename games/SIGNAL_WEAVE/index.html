@@ -285,7 +285,7 @@
     function resetNet() {
       if (peer) {
         try { peer.destroy(); }
-        catch (err) { console.warn('Peer cleanup warning during network reset:', err); }
+        catch (err) { console.warn('Failed to cleanly destroy peer connection:', err); }
       }
       peer = null; conn = null; conns = [null];
       isHost = false; mySlot = -1;
@@ -470,8 +470,9 @@
       drawWave((t) => Math.sin(t * 2.7 + offs[1]), '#6bb4ff', 1.2, 0.35);
 
       const pulses = s.pulses || [];
-      // Keep denominator at least 1 so solo snapshots still place pulse origins safely.
-      const playerDenom = Math.max(1, ((s.players ?? 1) - 1));
+      // Map owner slot to 0..1; keep denominator at least 1 for solo/local snapshots.
+      const playerCount = Math.max(1, (s.players ?? 1));
+      const playerDenom = playerCount > 1 ? (playerCount - 1) : 1;
       for (const p of pulses) {
         const age = now - p.t;
         const ownerNorm = (p.owner || 0) / playerDenom;
