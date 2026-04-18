@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Signal Weave — LD59</title>
+  <title>Signal Weave — Multiplayer Waveform Game</title>
   <style>
     :root{
       --bg:#06080f; --ink:#d7e5ff; --dim:#7d8cb1; --line:#1b2340;
@@ -124,6 +124,8 @@
     const MAX_PLAYERS = 2;
     const PULSE_X_MIN = 0.2;
     const PULSE_X_SPAN = 0.6;
+    const MAX_FRAME_TIME = 0.05;
+    const NETWORK_TICK_RATE = 0.05;
     const $ = (id) => document.getElementById(id);
     const canvas = $('canvas');
     const ctx = canvas.getContext('2d');
@@ -166,6 +168,7 @@
     }
 
     function makeCode() {
+      // Omit ambiguous glyphs (I/O/0/1) to reduce room-code entry mistakes.
       const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
       let c = '';
       for (let i = 0; i < 5; i++) c += chars[(Math.random() * chars.length) | 0];
@@ -392,13 +395,13 @@
     let last = performance.now();
     let netTimer = 0;
     function loop(ts) {
-      const dt = Math.min(0.05, (ts - last) / 1000);
+      const dt = Math.min(MAX_FRAME_TIME, (ts - last) / 1000);
       last = ts;
 
       if (isHost) {
         hostTick(dt);
         netTimer += dt;
-        if (netTimer > 0.05) { sendState(); netTimer = 0; }
+        if (netTimer > NETWORK_TICK_RATE) { sendState(); netTimer = 0; }
       }
       draw(localSnapshot || hostSnapshot());
       requestAnimationFrame(loop);
