@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { blip as sharedBlip, getAudioContext } from "$lib/audio";
 
 // Tiny WebAudio bleeps for SIGNAL

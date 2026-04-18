@@ -1,6 +1,4 @@
 dist/
 node_modules/
-games/
-index.html
 playwright-report/
 test-results/

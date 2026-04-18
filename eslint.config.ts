@@ -4,41 +4,24 @@ import tseslint from "typescript-eslint";
 import globals from "globals";
 
 export default tseslint.config(
-  {
-    ignores: [
-      "dist/",
-      "node_modules/",
-      ".svelte-kit/",
-      "src/lib/games/**/*.ts",
-      "svelte.config.ts",
-      "vite.config.ts",
-    ],
-  },
+  { ignores: ["dist/", "node_modules/", ".svelte-kit/"] },
   js.configs.recommended,
-  ...tseslint.configs.recommended,
+  ...tseslint.configs.strict,
   ...svelte.configs["flat/recommended"],
   {
-    files: ["src/**/*.ts", "src/routes/**/*.svelte"],
     languageOptions: {
       globals: {
         ...globals.browser,
         ...globals.node,
       },
     },
-    rules: {
-      eqeqeq: "error",
-      "no-var": "error",
-      "prefer-const": "error",
-      "@typescript-eslint/no-explicit-any": "error",
-      "@typescript-eslint/no-unused-vars": "error",
-      "no-console": "warn",
-      "svelte/no-at-html-tags": "off",
-    },
   },
   {
-    files: ["src/**/*.ts"],
-    rules: {
-      "@typescript-eslint/explicit-function-return-type": "error",
+    files: ["**/*.svelte"],
+    languageOptions: {
+      parserOptions: {
+        parser: tseslint.parser,
+      },
     },
-  }
+  },
 );

@@ -2,7 +2,6 @@ name: Deploy Pages
 run-name: Deploy Pages (${{ github.event_name }})
 
 on:
-  pull_request:
   merge_group:
   push:
     branches: [main]
@@ -14,13 +13,12 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages-${{ github.event.pull_request.number || github.ref }}
+  group: pages
   cancel-in-progress: true
 
 jobs:
   build:
     name: Build static site
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -42,7 +40,6 @@ jobs:
 
   deploy-main:
     name: Deploy production Pages
-    if: github.event_name == 'push'
     needs: build
     runs-on: ubuntu-latest
     environment:
@@ -51,17 +48,3 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v5
-
-  deploy-pr-preview:
-    name: Deploy PR preview Pages
-    if: github.event_name == 'pull_request'
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: pr-${{ github.event.pull_request.number }}-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v5
-        with:
-          preview: true

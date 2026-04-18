@@ -1,4 +1,3 @@
-// @ts-nocheck
 export interface Source { kind: "source"; x: number; y: number; dir: number; seq: number[]; period: number; offset: number; loop: boolean; }
 export interface Sink { kind: "sink"; x: number; y: number; dir: number; expected: number[]; }
 export interface Wall { kind: "wall"; x: number; y: number; }

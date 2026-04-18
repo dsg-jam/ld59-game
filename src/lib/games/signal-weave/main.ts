@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Peer from "peerjs";
 import { createGameLoop } from "$lib/game-loop";
 import { describePeerError, makeCode } from "$lib/peer";

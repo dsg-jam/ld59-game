@@ -4,6 +4,5 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "allowJs": false
-  },
-  "include": ["src/app.d.ts", "src/vite-env.d.ts", "src/lib/**/*.ts", "src/routes/**/*.svelte"]
+  }
 }
