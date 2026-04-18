@@ -2,7 +2,6 @@ import { test, expect } from "@playwright/test";
 
 const GAMES = [
   { id: "deconstruct", title: "Deconstruct", path: "/games/deconstruct/" },
-  { id: "deconstruct-siku2", title: "Deconstruct Siku2", path: "/games/deconstruct-siku2/" },
   { id: "signal-1", title: "Signal 1", path: "/games/signal-1/" },
   { id: "signal-2", title: "Signal 2", path: "/games/signal-2/" },
   { id: "signal-weave", title: "Signal Weave", path: "/games/signal-weave/" },

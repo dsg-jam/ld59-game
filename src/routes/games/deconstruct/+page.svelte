@@ -2,50 +2,78 @@
   import { onMount } from "svelte";
   import "./style.css";
 
+  type GameWindow = Window &
+    typeof globalThis & {
+      hostGame?: () => void;
+      joinGame?: () => void;
+      hostStartNow?: () => void;
+      soloGame?: () => void;
+      onPickCard?: () => void;
+      onClear?: () => void;
+      onPass?: () => void;
+    };
+
+  const soloGame = (): void => (window as GameWindow).soloGame?.();
+  const hostGame = (): void => (window as GameWindow).hostGame?.();
+  const joinGame = (): void => (window as GameWindow).joinGame?.();
+  const hostStartNow = (): void => (window as GameWindow).hostStartNow?.();
+  const onPickCard = (): void => (window as GameWindow).onPickCard?.();
+  const onClear = (): void => (window as GameWindow).onClear?.();
+  const onPass = (): void => (window as GameWindow).onPass?.();
+
   onMount(() => {
     void import("./main");
   });
 </script>
 
 <svelte:head>
-  <title>Signal Cascade — LDJAM 59</title>
+  <title>Deconstruct — LDJAM 59</title>
 </svelte:head>
 
-<div id="waiting">
-  <div class="spin"></div>
-  <div>Scanning for carrier… awaiting host.</div>
-  <small id="waitingInfo"></small>
-</div>
-<div id="app">
-  <header>
-    <h1>SIGNAL CASCADE</h1>
-    <div class="stat">Cycle <b id="round">1</b>/10</div>
-    <div id="scores" style="display:flex;gap:6px;"></div>
-    <input id="pname" placeholder="Operator" value="OP-1" style="background:#0f1622;color:var(--fg);border:1px solid #1c2a3a;border-radius:4px;padding:6px 8px;width:110px;font:inherit;">
-    <button id="newgame">Solo vs CPU</button>
-    <button id="host">Host</button>
-    <button id="startmp">Start</button>
-    <button id="join">Join…</button>
-    <span id="netStatus" style="opacity:.7"></span>
-    <button id="topview">Top View</button>
-    <span style="opacity:.6">Drag = orbit · Right-drag = pan · Scroll = zoom · Click signal to capture</span>
-  </header>
-  <div id="canvas-wrap"><div id="hud">Capture top signal packets matching your filter pattern + frequency.</div></div>
-  <div id="sidebar">
-    <div class="panel">
-      <h3>Decode Filters</h3>
-      <div id="hand"></div>
-      <div style="margin-top:6px;">
-        <button id="confirm">Transmit</button>
-        <button id="pass">Hold</button>
-        <button id="clear">Clear</button>
+<canvas id="three-canvas"></canvas>
+
+<div id="lobby">
+  <div class="lobby-box">
+    <h1>DECONSTRUCT</h1>
+    <div class="subtitle">Tune. Decode. Intercept. &mdash; 1-6 operators</div>
+    <div id="lobby-menu">
+      <div class="lobby-btns">
+        <button onclick={soloGame}>SOLO vs CPU</button>
+        <div class="or-divider">&mdash; multiplayer &mdash;</div>
+        <button onclick={hostGame}>OPEN CHANNEL</button>
+        <div class="or-divider" style="opacity:0.3;font-size:12px;">&mdash; or &mdash;</div>
+        <input id="join-code" maxlength="6" placeholder="FREQ ID" spellcheck="false" autocomplete="off" />
+        <button onclick={joinGame}>TUNE IN</button>
       </div>
-      <div class="msg" id="msg"></div>
     </div>
-    <div class="panel">
-      <h3>Protocol</h3>
-      <p style="margin:4px 0">The cascade broadcasts colored packets — top of each stack is live. Pick a filter (TX delay: low = first to air, high = high payload). Tag the live packets matching your filter's pattern &amp; frequency. All operators transmit at once; lowest delay airs first and can <b style="color:var(--warn)">jam</b> slower signals. Captured packets cascade — new ones surface beneath.</p>
+    <div id="lobby-waiting" style="display:none;">
+      <div style="opacity:0.6;">Share this frequency ID:</div>
+      <div class="room-code-display" id="room-code-show"></div>
+      <div class="player-list" id="player-list"></div>
+      <button id="start-btn" style="margin-top:14px;" onclick={hostStartNow}>BEGIN TRANSMISSION</button>
+      <div class="lobby-status" id="lobby-status">Awaiting operators&hellip;</div>
     </div>
-    <div class="panel"><h3>Comms Log</h3><div id="log"></div></div>
+    <div id="lobby-joining" style="display:none;">
+      <div class="lobby-status" id="join-status">Acquiring signal&hellip;</div>
+    </div>
+  </div>
+</div>
+
+<div id="ui-overlay" class="hidden">
+  <div class="score-bar">
+    <div class="title">// DECONSTRUCT</div>
+    <div id="score-chips"></div>
+  </div>
+  <div id="hint">Drag to rotate &bull; Scroll to zoom &bull; Click top blocks to select &bull; Cycle <span id="round-num">1</span>/10</div>
+  <div id="log-panel"></div>
+  <div id="msg-bar" class="msg-bar"></div>
+  <div id="wait-banner" class="hidden">// Awaiting other operators&hellip;</div>
+  <div id="side-panel">
+    <div id="player-hand" class="hand"></div>
+    <div class="btn-group">
+      <button id="resolve-btn" disabled onclick={onPickCard}>TRANSMIT</button>
+      <button class="btn-secondary" onclick={onClear}>CLEAR</button>
+      <button class="btn-secondary" onclick={onPass}>HOLD</button>
+    </div>
   </div>
 </div>
