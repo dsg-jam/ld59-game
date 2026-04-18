@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { Audio } from "./audio.js";
-import { LEVELS, type Level, type Fixed } from "./levels.js";
+import { GRID_H, GRID_W, LEVELS } from "./levels.js";
 
 // SIGNAL // ldjam59 -- main game logic
 // Tile-based signal routing puzzle. See levels.js for level data.

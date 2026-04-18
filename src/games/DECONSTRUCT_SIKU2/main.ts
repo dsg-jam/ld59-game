@@ -567,7 +567,7 @@ function onTurnResult(data) {
                     spawnSignalRipples(r.removed, r.card.colorIdx);
                     log('<span style="color:' + PLAYER_CSS[r.slot] + '">' + label + ' decoded ' + r.card.shape.name + ' on ' + cName + ' \u2014 +' + r.points + ' signal.</span>');
                 } else {
-                    log('<span style="color:let(--red)">' + label + ' \u2014 ' + cName + ' channel silent. Signal lost.</span>');
+                    log('<span style="color:var(--red)">' + label + ' \u2014 ' + cName + ' channel silent. Signal lost.</span>');
                 }
             }, delay);
             delay += 500;
