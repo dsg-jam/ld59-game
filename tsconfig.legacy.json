@@ -5,9 +5,5 @@
     "strict": false,
     "noUncheckedIndexedAccess": false
   },
-  "include": [
-    "src/vite-env.d.ts",
-    "src/games/SIGNAL_2/audio.ts",
-    "src/games/SIGNAL_2/levels.ts"
-  ]
+  "include": ["src/vite-env.d.ts", "src/games/SIGNAL_2/audio.ts", "src/games/SIGNAL_2/levels.ts"]
 }
