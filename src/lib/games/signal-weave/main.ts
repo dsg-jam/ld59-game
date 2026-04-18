@@ -1,4 +1,5 @@
 import Peer from "peerjs";
+import type { DataConnection } from "peerjs";
 import { createGameLoop } from "$lib/game-loop";
 import { describePeerError, makeCode } from "$lib/peer";
 
@@ -16,18 +17,49 @@ const PEER_PREFIX = 'sigweave-';
     const ROOM_CODE_LENGTH = 5;
     const HARMONY_THRESHOLD = 0.18;
     const HARMONY_GAIN_RATE = 12;
-    const $ = (id) => document.getElementById(id);
-    const canvas = $('canvas');
-    const ctx = canvas.getContext('2d');
+    const $ = (id: string): HTMLElement => document.getElementById(id)!;
+    const canvas = $('canvas') as HTMLCanvasElement;
+    const ctx = canvas.getContext('2d')!;
 
-    let peer = null;
-    let conn = null;
-    let conns = [null];
+    type Pulse = { owner: number; t: number; good: boolean };
+    type GameSnapshot = {
+      t: number;
+      timeLeft: number;
+      harmony: number;
+      combo: number;
+      offsets: number[];
+      pulses: Pulse[];
+      running: boolean;
+      players: number;
+    };
+    type HostMsg = { t: 'offset'; v: number } | { t: 'ping' };
+    type GuestMsg =
+      | { t: 'hello'; slot: number }
+      | { t: 'start' }
+      | { t: 'state'; s: GameSnapshot }
+      | { t: 'burst'; good: boolean }
+      | { t: 'end'; harmony: string }
+      | { t: 'reject'; reason?: string };
+
+    let peer: Peer | null = null;
+    let conn: DataConnection | null = null;
+    let conns: (DataConnection | null)[] = [null];
     let isHost = false;
     let mySlot = -1;
     let roomCode = '';
 
-    const state = {
+    const state: {
+      running: boolean;
+      t: number;
+      timeLeft: number;
+      harmony: number;
+      combo: number;
+      offsets: [number, number];
+      lastPing: [number, number];
+      pulses: Pulse[];
+      messages: string[];
+      players: number;
+    } = {
       running: false,
       t: 0,
       timeLeft: 90,
@@ -39,41 +71,41 @@ const PEER_PREFIX = 'sigweave-';
       messages: [],
       players: 1
     };
-    let localSnapshot = null;
+    let localSnapshot: GameSnapshot | null = null;
 
-    function msg(text, kind = '') {
+    function msg(text: string, kind = '') {
       const el = document.createElement('div');
       if (kind) el.className = kind;
       el.textContent = text;
       $('log').prepend(el);
-      while ($('log').children.length > 20) $('log').removeChild($('log').lastChild);
+      while ($('log').children.length > 20) $('log').removeChild($('log').lastChild!);
       $('status').textContent = text;
     }
 
-    function flash(kind) {
+    function flash(kind: string) {
       const f = $('flash');
       f.className = kind ? kind : '';
       f.style.opacity = kind ? '1' : '0';
       setTimeout(() => { f.style.opacity = '0'; }, 140);
     }
 
-    function setLobbyStatus(t) { $('lobby-status').textContent = t; }
+    function setLobbyStatus(t: string) { $('lobby-status').textContent = t; }
 
-    function broadcast(data) {
+    function broadcast(data: unknown) {
       for (let i = 1; i < conns.length; i++) {
         const c = conns[i];
         if (c && c.open) c.send(data);
       }
     }
 
-    function signalValue(t, offsets) {
-      return (Math.sin(t * 2.0 + offsets[0]) + Math.sin(t * 2.7 + offsets[1])) * 0.5;
+    function signalValue(t: number, offsets: number[]): number {
+      return (Math.sin(t * 2.0 + (offsets[0] ?? 0)) + Math.sin(t * 2.7 + (offsets[1] ?? 0))) * 0.5;
     }
-    function targetValue(t) {
+    function targetValue(t: number): number {
       return Math.sin(t * 1.5 + Math.sin(t * 0.4) * 1.2);
     }
 
-    function hostTick(dt) {
+    function hostTick(dt: number) {
       if (!state.running) return;
       state.t += dt;
       state.timeLeft = Math.max(0, state.timeLeft - dt);
@@ -93,7 +125,7 @@ const PEER_PREFIX = 'sigweave-';
       }
     }
 
-    function hostSnapshot() {
+    function hostSnapshot(): GameSnapshot {
       return {
         t: state.t,
         timeLeft: state.timeLeft,
@@ -112,12 +144,12 @@ const PEER_PREFIX = 'sigweave-';
       broadcast(data);
     }
 
-    function onPing(slot) {
+    function onPing(slot: number) {
       const now = state.t;
       state.lastPing[slot] = now;
       state.pulses.push({ owner: slot, t: now, good: false });
       const other = slot === 0 ? 1 : 0;
-      if (state.players >= 2 && now - state.lastPing[other] < PULSE_SYNC_WINDOW_SECONDS) {
+      if (state.players >= 2 && now - (state.lastPing[other] ?? -99) < PULSE_SYNC_WINDOW_SECONDS) {
         const aligned = Math.abs(signalValue(state.t, state.offsets) - targetValue(state.t)) < 0.2;
         if (aligned) {
           state.combo += 1;
@@ -155,7 +187,7 @@ const PEER_PREFIX = 'sigweave-';
     function resetNet() {
       if (peer) {
         try { peer.destroy(); }
-        catch (err) { console.warn('Failed to cleanly destroy peer connection:', err); }
+        catch { console.warn('Failed to cleanly destroy peer connection.'); }
       }
       peer = null; conn = null; conns = [null];
       isHost = false; mySlot = -1;
@@ -171,7 +203,7 @@ const PEER_PREFIX = 'sigweave-';
       $('slot').textContent = 'P1';
       $('room-wrap').style.display = 'block';
       $('room-code').textContent = roomCode;
-      $('start-btn').disabled = true;
+      ($('start-btn') as HTMLButtonElement).disabled = true;
       setLobbyStatus('Opening channel...');
 
       peer = new Peer(PEER_PREFIX + roomCode);
@@ -188,15 +220,15 @@ const PEER_PREFIX = 'sigweave-';
         c.on('open', () => {
           state.players = 2;
           c.send({ t: 'hello', slot: 1 });
-          $('start-btn').disabled = false;
+          ($('start-btn') as HTMLButtonElement).disabled = false;
           setLobbyStatus('Operator connected. Ready to begin.');
           msg('Second operator tuned in.');
         });
-        c.on('data', d => onHostMessage(d, 1));
+        c.on('data', d => onHostMessage(d as HostMsg, 1));
         c.on('close', () => {
           state.players = 1;
           conns[1] = null;
-          $('start-btn').disabled = true;
+          ($('start-btn') as HTMLButtonElement).disabled = true;
           setLobbyStatus('Operator disconnected.');
           msg('Peer disconnected.', 'bad');
         });
@@ -206,21 +238,21 @@ const PEER_PREFIX = 'sigweave-';
 
     function joinGame() {
       if (typeof Peer === 'undefined') return setLobbyStatus('PeerJS failed to load.');
-      const code = $('join-code').value.trim().toUpperCase();
+      const code = ($('join-code') as HTMLInputElement).value.trim().toUpperCase();
       if (!code) return setLobbyStatus('Enter room code.');
       resetNet();
       setLobbyStatus('Tuning into ' + code + '...');
       peer = new Peer();
       peer.on('open', () => {
-        conn = peer.connect(PEER_PREFIX + code, { reliable: true });
+        conn = peer!.connect(PEER_PREFIX + code, { reliable: true });
         conn.on('open', () => setLobbyStatus('Connected. Awaiting host start.'));
-        conn.on('data', onGuestMessage);
+        conn.on('data', d => onGuestMessage(d as GuestMsg));
         conn.on('close', () => setLobbyStatus('Disconnected from host.'));
       });
       peer.on('error', e => setLobbyStatus('Join peer error: ' + describePeerError(e)));
     }
 
-    function onHostMessage(d, slot) {
+    function onHostMessage(d: HostMsg, slot: number) {
       if (d.t === 'offset') {
         state.offsets[slot] = d.v;
       } else if (d.t === 'ping') {
@@ -228,7 +260,7 @@ const PEER_PREFIX = 'sigweave-';
       }
     }
 
-    function onGuestMessage(d) {
+    function onGuestMessage(d: GuestMsg) {
       if (d.t === 'hello') {
         mySlot = d.slot;
         $('slot').textContent = 'P' + (mySlot + 1);
@@ -244,7 +276,7 @@ const PEER_PREFIX = 'sigweave-';
       } else if (d.t === 'end') {
         msg('Weave complete. Harmony: ' + d.harmony);
       } else if (d.t === 'reject') {
-        setLobbyStatus(d.reason || 'Unable to join room.');
+        setLobbyStatus(d.reason ?? 'Unable to join room.');
       }
     }
 
@@ -252,8 +284,8 @@ const PEER_PREFIX = 'sigweave-';
     $('join-btn').onclick = joinGame;
     $('start-btn').onclick = () => { if (isHost && state.players >= 2) startRound(); };
 
-    $('offset').addEventListener('input', () => {
-      const v = Number($('offset').value) / OFFSET_SCALE;
+    ($('offset') as HTMLInputElement).addEventListener('input', () => {
+      const v = Number(($('offset') as HTMLInputElement).value) / OFFSET_SCALE;
       $('offset-label').textContent = v.toFixed(2) + ' rad';
       if (mySlot < 0 && isHost) mySlot = 0;
       if (isHost) {
@@ -270,8 +302,8 @@ const PEER_PREFIX = 'sigweave-';
     $('pulse-btn').onclick = doPulse;
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Space') { e.preventDefault(); doPulse(); }
-      if (e.code === 'ArrowLeft') { $('offset').value = Math.max(OFFSET_MIN, Number($('offset').value) - ARROW_KEY_STEP); $('offset').dispatchEvent(new Event('input')); }
-      if (e.code === 'ArrowRight') { $('offset').value = Math.min(OFFSET_MAX, Number($('offset').value) + ARROW_KEY_STEP); $('offset').dispatchEvent(new Event('input')); }
+      if (e.code === 'ArrowLeft') { ($('offset') as HTMLInputElement).value = String(Math.max(OFFSET_MIN, Number(($('offset') as HTMLInputElement).value) - ARROW_KEY_STEP)); $('offset').dispatchEvent(new Event('input')); }
+      if (e.code === 'ArrowRight') { ($('offset') as HTMLInputElement).value = String(Math.min(OFFSET_MAX, Number(($('offset') as HTMLInputElement).value) + ARROW_KEY_STEP)); $('offset').dispatchEvent(new Event('input')); }
     });
 
     let netTimer = 0;
@@ -281,10 +313,10 @@ const PEER_PREFIX = 'sigweave-';
         netTimer += dt;
         if (netTimer > NETWORK_TICK_RATE) { sendState(); netTimer = 0; }
       }
-      draw(localSnapshot || hostSnapshot());
+      draw(localSnapshot ?? hostSnapshot());
     });
 
-    function draw(snapshot) {
+    function draw(snapshot: GameSnapshot) {
       const w = canvas.clientWidth, h = canvas.clientHeight;
       if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
       ctx.clearRect(0, 0, w, h);
@@ -292,7 +324,7 @@ const PEER_PREFIX = 'sigweave-';
       const midY = h * 0.5;
       const left = 30, right = w - 30, span = right - left;
       const amp = h * 0.22;
-      const s = snapshot || hostSnapshot();
+      const s = snapshot;
       const now = s.t || 0;
 
       ctx.strokeStyle = '#1f2d56'; ctx.lineWidth = 1;
@@ -301,7 +333,7 @@ const PEER_PREFIX = 'sigweave-';
         ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke();
       }
 
-      function drawWave(fn, color, width = 2, alpha = 1) {
+      function drawWave(fn: (t: number) => number, color: string, width = 2, alpha = 1) {
         ctx.beginPath();
         for (let i = 0; i <= 240; i++) {
           const x = left + span * (i / 240);
@@ -316,13 +348,13 @@ const PEER_PREFIX = 'sigweave-';
         ctx.globalAlpha = 1;
       }
 
-      const offs = s.offsets || [0, 0];
+      const offs = s.offsets;
       drawWave((t) => targetValue(t), '#ff7ccf', 2.5, 0.95);
       drawWave((t) => signalValue(t, offs), '#79f3ff', 2.5, 0.95);
-      drawWave((t) => Math.sin(t * 2.0 + offs[0]), '#8ef9ff', 1.2, 0.35);
-      drawWave((t) => Math.sin(t * 2.7 + offs[1]), '#6bb4ff', 1.2, 0.35);
+      drawWave((t) => Math.sin(t * 2.0 + (offs[0] ?? 0)), '#8ef9ff', 1.2, 0.35);
+      drawWave((t) => Math.sin(t * 2.7 + (offs[1] ?? 0)), '#6bb4ff', 1.2, 0.35);
 
-      const pulses = s.pulses || [];
+      const pulses = s.pulses;
       // Map owner slot to 0..1; keep denominator at least 1 for solo/local snapshots.
       const playerCount = Math.max(1, (s.players ?? 1));
       const playerDenom = playerCount > 1 ? (playerCount - 1) : 1;
@@ -344,7 +376,7 @@ const PEER_PREFIX = 'sigweave-';
       if (mySlot >= 0) $('slot').textContent = 'P' + (mySlot + 1);
     }
 
-    $('offset').min = String(OFFSET_MIN);
-    $('offset').max = String(OFFSET_MAX);
+    ($('offset') as HTMLInputElement).min = String(OFFSET_MIN);
+    ($('offset') as HTMLInputElement).max = String(OFFSET_MAX);
     $('offset').dispatchEvent(new Event('input'));
     gameLoop.start();
