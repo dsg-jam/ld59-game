@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Signal Weave — LD59</title>
+  <style>
+    :root{
+      --bg:#06080f; --ink:#d7e5ff; --dim:#7d8cb1; --line:#1b2340;
+      --acc:#79f3ff; --hot:#ff7ccf; --good:#8dff9d; --warn:#ffb36b;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0}
+    body{
+      background:radial-gradient(circle at 30% 20%, #0b1230, #06080f 60%);
+      color:var(--ink); font:14px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      overflow:hidden;
+    }
+    body::before{
+      content:""; position:fixed; inset:0; pointer-events:none; z-index:30;
+      background:repeating-linear-gradient(0deg,transparent 0 2px,rgba(121,243,255,.04) 2px 3px);
+    }
+    #app{display:grid;grid-template-columns:1fr 320px;height:100%}
+    #stage{position:relative;background:#040610}
+    canvas{width:100%;height:100%;display:block}
+    #sidebar{border-left:1px solid var(--line);background:#0a0f20;padding:12px;display:flex;flex-direction:column;gap:10px;overflow:auto}
+    .panel{border:1px solid var(--line);background:#0d1530;border-radius:8px;padding:10px}
+    .panel h3{margin:0 0 8px;font-size:12px;letter-spacing:.1em;color:var(--acc)}
+    button,input{font:inherit}
+    button{
+      border:1px solid #34466f;background:#1a2852;color:var(--ink);padding:7px 10px;border-radius:6px;cursor:pointer
+    }
+    button:hover{background:#22356d}
+    button:disabled{opacity:.45;cursor:not-allowed}
+    input[type="text"]{
+      width:100%;padding:7px 8px;border-radius:6px;border:1px solid #2e3f64;background:#0d1631;color:var(--ink);
+      text-transform:uppercase;letter-spacing:.2em;
+    }
+    input[type="range"]{width:100%}
+    #status{min-height:20px;color:var(--dim)}
+    #lobby{position:fixed;inset:0;background:#050912f0;z-index:40;display:flex;align-items:center;justify-content:center;padding:16px}
+    #lobby .card{max-width:420px;width:100%;border:1px solid var(--line);background:#0b1328;border-radius:12px;padding:18px}
+    #lobby h1{margin:0 0 6px;color:var(--acc);letter-spacing:.08em}
+    #lobby p{margin:4px 0;color:var(--dim)}
+    .room{margin:10px 0;padding:8px;border:1px dashed #3a4f86;border-radius:7px;color:var(--good);text-align:center;font-size:20px;letter-spacing:.25em}
+    .row{display:flex;gap:8px;flex-wrap:wrap}
+    .hud{position:absolute;top:10px;left:10px;display:flex;gap:8px;flex-wrap:wrap;z-index:2}
+    .chip{padding:6px 8px;border:1px solid #32456d;background:#0b1530;border-radius:6px;font-size:12px}
+    .chip b{color:var(--acc)}
+    #flash{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .18s;z-index:1}
+    #flash.good{background:radial-gradient(circle, rgba(141,255,157,.22), transparent 55%)}
+    #flash.bad{background:radial-gradient(circle, rgba(255,124,207,.2), transparent 55%)}
+    #log{max-height:180px;overflow:auto;font-size:12px}
+    #log div{margin-bottom:4px;color:var(--dim)}
+    #log .good{color:var(--good)} #log .bad{color:var(--warn)}
+  </style>
+</head>
+<body>
+  <div id="lobby">
+    <div class="card">
+      <h1>SIGNAL WEAVE</h1>
+      <p>Two operators shape one impossible waveform.</p>
+      <p>Match the target signal and fire synchronized pulses.</p>
+      <div class="row" style="margin-top:10px">
+        <button id="host-btn">OPEN CHANNEL</button>
+      </div>
+      <div style="margin:10px 0;color:var(--dim)">— or —</div>
+      <input id="join-code" maxlength="6" placeholder="ROOM CODE">
+      <div class="row" style="margin-top:8px">
+        <button id="join-btn">TUNE IN</button>
+      </div>
+      <div id="room-wrap" style="display:none">
+        <p style="margin-top:10px">Share this code:</p>
+        <div class="room" id="room-code">-----</div>
+        <button id="start-btn" disabled>BEGIN WEAVE</button>
+      </div>
+      <p id="lobby-status"></p>
+    </div>
+  </div>
+
+  <div id="app">
+    <div id="stage">
+      <canvas id="canvas" width="1200" height="800"></canvas>
+      <div class="hud">
+        <div class="chip">TIME <b id="time">90.0</b></div>
+        <div class="chip">HARMONY <b id="harmony">0.0</b></div>
+        <div class="chip">COMBO <b id="combo">x0</b></div>
+        <div class="chip">YOU <b id="slot">--</b></div>
+      </div>
+      <div id="flash"></div>
+    </div>
+    <div id="sidebar">
+      <div class="panel">
+        <h3>CONTROL</h3>
+        <div>PHASE OFFSET</div>
+        <input id="offset" type="range" min="0" max="628" value="0">
+        <div id="offset-label">0.00 rad</div>
+        <div class="row" style="margin-top:8px">
+          <button id="pulse-btn">TRANSMIT PULSE [SPACE]</button>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>PROTOCOL</h3>
+        <div style="color:var(--dim)">
+          Keep the cyan combined wave close to the magenta target.<br>
+          Synchronized pulses (&lt; 0.8s apart) amplify harmony when alignment is good.
+        </div>
+      </div>
+      <div class="panel">
+        <h3>NETWORK</h3>
+        <div id="status">Idle.</div>
+      </div>
+      <div class="panel">
+        <h3>LOG</h3>
+        <div id="log"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script>
+  (() => {
+    const PEER_PREFIX = 'sigweave-';
+    const MAX_PLAYERS = 2;
+    const $ = (id) => document.getElementById(id);
+    const canvas = $('canvas');
+    const ctx = canvas.getContext('2d');
+
+    let peer = null;
+    let conn = null;
+    let conns = [null];
+    let isHost = false;
+    let mySlot = -1;
+    let roomCode = '';
+
+    const state = {
+      running: false,
+      t: 0,
+      timeLeft: 90,
+      harmony: 0,
+      combo: 0,
+      offsets: [0, Math.PI * 0.5],
+      lastPing: [-99, -99],
+      pulses: [], // {owner, t, good}
+      messages: [],
+      players: 1
+    };
+    let localSnapshot = null;
+
+    function msg(text, kind = '') {
+      const el = document.createElement('div');
+      if (kind) el.className = kind;
+      el.textContent = text;
+      $('log').prepend(el);
+      while ($('log').children.length > 20) $('log').removeChild($('log').lastChild);
+      $('status').textContent = text;
+    }
+
+    function flash(kind) {
+      const f = $('flash');
+      f.className = kind ? kind : '';
+      f.style.opacity = kind ? '1' : '0';
+      setTimeout(() => { f.style.opacity = '0'; }, 140);
+    }
+
+    function makeCode() {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let c = '';
+      for (let i = 0; i < 5; i++) c += chars[(Math.random() * chars.length) | 0];
+      return c;
+    }
+
+    function setLobbyStatus(t) { $('lobby-status').textContent = t; }
+
+    function broadcast(data) {
+      for (let i = 1; i < conns.length; i++) {
+        const c = conns[i];
+        if (c && c.open) c.send(data);
+      }
+    }
+
+    function signalValue(t, offsets) {
+      return (Math.sin(t * 2.0 + offsets[0]) + Math.sin(t * 2.7 + offsets[1])) * 0.5;
+    }
+    function targetValue(t) {
+      return Math.sin(t * 1.5 + Math.sin(t * 0.4) * 1.2);
+    }
+
+    function hostTick(dt) {
+      if (!state.running) return;
+      state.t += dt;
+      state.timeLeft = Math.max(0, state.timeLeft - dt);
+      const comboFactor = 1 + Math.min(5, state.combo) * 0.15;
+      const diff = Math.abs(signalValue(state.t, state.offsets) - targetValue(state.t));
+
+      if (diff < 0.18) state.harmony += dt * 12 * comboFactor;
+      else state.harmony = Math.max(0, state.harmony - dt * 5);
+
+      if (state.combo > 0 && state.t - Math.max(state.lastPing[0], state.lastPing[1]) > 4) state.combo = 0;
+      state.pulses = state.pulses.filter(p => state.t - p.t < 2.4);
+
+      if (state.timeLeft <= 0) {
+        state.running = false;
+        broadcast({ t: 'end', harmony: state.harmony.toFixed(1) });
+        msg('Weave complete. Harmony: ' + state.harmony.toFixed(1));
+      }
+    }
+
+    function hostSnapshot() {
+      return {
+        t: state.t,
+        timeLeft: state.timeLeft,
+        harmony: state.harmony,
+        combo: state.combo,
+        offsets: state.offsets,
+        pulses: state.pulses,
+        running: state.running,
+        players: state.players
+      };
+    }
+
+    function sendState() {
+      const data = { t: 'state', s: hostSnapshot() };
+      localSnapshot = data.s;
+      broadcast(data);
+    }
+
+    function onPing(slot) {
+      const now = state.t;
+      state.lastPing[slot] = now;
+      state.pulses.push({ owner: slot, t: now, good: false });
+      const other = slot === 0 ? 1 : 0;
+      if (state.players >= 2 && now - state.lastPing[other] < 0.8) {
+        const aligned = Math.abs(signalValue(state.t, state.offsets) - targetValue(state.t)) < 0.2;
+        if (aligned) {
+          state.combo += 1;
+          state.harmony += 16 + Math.min(state.combo, 6) * 2;
+          state.pulses.push({ owner: slot, t: now, good: true });
+          broadcast({ t: 'burst', good: true });
+          flash('good');
+          msg('Synchronized constructive pulse.', 'good');
+        } else {
+          state.combo = 0;
+          state.harmony = Math.max(0, state.harmony - 6);
+          broadcast({ t: 'burst', good: false });
+          flash('bad');
+          msg('Pulse collided out of phase.', 'bad');
+        }
+      } else if (state.players < 2) {
+        msg('Awaiting second operator for synchronized pulse.');
+      }
+    }
+
+    function startRound() {
+      state.running = true;
+      state.t = 0;
+      state.timeLeft = 90;
+      state.harmony = 0;
+      state.combo = 0;
+      state.pulses = [];
+      state.lastPing = [-99, -99];
+      sendState();
+      broadcast({ t: 'start' });
+      $('lobby').style.display = 'none';
+      msg('Carrier locked. Weave active.');
+    }
+
+    function resetNet() {
+      if (peer) { try { peer.destroy(); } catch (_) {} }
+      peer = null; conn = null; conns = [null];
+      isHost = false; mySlot = -1;
+    }
+
+    function hostGame() {
+      if (typeof Peer === 'undefined') return setLobbyStatus('PeerJS failed to load.');
+      resetNet();
+      isHost = true;
+      mySlot = 0;
+      roomCode = makeCode();
+      state.players = 1;
+      $('slot').textContent = 'P1';
+      $('room-wrap').style.display = 'block';
+      $('room-code').textContent = roomCode;
+      $('start-btn').disabled = true;
+      setLobbyStatus('Opening channel...');
+
+      peer = new Peer(PEER_PREFIX + roomCode);
+      peer.on('open', () => setLobbyStatus('Channel open. Waiting for operator 2.'));
+      peer.on('connection', c => {
+        if (state.players >= MAX_PLAYERS || state.running) { c.close(); return; }
+        conns[1] = c;
+        c.on('open', () => {
+          state.players = 2;
+          c.send({ t: 'hello', slot: 1 });
+          $('start-btn').disabled = false;
+          setLobbyStatus('Operator connected. Ready to begin.');
+          msg('Second operator tuned in.');
+        });
+        c.on('data', d => onHostMessage(d, 1));
+        c.on('close', () => {
+          state.players = 1;
+          conns[1] = null;
+          $('start-btn').disabled = true;
+          setLobbyStatus('Operator disconnected.');
+          msg('Peer disconnected.', 'bad');
+        });
+      });
+      peer.on('error', e => setLobbyStatus('Peer error: ' + e.type));
+    }
+
+    function joinGame() {
+      if (typeof Peer === 'undefined') return setLobbyStatus('PeerJS failed to load.');
+      const code = $('join-code').value.trim().toUpperCase();
+      if (!code) return setLobbyStatus('Enter room code.');
+      resetNet();
+      setLobbyStatus('Tuning into ' + code + '...');
+      peer = new Peer();
+      peer.on('open', () => {
+        conn = peer.connect(PEER_PREFIX + code, { reliable: true });
+        conn.on('open', () => setLobbyStatus('Connected. Awaiting host start.'));
+        conn.on('data', onGuestMessage);
+        conn.on('close', () => setLobbyStatus('Disconnected from host.'));
+      });
+      peer.on('error', e => setLobbyStatus('Peer error: ' + e.type));
+    }
+
+    function onHostMessage(d, slot) {
+      if (d.t === 'offset') {
+        state.offsets[slot] = d.v;
+      } else if (d.t === 'ping') {
+        onPing(slot);
+      }
+    }
+
+    function onGuestMessage(d) {
+      if (d.t === 'hello') {
+        mySlot = d.slot;
+        $('slot').textContent = 'P' + (mySlot + 1);
+        setLobbyStatus('Linked as operator ' + (mySlot + 1) + '.');
+      } else if (d.t === 'start') {
+        $('lobby').style.display = 'none';
+        msg('Host started the weave.');
+      } else if (d.t === 'state') {
+        localSnapshot = d.s;
+      } else if (d.t === 'burst') {
+        flash(d.good ? 'good' : 'bad');
+        msg(d.good ? 'Synchronized constructive pulse.' : 'Pulse collided out of phase.', d.good ? 'good' : 'bad');
+      } else if (d.t === 'end') {
+        msg('Weave complete. Harmony: ' + d.harmony);
+      }
+    }
+
+    $('host-btn').onclick = hostGame;
+    $('join-btn').onclick = joinGame;
+    $('start-btn').onclick = () => { if (isHost && state.players >= 2) startRound(); };
+
+    $('offset').addEventListener('input', () => {
+      const v = Number($('offset').value) / 100;
+      $('offset-label').textContent = v.toFixed(2) + ' rad';
+      if (mySlot < 0 && isHost) mySlot = 0;
+      if (isHost) {
+        state.offsets[0] = v;
+      } else if (conn && conn.open) {
+        conn.send({ t: 'offset', v });
+      }
+    });
+
+    function doPulse() {
+      if (isHost) onPing(0);
+      else if (conn && conn.open) conn.send({ t: 'ping' });
+    }
+    $('pulse-btn').onclick = doPulse;
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') { e.preventDefault(); doPulse(); }
+      if (e.code === 'ArrowLeft') { $('offset').value = Math.max(0, Number($('offset').value) - 6); $('offset').dispatchEvent(new Event('input')); }
+      if (e.code === 'ArrowRight') { $('offset').value = Math.min(628, Number($('offset').value) + 6); $('offset').dispatchEvent(new Event('input')); }
+    });
+
+    let last = performance.now();
+    let netTimer = 0;
+    function loop(ts) {
+      const dt = Math.min(0.05, (ts - last) / 1000);
+      last = ts;
+
+      if (isHost) {
+        hostTick(dt);
+        netTimer += dt;
+        if (netTimer > 0.05) { sendState(); netTimer = 0; }
+      }
+      draw(localSnapshot || hostSnapshot());
+      requestAnimationFrame(loop);
+    }
+
+    function draw(snapshot) {
+      const w = canvas.clientWidth, h = canvas.clientHeight;
+      if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+      ctx.clearRect(0, 0, w, h);
+
+      const midY = h * 0.5;
+      const left = 30, right = w - 30, span = right - left;
+      const amp = h * 0.22;
+      const s = snapshot || hostSnapshot();
+      const now = s.t || 0;
+
+      ctx.strokeStyle = '#1f2d56'; ctx.lineWidth = 1;
+      for (let i = 0; i <= 8; i++) {
+        const y = midY - amp + (amp * 2 * i / 8);
+        ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke();
+      }
+
+      function drawWave(fn, color, width = 2, alpha = 1) {
+        ctx.beginPath();
+        for (let i = 0; i <= 240; i++) {
+          const x = left + span * (i / 240);
+          const t = now - 3 + (i / 240) * 6;
+          const y = midY - fn(t) * amp;
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+
+      const offs = s.offsets || [0, 0];
+      drawWave((t) => targetValue(t), '#ff7ccf', 2.5, 0.95);
+      drawWave((t) => signalValue(t, offs), '#79f3ff', 2.5, 0.95);
+      drawWave((t) => Math.sin(t * 2.0 + offs[0]), '#8ef9ff', 1.2, 0.35);
+      drawWave((t) => Math.sin(t * 2.7 + offs[1]), '#6bb4ff', 1.2, 0.35);
+
+      const pulses = s.pulses || [];
+      for (const p of pulses) {
+        const age = now - p.t;
+        const x = w * (0.2 + 0.6 * ((p.owner || 0) / 1));
+        const r = 20 + age * 120;
+        ctx.beginPath();
+        ctx.arc(x, midY, r, 0, Math.PI * 2);
+        ctx.strokeStyle = p.good ? 'rgba(141,255,157,' + (1 - age / 2.4).toFixed(3) + ')' : 'rgba(121,243,255,' + (1 - age / 2.4).toFixed(3) + ')';
+        ctx.lineWidth = p.good ? 3 : 1.5;
+        ctx.stroke();
+      }
+
+      $('time').textContent = (s.timeLeft || 0).toFixed(1);
+      $('harmony').textContent = (s.harmony || 0).toFixed(1);
+      $('combo').textContent = 'x' + (s.combo || 0);
+      if (mySlot >= 0) $('slot').textContent = 'P' + (mySlot + 1);
+    }
+
+    $('offset').dispatchEvent(new Event('input'));
+    requestAnimationFrame(loop);
+  })();
+  </script>
+</body>
+</html>
