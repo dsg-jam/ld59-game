@@ -1,8 +1,9 @@
-// Legacy game logic migrated from JavaScript; keep no-check until this file is incrementally typed.
 import Peer from "peerjs";
+import type { DataConnection, MediaConnection } from "peerjs";
 import { describePeerError as sharedDescribePeerError, makeCode as sharedMakeCode } from "$lib/peer";
 import { endState as endStateStore } from "$lib/games/dead-air/endState";
 import {
+  type Player, type Tower, type Role, type VoteState,
   WORLD_W, WORLD_H, PLAYER_SPEED, PLAYER_COLORS, MAX_PLAYERS,
   TOWER_REQUIRED, WARM_X, WARM_Y, WARM_R,
   VOTE_DURATION_MS, ELIM_COOLDOWN_MS, PLAYBACK_COOLDOWN_MS, SNIPPET_DURATION_MS,
@@ -16,6 +17,45 @@ import {
 } from "$lib/dead-air-engine";
 
 (() => {
+  interface PlayerSnap {
+    id: string;
+    name?: string;
+    color?: string;
+    x: number;
+    y: number;
+    alive: boolean;
+    spectator: boolean;
+  }
+  interface GameMsg {
+    t: string;
+    id?: string;
+    name?: string;
+    hostId?: string;
+    roomCode?: string;
+    players?: PlayerSnap[];
+    role?: Role;
+    towers?: Tower[];
+    vote?: VoteState;
+    votes?: Record<string, string>;
+    text?: string;
+    winner?: string;
+    roles?: Array<{ id: string; name: string; role?: string }>;
+    x?: number;
+    y?: number;
+    target?: string;
+    buffer?: ArrayBuffer;
+    from?: string;
+    by?: string;
+    caller?: string;
+  }
+  type VoicePipeline = {
+    filter: BiquadFilterNode;
+    gain: GainNode;
+    noiseGain: GainNode;
+    wobblePhase: number;
+  };
+  type Snippet = { fromId: string; name: string; buffer: ArrayBuffer };
+
   // ── CONSTANTS ────────────────────────────────────────────────────────────────
   const PEER_PREFIX = 'dead-air-';
   const ROOM_CODE_LENGTH = 5;
@@ -26,29 +66,37 @@ import {
   const MIME_WEBM = 'audio/webm';
   const DEFAULT_OPERATIVE_RANGE = MAX_PLAYERS;
 
-  const $ = id => document.getElementById(id);
-  const canvas = $('map');
-  const ctx = canvas.getContext('2d');
+  const $ = (id: string): HTMLElement => {
+    const el = document.getElementById(id);
+    if (!el) throw new Error(`#${id} not found`);
+    return el;
+  };
+  const $input = (id: string): HTMLInputElement => $( id) as HTMLInputElement;
+  const $btn = (id: string): HTMLButtonElement => $(id) as HTMLButtonElement;
+  const canvas = $('map') as HTMLCanvasElement;
+  const ctxRaw = canvas.getContext('2d');
+  if (!ctxRaw) throw new Error('no ctx');
+  const ctx = ctxRaw;
 
   // ── NETWORK + GAME STATE ─────────────────────────────────────────────────────
-  let peer = null;
+  let peer: InstanceType<typeof Peer> | null = null;
   let isHost = false;
-  let hostId = null;
+  let hostId: string | null = null;
   let roomCode = '';
-  let myId = null;
+  let myId: string | null = null;
   let gameStarted = false;
-  let localRole = null;
-  let pendingRole = null;
-  let myColor = PLAYER_COLORS[0];
+  let localRole: Role | null = null;
+  let pendingRole: Role | null = null;
+  let myColor: string = PLAYER_COLORS[0] ?? '#ffb800';
 
-  const players = new Map();
-  const conns = new Map();
-  const rolesById = new Map();
-  const incomingRawStreams = new Map();
+  const players = new Map<string, Player>();
+  const conns = new Map<string, DataConnection>();
+  const rolesById = new Map<string, Role>();
+  const incomingRawStreams = new Map<string, MediaStream>();
 
   let towers = createDefaultTowers();
-  let voteState = null;
-  let endState = null;
+  let voteState: VoteState | null = null;
+  let endState: { winner: string } | null = null;
 
   let lastTowerBroadcast = 0;
   let lastHostSimTime = performance.now();
@@ -61,17 +109,17 @@ import {
   const keys = new Set();
 
   // ── AUDIO PIPELINE ────────────────────────────────────────────────────────────
-  let audioCtx = null;
-  let micStream = null;
-  let outgoingStream = null;
+  let audioCtx: AudioContext | null = null;
+  let micStream: MediaStream | null = null;
+  let outgoingStream: MediaStream | null = null;
   let micDenied = false;
-  const mediaCalls = new Map();
-  const voicePipelines = new Map();
-  let pinkNoiseBuffer = null;
+  const mediaCalls = new Map<string, MediaConnection>();
+  const voicePipelines = new Map<string, VoicePipeline>();
+  let pinkNoiseBuffer: AudioBuffer | null = null;
 
   // ── MIMIC CAPTURE ─────────────────────────────────────────────────────────────
-  const capturedSnippets = [];
-  let activeCapture = null;
+  const capturedSnippets: Snippet[] = [];
+  let activeCapture: MediaRecorder | null = null;
 
   function setWarn(msg = '') { $('warn').textContent = msg; }
   function setLobbyStatus(msg = '') { $('lobby-status').textContent = msg; }
@@ -84,18 +132,18 @@ import {
     return `OPERATIVE-${1 + Math.floor(Math.random() * DEFAULT_OPERATIVE_RANGE)}`;
   }
 
-  $('name').value = defaultName();
+  $input('name').value = defaultName();
 
-  function describePeerError(err) {
-    return sharedDescribePeerError(err);
+  function describePeerError(err: unknown): string {
+    return sharedDescribePeerError(err as Parameters<typeof sharedDescribePeerError>[0]);
   }
 
-  function updateNetDot(ok) {
+  function updateNetDot(ok: boolean): void {
     $('net-dot').classList.toggle('ok', !!ok);
   }
 
-  function myPlayer() {
-    return players.get(myId);
+  function myPlayer(): Player | undefined {
+    return myId ? players.get(myId) : undefined;
   }
 
   // ── PEER DATA CONNECTIONS ─────────────────────────────────────────────────────
@@ -117,7 +165,7 @@ import {
     updateNetDot(false);
   }
 
-  function addConn(conn) {
+  function addConn(conn: DataConnection): void {
     const pid = conn.peer;
     if (!pid || pid === myId) return;
     if (conns.has(pid)) return;
@@ -126,18 +174,18 @@ import {
     conn.on('open', () => {
       updateNetDot(true);
       if (gameStarted && players.has(pid)) {
-        send(conn, { t: 'helloMesh', id: myId, name: $('name').value.slice(0, 16) || 'OPERATIVE' });
+        if (myId) send(conn, { t: 'helloMesh', id: myId, name: $input('name').value.slice(0, 16) || 'OPERATIVE' });
       }
     });
 
-    conn.on('data', data => {
+    conn.on('data', (data: unknown) => {
       handleData(data, pid);
     });
 
     conn.on('close', () => {
       conns.delete(pid);
-      if (players.has(pid)) {
-        const p = players.get(pid);
+      const p = players.get(pid);
+      if (p) {
         p.alive = false;
         p.spectator = true;
       }
@@ -145,28 +193,31 @@ import {
     });
   }
 
-  function send(conn, msg) {
+  function send(conn: DataConnection | undefined, msg: unknown): void {
     if (conn && conn.open) conn.send(msg);
   }
 
-  function sendTo(id, msg) {
+  function sendTo(id: string | null, msg: unknown): void {
+    if (!id) return;
     send(conns.get(id), msg);
   }
 
-  function broadcast(msg) {
+  function broadcast(msg: unknown): void {
     for (const c of conns.values()) send(c, msg);
   }
 
-  function sendToHost(msg) {
+  function sendToHost(msg: unknown): void {
     if (isHost) {
-      handleHostMessage(msg, myId);
+      if (!myId) return;
+      handleHostMessage(msg as GameMsg, myId);
       return;
     }
     sendTo(hostId, msg);
   }
 
-  function ensureMesh() {
+  function ensureMesh(): void {
     if (!peer || !gameStarted) return;
+    if (!myId) return;
     const ids = [...players.keys()];
     for (const id of ids) {
       if (id === myId) continue;
@@ -178,17 +229,17 @@ import {
     }
   }
 
-  function setupPeerEvents() {
-    peer.on('connection', conn => {
+  function setupPeerEvents(p: InstanceType<typeof Peer>): void {
+    p.on('connection', (conn: DataConnection) => {
       addConn(conn);
     });
 
-    peer.on('call', call => {
-      call.answer(outgoingStream || undefined);
+    p.on('call', (call: MediaConnection) => {
+      call.answer(outgoingStream ?? undefined);
       attachCall(call, call.peer);
     });
 
-    peer.on('error', err => {
+    p.on('error', (err: Error) => {
       setLobbyStatus('Peer error: ' + describePeerError(err));
       setWarn('Network issue: ' + describePeerError(err));
     });
@@ -203,7 +254,7 @@ import {
     }));
   }
 
-  function renderLobbyPlayers() {
+  function renderLobbyPlayers(): void {
     const wrap = $('lobby-players');
     wrap.innerHTML = '';
     const list = lobbySnapshot();
@@ -218,7 +269,7 @@ import {
       wrap.appendChild(d);
     }
     if (isHost) {
-      $('start-btn').disabled = list.length < 2 || list.length > MAX_PLAYERS;
+      $btn('start-btn').disabled = list.length < 2 || list.length > MAX_PLAYERS;
     }
   }
 
@@ -242,18 +293,18 @@ import {
     $('room-code').textContent = roomCode;
 
     peer = new Peer(hostId);
-    setupPeerEvents();
+    setupPeerEvents(peer);
 
     peer.on('open', id => {
       myId = id;
-      const name = ($('name').value || 'OPERATIVE').slice(0, 16);
+      const name = ($input('name').value || 'OPERATIVE').slice(0, 16);
       players.clear();
       rolesById.clear();
       towers = createDefaultTowers();
       players.set(myId, {
         id: myId,
         name,
-        color: PLAYER_COLORS[0],
+        color: PLAYER_COLORS[0] ?? '#ffb800',
         x: WARM_X,
         y: WARM_Y,
         alive: true,
@@ -271,21 +322,24 @@ import {
     gameStarted = false;
     localRole = null;
     pendingRole = null;
-    const code = $('join-code').value.trim().toUpperCase();
+    const code = $input('join-code').value.trim().toUpperCase();
     if (!code) return setLobbyStatus('Enter room code.');
     roomCode = code;
     hostId = PEER_PREFIX + code;
     setLobbyStatus('Connecting to room...');
 
     peer = new Peer();
-    setupPeerEvents();
+    setupPeerEvents(peer);
 
     peer.on('open', id => {
       myId = id;
-      const c = peer.connect(hostId, { reliable: true });
+      const currentPeer = peer;
+      const currentHostId = hostId;
+      if (!currentPeer || !currentHostId) return;
+      const c = currentPeer.connect(currentHostId, { reliable: true });
       addConn(c);
       c.on('open', () => {
-        send(c, { t: 'helloJoin', name: ($('name').value || 'OPERATIVE').slice(0, 16) });
+        send(c, { t: 'helloJoin', name: ($input('name').value || 'OPERATIVE').slice(0, 16) });
         setLobbyStatus('Connected. Waiting for host.');
       });
     });
@@ -312,7 +366,7 @@ import {
 
     let idx = 0;
     for (const p of players.values()) {
-      p.color = PLAYER_COLORS[idx % PLAYER_COLORS.length];
+      p.color = PLAYER_COLORS[idx % PLAYER_COLORS.length] ?? '#ffb800';
       p.x = WARM_X + (Math.cos(idx * 1.7) * 30);
       p.y = WARM_Y + (Math.sin(idx * 1.7) * 30);
       p.alive = true;
@@ -320,8 +374,8 @@ import {
       idx++;
     }
 
-    localRole = rolesById.get(myId);
-    myColor = players.get(myId).color;
+    localRole = myId ? (rolesById.get(myId) ?? null) : null;
+    myColor = (myId ? players.get(myId)?.color : undefined) ?? myColor;
 
     for (const [id] of players) {
       if (id === myId) continue;
@@ -342,16 +396,16 @@ import {
     startLocalGame(payloadPlayers, towers);
   }
 
-  function startLocalGame(seedPlayers, seedTowers) {
+  function startLocalGame(seedPlayers: PlayerSnap[], seedTowers: Tower[]): void {
     $('lobby').style.display = 'none';
     $('game').style.display = 'block';
-    towers = seedTowers.map(t => ({ ...t }));
+    towers = seedTowers.map((t: Tower) => ({ ...t }));
     players.clear();
-    for (const p of seedPlayers) players.set(p.id, { ...p });
-    if (!players.has(myId)) {
+    for (const p of seedPlayers) players.set(p.id, { id: p.id, name: p.name ?? 'OPERATIVE', color: p.color ?? '#888', x: p.x, y: p.y, alive: p.alive, spectator: p.spectator });
+    if (myId && !players.has(myId)) {
       players.set(myId, {
         id: myId,
-        name: ($('name').value || 'OPERATIVE').slice(0, 16),
+        name: ($input('name').value || 'OPERATIVE').slice(0, 16),
         color: myColor,
         x: WARM_X,
         y: WARM_Y,
@@ -366,7 +420,7 @@ import {
     $('role-pill').textContent = `ROLE: ${localRole ? localRole.toUpperCase() : 'UNKNOWN'}`;
     $('role-pill').classList.toggle('bad', localRole === 'mimic');
     $('mimic-panel').style.display = localRole === 'mimic' ? 'block' : 'none';
-    $('call-vote').disabled = false;
+    $btn('call-vote').disabled = false;
     $('status-pill').textContent = 'TRANSMISSION LIVE';
 
     ensureMesh();
@@ -377,8 +431,9 @@ import {
   }
 
   // ── DATA MESSAGES ─────────────────────────────────────────────────────────────
-  function handleData(msg, fromId) {
-    if (!msg || typeof msg !== 'object') return;
+  function handleData(data: unknown, fromId: string): void {
+    if (!data || typeof data !== 'object') return;
+    const msg = data as GameMsg;
 
     if (isHost) {
       handleHostMessage(msg, fromId);
@@ -387,17 +442,17 @@ import {
 
     switch (msg.t) {
       case 'lobby': {
-        hostId = msg.hostId;
-        roomCode = msg.roomCode;
+        hostId = msg.hostId ?? null;
+        roomCode = msg.roomCode ?? '';
         players.clear();
-        for (const p of msg.players || []) {
-          players.set(p.id, { id: p.id, name: p.name, color: '#888', x: WARM_X, y: WARM_Y, alive: p.alive, spectator: false });
+        for (const p of msg.players ?? []) {
+          players.set(p.id, { id: p.id, name: p.name ?? 'OPERATIVE', color: '#888', x: WARM_X, y: WARM_Y, alive: p.alive, spectator: false });
         }
         renderLobbyPlayers();
         setLobbyStatus(`Joined ${roomCode}. Awaiting host start.`);
       } break;
       case 'rolePrivate': {
-        pendingRole = msg.role;
+        pendingRole = msg.role ?? null;
         if (gameStarted) {
           localRole = pendingRole;
           pendingRole = null;
@@ -409,31 +464,31 @@ import {
       } break;
       case 'start': {
         gameStarted = true;
-        startLocalGame(msg.players || [], msg.towers || towers);
+        startLocalGame(msg.players ?? [], msg.towers ?? towers);
       } break;
       case 'helloMesh': {
         if (!players.has(fromId)) {
-          players.set(fromId, { id: fromId, name: msg.name || 'OPERATIVE', color: '#888', x: WARM_X, y: WARM_Y, alive: true, spectator: false });
+          players.set(fromId, { id: fromId, name: msg.name ?? 'OPERATIVE', color: '#888', x: WARM_X, y: WARM_Y, alive: true, spectator: false });
         }
       } break;
       case 'state': {
         applyAuthoritativeState(msg);
       } break;
       case 'towerSync': {
-        towers = (msg.towers || []).map(t => ({ ...t }));
+        towers = (msg.towers ?? []).map((t: Tower) => ({ ...t }));
         renderSidebar();
       } break;
       case 'voteStarted': {
-        voteState = { ...msg.vote, votes: msg.vote.votes || {} };
+        if (msg.vote) voteState = { ...msg.vote, votes: msg.vote.votes ?? {} };
         renderVotePanel();
       } break;
       case 'voteUpdate': {
-        if (!voteState) voteState = { active: true, endsAt: Date.now() + 15000, votes: {} };
-        voteState.votes = msg.votes || {};
+        if (!voteState) voteState = { active: true, endsAt: Date.now() + 15000, votes: {}, caller: '' };
+        voteState.votes = msg.votes ?? {};
         renderVotePanel();
       } break;
       case 'playerEliminated': {
-        const p = players.get(msg.id);
+        const p = players.get(msg.id ?? '');
         if (p) {
           p.alive = false;
           p.spectator = true;
@@ -447,17 +502,15 @@ import {
         handleMimicPlayback(msg);
       } break;
       case 'warn': {
-        setWarn(msg.text || '');
+        setWarn(msg.text ?? '');
       } break;
       case 'gameOver': {
-        showEnd(msg.winner, msg.roles || []);
+        showEnd(msg.winner ?? '', msg.roles ?? []);
       } break;
     }
   }
 
-  function handleHostMessage(msg, fromId) {
-    if (!msg || typeof msg !== 'object') return;
-
+  function handleHostMessage(msg: GameMsg, fromId: string): void {
     switch (msg.t) {
       case 'helloJoin': {
         if (gameStarted) {
@@ -473,7 +526,7 @@ import {
         players.set(fromId, {
           id: fromId,
           name,
-          color: PLAYER_COLORS[idx % PLAYER_COLORS.length],
+          color: PLAYER_COLORS[idx % PLAYER_COLORS.length] ?? '#ffb800',
           x: WARM_X,
           y: WARM_Y,
           alive: true,
@@ -492,8 +545,8 @@ import {
         if (!gameStarted) return;
         const p = players.get(fromId);
         if (!p || !p.alive) return;
-        p.x = clamp(msg.x, 0, WORLD_W);
-        p.y = clamp(msg.y, 0, WORLD_H);
+        p.x = clamp(msg.x ?? 0, 0, WORLD_W);
+        p.y = clamp(msg.y ?? 0, 0, WORLD_H);
       } break;
 
       case 'requestVote': {
@@ -511,7 +564,7 @@ import {
         const voter = players.get(fromId);
         if (!voter || !voter.alive) return;
         if (rolesById.get(fromId) === 'mimic') return;
-        if (!players.has(msg.target)) return;
+        if (!msg.target || !players.has(msg.target)) return;
         voteState.votes[fromId] = msg.target;
         broadcast({ t: 'voteUpdate', votes: voteState.votes });
       } break;
@@ -524,7 +577,7 @@ import {
         const targetId = msg.target;
         if (!targetId || !players.has(targetId)) return;
         const target = players.get(targetId);
-        if (!target.alive || rolesById.get(targetId) === 'mimic') return;
+        if (!target || !target.alive || rolesById.get(targetId) === 'mimic') return;
         if (!isIsolatedInDark(targetId)) return;
 
         target.alive = false;
@@ -550,13 +603,14 @@ import {
     }
   }
 
-  function applyAuthoritativeState(msg) {
-    const snapshot = msg.players || [];
+  function applyAuthoritativeState(msg: GameMsg): void {
+    const snapshot = msg.players ?? [];
     for (const p of snapshot) {
       if (!players.has(p.id)) {
-        players.set(p.id, { id: p.id, name: p.name || 'OPERATIVE', color: p.color || '#999', x: p.x, y: p.y, alive: p.alive, spectator: p.spectator });
+        players.set(p.id, { id: p.id, name: p.name ?? 'OPERATIVE', color: p.color ?? '#999', x: p.x, y: p.y, alive: p.alive, spectator: p.spectator });
       }
       const local = players.get(p.id);
+      if (!local) continue;
       if (p.id !== myId) {
         local.x = p.x;
         local.y = p.y;
@@ -566,18 +620,19 @@ import {
       if (p.name) local.name = p.name;
       if (p.color) local.color = p.color;
     }
-    towers = (msg.towers || towers).map(t => ({ ...t }));
+    towers = (msg.towers ?? towers).map((t: Tower) => ({ ...t }));
     if (msg.vote) voteState = msg.vote.active ? msg.vote : null;
     renderSidebar();
   }
 
   // ── AUDIO HELPERS ────────────────────────────────────────────────────────────
-  function ensureAudioContext() {
+  function ensureAudioContext(): void {
     if (!audioCtx) {
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      audioCtx = new AC();
       pinkNoiseBuffer = createPinkNoiseBuffer(audioCtx, 2.0);
     }
-    if (audioCtx.state === 'suspended') audioCtx.resume();
+    if (audioCtx.state === 'suspended') void audioCtx.resume();
   }
 
   async function initMicrophone() {
@@ -596,7 +651,7 @@ import {
     }
   }
 
-  function createPinkNoiseBuffer(ac, seconds) {
+  function createPinkNoiseBuffer(ac: AudioContext, seconds: number): AudioBuffer {
     const len = Math.floor(ac.sampleRate * seconds);
     const buffer = ac.createBuffer(1, len, ac.sampleRate);
     const out = buffer.getChannelData(0);
@@ -616,9 +671,9 @@ import {
     return buffer;
   }
 
-  function attachCall(call, sourceId) {
+  function attachCall(call: MediaConnection, sourceId: string): void {
     mediaCalls.set(sourceId, call);
-    call.on('stream', stream => {
+    call.on('stream', (stream: MediaStream) => {
       incomingRawStreams.set(sourceId, stream);
       attachVoicePipeline(sourceId, stream);
       renderMimicPanel();
@@ -631,53 +686,55 @@ import {
     });
   }
 
-  function beginVoiceCalls() {
-    if (!peer) return;
+  function beginVoiceCalls(): void {
+    if (!peer || !myId) return;
     for (const id of players.keys()) {
       if (id === myId) continue;
       if (myId < id) {
-        const call = peer.call(id, outgoingStream || undefined);
+        const call = peer.call(id, outgoingStream ?? new MediaStream());
         if (call) attachCall(call, id);
       }
     }
   }
 
-  function attachVoicePipeline(sourceId, stream) {
+  function attachVoicePipeline(sourceId: string, stream: MediaStream): void {
     if (!audioCtx) ensureAudioContext();
-    const source = audioCtx.createMediaStreamSource(stream);
-    const filter = audioCtx.createBiquadFilter();
+    const ac = audioCtx;
+    if (!ac) return;
+    const source = ac.createMediaStreamSource(stream);
+    const filter = ac.createBiquadFilter();
     filter.type = 'lowpass';
     filter.frequency.value = VOICE_FREQ_NEAR;
-    const gain = audioCtx.createGain();
+    const gain = ac.createGain();
     gain.gain.value = 1.0;
 
-    const noiseSrc = audioCtx.createBufferSource();
+    const noiseSrc = ac.createBufferSource();
     noiseSrc.buffer = pinkNoiseBuffer;
     noiseSrc.loop = true;
-    const noiseGain = audioCtx.createGain();
+    const noiseGain = ac.createGain();
     noiseGain.gain.value = 0;
 
     source.connect(filter);
     filter.connect(gain);
-    gain.connect(audioCtx.destination);
+    gain.connect(ac.destination);
     noiseSrc.connect(noiseGain);
-    noiseGain.connect(audioCtx.destination);
+    noiseGain.connect(ac.destination);
     noiseSrc.start();
 
     voicePipelines.set(sourceId, { filter, gain, noiseGain, wobblePhase: Math.random() * Math.PI * 2 });
   }
 
-  function applyDistanceNodes(filter, gain, noiseGain, dist, wobbleT) {
+  function applyDistanceNodes(filter: BiquadFilterNode, gain: GainNode, noiseGain: GainNode, d: number, wobbleT: number): void {
     let f = VOICE_FREQ_NEAR;
     let g = 1;
     let n = 0.01;
-    if (dist > 350) {
+    if (d > 350) {
       f = VOICE_FREQ_FAR;
       g = 0.1;
       n = 0.24;
       filter.detune.value = 0;
-    } else if (dist > 150) {
-      const t = (dist - 150) / 200;
+    } else if (d > 150) {
+      const t = (d - 150) / 200;
       f = VOICE_FREQ_NEAR + (VOICE_FREQ_MID - VOICE_FREQ_NEAR) * t;
       g = 1 + (0.5 - 1) * t;
       n = 0.05 + 0.12 * t;
@@ -685,32 +742,35 @@ import {
     } else {
       filter.detune.value = 0;
     }
+    if (!audioCtx) return;
     filter.frequency.setTargetAtTime(Math.max(120, f), audioCtx.currentTime, 0.08);
     gain.gain.setTargetAtTime(g, audioCtx.currentTime, 0.08);
     noiseGain.gain.setTargetAtTime(n, audioCtx.currentTime, 0.1);
   }
 
-  async function playDecodedBuffer(arrayBuffer, sourcePos) {
+  async function playDecodedBuffer(arrayBuffer: ArrayBuffer, sourcePos: { x: number; y: number }): Promise<void> {
     if (!audioCtx) ensureAudioContext();
+    const ac = audioCtx;
+    if (!ac) return;
     try {
-      const decoded = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
-      const src = audioCtx.createBufferSource();
+      const decoded = await ac.decodeAudioData(arrayBuffer.slice(0));
+      const src = ac.createBufferSource();
       src.buffer = decoded;
-      const filter = audioCtx.createBiquadFilter();
+      const filter = ac.createBiquadFilter();
       filter.type = 'lowpass';
       filter.frequency.value = VOICE_FREQ_NEAR;
-      const gain = audioCtx.createGain();
+      const gain = ac.createGain();
       gain.gain.value = 1;
-      const noiseSrc = audioCtx.createBufferSource();
+      const noiseSrc = ac.createBufferSource();
       noiseSrc.buffer = pinkNoiseBuffer;
       noiseSrc.loop = true;
-      const noiseGain = audioCtx.createGain();
+      const noiseGain = ac.createGain();
       noiseGain.gain.value = 0;
       src.connect(filter);
       filter.connect(gain);
-      gain.connect(audioCtx.destination);
+      gain.connect(ac.destination);
       noiseSrc.connect(noiseGain);
-      noiseGain.connect(audioCtx.destination);
+      noiseGain.connect(ac.destination);
       const local = myPlayer();
       if (local) {
         const d = dist(local.x, local.y, sourcePos.x, sourcePos.y);
@@ -722,13 +782,13 @@ import {
     } catch { /* ignore */ }
   }
 
-  function handleMimicPlayback(msg) {
-    if (!msg || !msg.buffer) return;
-    playDecodedBuffer(msg.buffer, { x: msg.x, y: msg.y });
+  function handleMimicPlayback(msg: GameMsg): void {
+    if (!msg.buffer) return;
+    void playDecodedBuffer(msg.buffer, { x: msg.x ?? 0, y: msg.y ?? 0 });
   }
 
   // ── MIMIC CAPTURE + PLAYBACK UI ──────────────────────────────────────────────
-  function renderMimicPanel() {
+  function renderMimicPanel(): void {
     if (localRole !== 'mimic') return;
     const captureList = $('capture-list');
     captureList.innerHTML = '';
@@ -746,6 +806,7 @@ import {
     snippetList.innerHTML = '';
     for (let i = 0; i < capturedSnippets.length; i++) {
       const s = capturedSnippets[i];
+      if (!s) continue;
       const b = document.createElement('button');
       b.className = 'snippet';
       b.textContent = `[${s.name}] 3s snippet`;
@@ -755,13 +816,13 @@ import {
     }
   }
 
-  function captureSnippet(fromId) {
+  function captureSnippet(fromId: string): void {
     const stream = incomingRawStreams.get(fromId);
     if (!stream || activeCapture) return;
     const person = players.get(fromId);
     const mime = MediaRecorder.isTypeSupported(MIME_OPUS_WEBM) ? MIME_OPUS_WEBM : MIME_WEBM;
     const rec = new MediaRecorder(stream, { mimeType: mime });
-    const chunks = [];
+    const chunks: Blob[] = [];
     activeCapture = rec;
     renderMimicPanel();
     rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
@@ -776,7 +837,7 @@ import {
     setTimeout(() => { if (rec.state !== 'inactive') rec.stop(); }, SNIPPET_DURATION_MS);
   }
 
-  function playSnippet(index) {
+  function playSnippet(index: number): void {
     const me = myPlayer();
     if (!me) return;
     if (Date.now() - lastPlaybackAt < PLAYBACK_COOLDOWN_MS) return;
@@ -788,11 +849,11 @@ import {
   }
 
   // ── GAME RULES ────────────────────────────────────────────────────────────────
-  function isIsolatedInDark(targetId) {
+  function isIsolatedInDark(targetId: string): boolean {
     return engineIsIsolated(targetId, players, rolesById, towers);
   }
 
-  function updateHostSimulation(now) {
+  function updateHostSimulation(now: number): void {
     const dt = Math.min(0.25, (now - lastHostSimTime) / 1000);
     lastHostSimTime = now;
     engineUpdateTowers(towers, players, rolesById, dt);
@@ -842,19 +903,19 @@ import {
     if (winner) endMatch(winner);
   }
 
-  function endMatch(winner) {
+  function endMatch(winner: string): void {
     if (endState) return;
     endState = { winner };
-    const roles = [...players.values()].map(p => ({ id: p.id, name: p.name, role: rolesById.get(p.id) || (p.id === myId ? localRole : 'unknown') }));
+    const roles = [...players.values()].map(p => ({ id: p.id, name: p.name, role: rolesById.get(p.id) ?? (p.id === myId ? localRole : 'unknown') }));
     broadcast({ t: 'gameOver', winner, roles });
     showEnd(winner, roles);
   }
 
-  function showEnd(winner, roles) {
+  function showEnd(winner: string, roles: Array<{ id: string; name: string; role?: string | null }>): void {
     $('status-pill').textContent = 'TRANSMISSION LOST';
     endStateStore.set({
-      winner,
-      roles: roles.map(r => ({ name: r.name, role: String(r.role || '').toUpperCase() })),
+      winner: winner as 'researchers' | 'mimic',
+      roles: roles.map(r => ({ name: r.name, role: String(r.role ?? '').toUpperCase() })),
     });
   }
 
@@ -869,14 +930,14 @@ import {
     }
   }
 
-  function worldToCanvas(x, y) {
+  function worldToCanvas(x: number, y: number): { x: number; y: number; s: number } {
     const s = Math.min(canvas.width / WORLD_W, canvas.height / WORLD_H);
     const ox = (canvas.width - WORLD_W * s) * 0.5;
     const oy = (canvas.height - WORLD_H * s) * 0.5;
     return { x: ox + x * s, y: oy + y * s, s };
   }
 
-  function drawMap(now) {
+  function drawMap(now: number): void {
     resizeCanvas();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = '#050810';
@@ -1028,17 +1089,18 @@ import {
     renderMimicPanel();
   }
 
-  function renderVotePanel() {
+  function renderVotePanel(): void {
     const show = !!(voteState && voteState.active);
     $('vote-box').style.display = show ? 'block' : 'none';
-    if (!show) return;
-    const remain = Math.max(0, Math.ceil((voteState.endsAt - Date.now()) / 1000));
+    if (!show || !voteState) return;
+    const vs = voteState;
+    const remain = Math.max(0, Math.ceil((vs.endsAt - Date.now()) / 1000));
     $('vote-timer').textContent = `Time left: ${remain}s`;
     const list = $('vote-list');
     list.innerHTML = '';
     const me = myPlayer();
     const canVote = me && me.alive && localRole === 'researcher';
-    const voted = voteState.votes && voteState.votes[myId];
+    const voted = vs.votes && myId ? vs.votes[myId] : undefined;
     for (const p of players.values()) {
       if (!p.alive) continue;
       const b = document.createElement('button');
@@ -1054,7 +1116,7 @@ import {
 
   // ── MAIN LOOP ────────────────────────────────────────────────────────────────
   let lastFrame = performance.now();
-  function loop(now) {
+  function loop(now: number): void {
     const dt = Math.min(0.06, (now - lastFrame) / 1000);
     lastFrame = now;
 
@@ -1091,9 +1153,9 @@ import {
   $('start-btn').addEventListener('click', beginGame);
 
   $('name').addEventListener('change', () => {
-    const name = ($('name').value || 'OPERATIVE').slice(0, 16);
-    $('name').value = name;
-    const me = players.get(myId);
+    const name = ($input('name').value || 'OPERATIVE').slice(0, 16);
+    $input('name').value = name;
+    const me = myId ? players.get(myId) : undefined;
     if (me) me.name = name;
     if (isHost) syncLobby();
     else sendToHost({ t: 'updateName', name });
@@ -1111,8 +1173,8 @@ import {
     if (localRole !== 'mimic') return;
     const targets = [...players.values()].filter(p => p.id !== myId && p.alive);
     if (!targets.length) return;
-    const selected = targets.find(p => isHost ? isIsolatedInDark(p.id) : true) || targets[0];
-    sendToHost({ t: 'mimicElim', target: selected.id });
+    const selected = targets.find(p => isHost ? isIsolatedInDark(p.id) : true) ?? targets[0];
+    if (selected) sendToHost({ t: 'mimicElim', target: selected.id });
   });
 
   window.addEventListener('keydown', e => {
