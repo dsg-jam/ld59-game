@@ -26,7 +26,7 @@ test.describe("Multiplayer lobby coverage", () => {
       await expect(hostPage.locator("#start-btn")).toBeEnabled({ timeout: 30_000 });
       await expect(hostPage.locator("#slot")).toHaveText("P1");
 
-      await expect(guestPage.locator("#lobby-status")).toContainText("Linked as operator 2.", {
+      await expect(guestPage.locator("#lobby-status")).toContainText("Linked as operator 2", {
         timeout: 30_000,
       });
       await expect(guestPage.locator("#slot")).toHaveText("P2");

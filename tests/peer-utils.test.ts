@@ -35,7 +35,7 @@ test.describe("Peer utility coverage", () => {
     const result = resetNet(peer);
 
     expect(result).toBeNull();
-    expect(peer.destroyed).toBeTruthy();
+    expect(peer.destroyed).toBe(true);
   });
 
   test("resetNet reports destroy errors through callback", () => {
