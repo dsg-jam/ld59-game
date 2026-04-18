@@ -1,24 +1,36 @@
 <script lang="ts">
-  export let title: string;
-  export let subtitle = "";
-  export let onHost: () => void;
-  export let onJoin: (code: string) => void;
-  export let players: string[] = [];
-  export let roomCode = "";
-  export let canStart = false;
-  export let onStart: () => void;
-  export let status = "";
+  let {
+    title,
+    subtitle = "",
+    onHost,
+    onJoin,
+    players = [],
+    roomCode = "",
+    canStart = false,
+    onStart,
+    status = "",
+  }: {
+    title: string;
+    subtitle?: string;
+    onHost: () => void;
+    onJoin: (code: string) => void;
+    players?: string[];
+    roomCode?: string;
+    canStart?: boolean;
+    onStart: () => void;
+    status?: string;
+  } = $props();
 
-  let joinCode = "";
+  let joinCode = $state("");
 </script>
 
 <div class="lobby">
   <h1>{title}</h1>
   {#if subtitle}<p>{subtitle}</p>{/if}
-  <button on:click={onHost}>OPEN CHANNEL</button>
+  <button onclick={onHost}>OPEN CHANNEL</button>
   <div class="or">— or —</div>
   <input bind:value={joinCode} maxlength="6" placeholder="ROOM CODE" />
-  <button on:click={() => onJoin(joinCode)}>TUNE IN</button>
+  <button onclick={() => onJoin(joinCode)}>TUNE IN</button>
   {#if roomCode}
     <p>Share this code:</p>
     <div class="room">{roomCode}</div>
@@ -29,7 +41,7 @@
         {/each}
       </div>
     {/if}
-    <button disabled={!canStart} on:click={onStart}>START</button>
+    <button disabled={!canStart} onclick={onStart}>START</button>
   {/if}
   {#if status}<p class="status">{status}</p>{/if}
 </div>

@@ -4,3 +4,6 @@ dist/
 *.tsbuildinfo
 
 .svelte-kit/
+
+playwright-report/
+test-results/
