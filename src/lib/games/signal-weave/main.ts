@@ -17,9 +17,9 @@ const PEER_PREFIX = 'sigweave-';
     const ROOM_CODE_LENGTH = 5;
     const HARMONY_THRESHOLD = 0.18;
     const HARMONY_GAIN_RATE = 12;
-    const $ = (id: string): HTMLElement => document.getElementById(id)!;
+    const $ = (id: string): HTMLElement => { const el = document.getElementById(id); if (!el) throw new Error(`Element #${id} not found`); return el; };
     const canvas = $('canvas') as HTMLCanvasElement;
-    const ctx = canvas.getContext('2d')!;
+    const rawCtx = canvas.getContext('2d'); if (!rawCtx) throw new Error('Canvas 2D context unavailable'); const ctx = rawCtx;
 
     type Pulse = { owner: number; t: number; good: boolean };
     type GameSnapshot = {
@@ -78,7 +78,7 @@ const PEER_PREFIX = 'sigweave-';
       if (kind) el.className = kind;
       el.textContent = text;
       $('log').prepend(el);
-      while ($('log').children.length > 20) $('log').removeChild($('log').lastChild!);
+      while ($('log').children.length > 20) { const last = $('log').lastChild; if (last) $('log').removeChild(last); }
       $('status').textContent = text;
     }
 
@@ -244,7 +244,7 @@ const PEER_PREFIX = 'sigweave-';
       setLobbyStatus('Tuning into ' + code + '...');
       peer = new Peer();
       peer.on('open', () => {
-        conn = peer!.connect(PEER_PREFIX + code, { reliable: true });
+        const p = peer; if (!p) throw new Error('No peer'); conn = p.connect(PEER_PREFIX + code, { reliable: true });
         conn.on('open', () => setLobbyStatus('Connected. Awaiting host start.'));
         conn.on('data', d => onGuestMessage(d as GuestMsg));
         conn.on('close', () => setLobbyStatus('Disconnected from host.'));

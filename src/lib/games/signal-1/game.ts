@@ -415,7 +415,7 @@ function beep(f, d=0.08, type="square", v=0.06) {
     g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + d);
     o.connect(g); g.connect(c.destination);
     o.start(); o.stop(c.currentTime + d);
-  } catch { // ignore
+  } catch { /* ignore */ }
 }
 const sfx = {
   ring:     () => { beep(880,0.12); setTimeout(()=>beep(880,0.12), 180); },
@@ -438,10 +438,8 @@ function shuffle(a) {
   return a;
 }
 function unlockAudio() {
-  try { const c = ac(); if (c.state === "suspended") c.resume(); beep(1,0.001,"sine",0.0001); } catch { // ignore
+  try { const c = ac(); if (c.state === "suspended") c.resume(); beep(1,0.001,"sine",0.0001); } catch { /* ignore */ }
 }
-
-/* ---------- DOM refs ---------- */
 const $ = id => document.getElementById(id);
 const screens = {
   get title() { return $("title-screen"); },
@@ -509,7 +507,7 @@ const Net = {
     });
     this.peer.on("error", (err) => {
       if (err.type === "unavailable-id" && attempt < 4) {
-        try { this.peer.destroy(); } catch { // ignore
+        try { this.peer.destroy(); } catch { /* ignore */ }
         this._tryHost(onReady, attempt + 1);
       } else {
         this.status("HOST ERROR: " + err.type, "err");
@@ -543,14 +541,14 @@ const Net = {
 
   broadcast(msg) {
     for (const conn of this.clientConns.values()) {
-      if (conn.open) { try { conn.send(msg); } catch { // ignore }
+      if (conn.open) { try { conn.send(msg); } catch { /* ignore */ } }
     }
   },
   sendToHost(msg) {
-    if (this.hostConn && this.hostConn.open) { try { this.hostConn.send(msg); } catch { // ignore }
+    if (this.hostConn && this.hostConn.open) { try { this.hostConn.send(msg); } catch { /* ignore */ } }
   },
   leave() {
-    try { if (this.peer) this.peer.destroy(); } catch { // ignore
+    try { if (this.peer) this.peer.destroy(); } catch { /* ignore */ }
     this.peer = null;
     this.hostConn = null;
     this.clientConns.clear();
@@ -1158,7 +1156,7 @@ function applyEventLocally(ev) {
    ============================================================ */
 Net.onClientConnect = (conn) => {
   // Send lobby mode to new connection so their picker reflects host's choice.
-  try { conn.send({ type: "lobby", mode: lobbyMode, supervisorId: lobbySupervisorId }); } catch { // ignore
+  try { conn.send({ type: "lobby", mode: lobbyMode, supervisorId: lobbySupervisorId }); } catch { /* ignore */ }
 };
 Net.onClientDisconnect = (peerId) => {
   if (Net.isHost) {
