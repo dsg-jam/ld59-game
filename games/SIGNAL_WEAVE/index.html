@@ -126,6 +126,8 @@
     const PULSE_X_SPAN = 0.6;
     const MAX_FRAME_TIME = 0.05;
     const NETWORK_TICK_RATE = 0.05;
+    const COMBO_TIMEOUT_SECONDS = 4;
+    const PULSE_SYNC_WINDOW_SECONDS = 0.8;
     const $ = (id) => document.getElementById(id);
     const canvas = $('canvas');
     const ctx = canvas.getContext('2d');
@@ -201,7 +203,7 @@
       if (diff < 0.18) state.harmony += dt * 12 * comboFactor;
       else state.harmony = Math.max(0, state.harmony - dt * 5);
 
-      if (state.combo > 0 && state.t - Math.max(state.lastPing[0], state.lastPing[1]) > 4) state.combo = 0;
+      if (state.combo > 0 && state.t - Math.max(state.lastPing[0], state.lastPing[1]) > COMBO_TIMEOUT_SECONDS) state.combo = 0;
       state.pulses = state.pulses.filter(p => state.t - p.t < 2.4);
 
       if (state.timeLeft <= 0) {
@@ -235,7 +237,7 @@
       state.lastPing[slot] = now;
       state.pulses.push({ owner: slot, t: now, good: false });
       const other = slot === 0 ? 1 : 0;
-      if (state.players >= 2 && now - state.lastPing[other] < 0.8) {
+      if (state.players >= 2 && now - state.lastPing[other] < PULSE_SYNC_WINDOW_SECONDS) {
         const aligned = Math.abs(signalValue(state.t, state.offsets) - targetValue(state.t)) < 0.2;
         if (aligned) {
           state.combo += 1;
