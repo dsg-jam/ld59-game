@@ -17,6 +17,13 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: package-lock.json
+      - uses: actions/cache@v4
+        with:
+          path: .cache
+          key: ${{ runner.os }}-ci-cache-${{ hashFiles('package-lock.json', 'eslint.config.js', 'tsconfig*.json') }}
+          restore-keys: |
+            ${{ runner.os }}-ci-cache-
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint

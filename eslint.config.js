@@ -13,7 +13,15 @@ export default tseslint.config(
       "prefer-const": "warn",
       "@typescript-eslint/no-explicit-any": "warn",
       "@typescript-eslint/explicit-function-return-type": "off",
-      "@typescript-eslint/ban-ts-comment": "off",
+      "@typescript-eslint/ban-ts-comment": [
+        "error",
+        {
+          "ts-nocheck": true,
+          "ts-ignore": "allow-with-description",
+          "ts-expect-error": "allow-with-description",
+          minimumDescriptionLength: 3,
+        },
+      ],
     },
   },
   {

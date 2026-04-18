@@ -1,4 +1,3 @@
-// @ts-nocheck
 interface Character { name: string; emoji: string; }
 interface Call { from: string; to: string; note: string; at: number; }
 interface Level { title: string; subtitle: string; duration: number; chars: string[]; calls: Call[]; goal: number; }

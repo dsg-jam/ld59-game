@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Peer from "peerjs";
 
 const PEER_PREFIX = 'sigweave-';

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Audio } from "./audio.js";
 import { GRID_H, GRID_W, LEVELS } from "./levels.js";
 

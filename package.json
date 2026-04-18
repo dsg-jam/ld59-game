@@ -6,9 +6,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint src",
+    "lint": "eslint src --cache --cache-location .cache/eslint",
     "format": "prettier --write .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc -b --pretty false --noEmit tsconfig.typecheck.json"
   },
   "dependencies": {
     "peerjs": "^1.5.4",
