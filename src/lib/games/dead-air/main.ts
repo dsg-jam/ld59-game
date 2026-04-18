@@ -3,37 +3,29 @@
 import Peer from "peerjs";
 import { describePeerError as sharedDescribePeerError, makeCode as sharedMakeCode } from "$lib/peer";
 import { endState as endStateStore } from "$lib/games/dead-air/endState";
+import {
+  WORLD_W, WORLD_H, PLAYER_SPEED, PLAYER_COLORS, MAX_PLAYERS,
+  TOWER_REQUIRED, REPAIR_RADIUS, WARM_X, WARM_Y, WARM_R, DARK_CHECK_RADIUS,
+  VOTE_DURATION_MS, ELIM_COOLDOWN_MS, PLAYBACK_COOLDOWN_MS, SNIPPET_DURATION_MS,
+  createDefaultTowers,
+  assignRoles as engineAssignRoles,
+  checkWinConditions as engineCheckWin,
+  updateTowers as engineUpdateTowers,
+  isIsolatedInDark as engineIsIsolated,
+  resolveVote as engineResolveVote,
+  clamp, dist,
+} from "$lib/dead-air-engine";
 
 (() => {
   // ── CONSTANTS ────────────────────────────────────────────────────────────────
   const PEER_PREFIX = 'dead-air-';
   const ROOM_CODE_LENGTH = 5;
-  const MAX_PLAYERS = 6;
-  const WORLD_W = 1400;
-  const WORLD_H = 900;
-  const PLAYER_SPEED = 150;
-  const PLAYER_COLORS = ['#ffb800', '#66d9ff', '#ff66cc', '#95ff66', '#ff8a66', '#b19dff'];
   const VOICE_FREQ_NEAR = 3500;
   const VOICE_FREQ_MID = 800;
   const VOICE_FREQ_FAR = 200;
   const MIME_OPUS_WEBM = 'audio/webm;codecs=opus';
   const MIME_WEBM = 'audio/webm';
   const DEFAULT_OPERATIVE_RANGE = MAX_PLAYERS;
-  const VOTE_DURATION_MS = 30000;
-  const ELIM_COOLDOWN_MS = 20000;
-  const PLAYBACK_COOLDOWN_MS = 8000;
-  const SNIPPET_DURATION_MS = 3000;
-  const TOWERS = [
-    { id: 'A', x: WORLD_W * 0.5, y: 140, progress: 0 },
-    { id: 'B', x: 250, y: WORLD_H - 200, progress: 0 },
-    { id: 'C', x: WORLD_W - 250, y: WORLD_H - 200, progress: 0 },
-  ];
-  const TOWER_REQUIRED = 30;
-  const REPAIR_RADIUS = 40;
-  const WARM_X = WORLD_W * 0.5;
-  const WARM_Y = WORLD_H * 0.5;
-  const WARM_R = 170;
-  const DARK_CHECK_RADIUS = 300;
 
   const $ = id => document.getElementById(id);
   const canvas = $('map');
@@ -55,7 +47,7 @@ import { endState as endStateStore } from "$lib/games/dead-air/endState";
   const rolesById = new Map();
   const incomingRawStreams = new Map();
 
-  let towers = TOWERS.map(t => ({ ...t }));
+  let towers = createDefaultTowers();
   let voteState = null;
   let endState = null;
 
@@ -258,7 +250,7 @@ import { endState as endStateStore } from "$lib/games/dead-air/endState";
       const name = ($('name').value || 'OPERATIVE').slice(0, 16);
       players.clear();
       rolesById.clear();
-      towers = TOWERS.map(t => ({ ...t }));
+      towers = createDefaultTowers();
       players.set(myId, {
         id: myId,
         name,
@@ -302,16 +294,10 @@ import { endState as endStateStore } from "$lib/games/dead-air/endState";
 
   function assignRoles() {
     const ids = [...players.keys()];
-    const shuffled = ids.slice();
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = (Math.random() * (i + 1)) | 0;
-      const tmp = shuffled[i];
-      shuffled[i] = shuffled[j];
-      shuffled[j] = tmp;
-    }
-    const mimicId = shuffled[0];
-    for (const id of ids) {
-      rolesById.set(id, id === mimicId ? 'mimic' : 'researcher');
+    const roles = engineAssignRoles(ids);
+    rolesById.clear();
+    for (const [id, role] of roles) {
+      rolesById.set(id, role);
     }
   }
 
@@ -323,7 +309,7 @@ import { endState as endStateStore } from "$lib/games/dead-air/endState";
     gameStarted = true;
     voteState = null;
     endState = null;
-    towers = TOWERS.map(t => ({ ...t }));
+    towers = createDefaultTowers();
 
     let idx = 0;
     for (const p of players.values()) {
@@ -804,30 +790,13 @@ import { endState as endStateStore } from "$lib/games/dead-air/endState";
 
   // ── GAME RULES ────────────────────────────────────────────────────────────────
   function isIsolatedInDark(targetId) {
-    const target = players.get(targetId);
-    if (!target || !target.alive) return false;
-    for (const t of towers) {
-      if (dist(target.x, target.y, t.x, t.y) <= DARK_CHECK_RADIUS) return false;
-    }
-    const others = [...players.values()].filter(p => p.id !== targetId && p.alive && rolesById.get(p.id) !== 'mimic');
-    for (const p of others) {
-      if (dist(target.x, target.y, p.x, p.y) <= DARK_CHECK_RADIUS) return false;
-    }
-    return true;
+    return engineIsIsolated(targetId, players, rolesById, towers);
   }
 
   function updateHostSimulation(now) {
     const dt = Math.min(0.25, (now - lastHostSimTime) / 1000);
     lastHostSimTime = now;
-    for (const tower of towers) {
-      if (tower.progress >= TOWER_REQUIRED) continue;
-      const repairing = [...players.values()].some(p => {
-        if (!p.alive) return false;
-        if (rolesById.get(p.id) !== 'researcher') return false;
-        return dist(p.x, p.y, tower.x, tower.y) <= REPAIR_RADIUS;
-      });
-      if (repairing) tower.progress = Math.min(TOWER_REQUIRED, tower.progress + dt);
-    }
+    engineUpdateTowers(towers, players, rolesById, dt);
     if (voteState && voteState.active && Date.now() >= voteState.endsAt) resolveVote();
     if (now - lastTowerBroadcast > 1000) {
       lastTowerBroadcast = now;
@@ -852,34 +821,16 @@ import { endState as endStateStore } from "$lib/games/dead-air/endState";
 
   function resolveVote() {
     if (!voteState || !voteState.active) return;
-    const tally = new Map();
-    for (const target of Object.values(voteState.votes || {})) {
-      tally.set(target, (tally.get(target) || 0) + 1);
-    }
-    let winner = null;
-    let top = -1;
-    let tie = false;
-    for (const [id, count] of tally) {
-      if (count > top) {
-        top = count;
-        winner = id;
-        tie = false;
-      } else if (count === top) {
-        tie = true;
-      }
-    }
-    if (!tie && winner && players.has(winner)) {
-      if (rolesById.get(winner) === 'mimic') {
-        const p = players.get(winner);
+    const result = engineResolveVote(voteState, players, rolesById);
+    if (!result.tie && result.eliminated) {
+      const p = players.get(result.eliminated);
+      if (p) {
         p.alive = false;
         p.spectator = true;
-        broadcast({ t: 'playerEliminated', id: winner, reason: 'vote-correct' });
-        endMatch('researchers');
-      } else {
-        const p = players.get(winner);
-        p.alive = false;
-        p.spectator = true;
-        broadcast({ t: 'playerEliminated', id: winner, reason: 'vote-wrong' });
+        broadcast({ t: 'playerEliminated', id: result.eliminated, reason: result.correct ? 'vote-correct' : 'vote-wrong' });
+        if (result.correct) {
+          endMatch('researchers');
+        }
       }
     }
     voteState = null;
@@ -888,12 +839,8 @@ import { endState as endStateStore } from "$lib/games/dead-air/endState";
 
   function checkWinConditions() {
     if (endState) return;
-    const towersDone = towers.every(t => t.progress >= TOWER_REQUIRED);
-    if (towersDone) return endMatch('researchers');
-    const mimicAlive = [...players.values()].some(p => p.alive && rolesById.get(p.id) === 'mimic');
-    if (!mimicAlive) return endMatch('researchers');
-    const researchersAlive = [...players.values()].filter(p => p.alive && rolesById.get(p.id) === 'researcher').length;
-    if (researchersAlive <= 1) endMatch('mimic');
+    const winner = engineCheckWin(players, rolesById, towers);
+    if (winner) endMatch(winner);
   }
 
   function endMatch(winner) {
@@ -1104,8 +1051,7 @@ import { endState as endStateStore } from "$lib/games/dead-air/endState";
   }
 
   // ── UTILS ────────────────────────────────────────────────────────────────────
-  function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
-  function dist(ax, ay, bx, by) { return Math.hypot(ax - bx, ay - by); }
+  // clamp & dist imported from dead-air-engine
 
   // ── MAIN LOOP ────────────────────────────────────────────────────────────────
   let lastFrame = performance.now();
