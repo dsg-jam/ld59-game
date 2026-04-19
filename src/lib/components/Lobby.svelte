@@ -27,24 +27,24 @@
 <div class="lobby">
   <h1>{title}</h1>
   {#if subtitle}<p>{subtitle}</p>{/if}
-  <button onclick={onHost}>OPEN CHANNEL</button>
+  <button id="lobby-host-btn" onclick={onHost}>OPEN CHANNEL</button>
   <div class="or">— or —</div>
   <label for="lobby-join-code">Room code</label>
   <input id="lobby-join-code" bind:value={joinCode} maxlength="6" placeholder="ROOM CODE" />
-  <button onclick={() => onJoin(joinCode)}>TUNE IN</button>
+  <button id="lobby-join-btn" onclick={() => onJoin(joinCode)}>TUNE IN</button>
   {#if roomCode}
     <p>Share this code:</p>
-    <div class="room">{roomCode}</div>
+    <div id="lobby-room-code" class="room">{roomCode}</div>
     {#if players.length}
-      <div class="players">
+      <div id="lobby-players" class="players">
         {#each players as player (player)}
           <div>{player}</div>
         {/each}
       </div>
     {/if}
-    <button disabled={!canStart} onclick={onStart}>START</button>
+    <button id="lobby-start-btn" disabled={!canStart} onclick={onStart}>START</button>
   {/if}
-  {#if status}<p class="status">{status}</p>{/if}
+  {#if status}<p id="lobby-status" class="status">{status}</p>{/if}
 </div>
 
 <style>

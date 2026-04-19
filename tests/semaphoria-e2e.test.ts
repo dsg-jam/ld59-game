@@ -8,6 +8,11 @@ async function openSemaphoria(page: Page): Promise<void> {
   await expect(page.getByRole("heading", { level: 1, name: "SEMAPHORIA" })).toBeVisible();
 }
 
+async function readLobbyRoomCode(page: Page): Promise<string> {
+  await expect(page.locator("#lobby-room-code")).toHaveText(ROOM_CODE_REGEX);
+  return ((await page.locator("#lobby-room-code").textContent()) ?? "").trim();
+}
+
 test.describe("Semaphoria E2E", () => {
   test("loads correctly and has no uncaught errors", async ({ page }) => {
     const errors: string[] = [];
@@ -21,11 +26,12 @@ test.describe("Semaphoria E2E", () => {
 
   test("requires a room code to join", async ({ page }) => {
     await openSemaphoria(page);
-    await page.getByRole("button", { name: "TUNE IN" }).click();
-    await expect(page.getByText("Enter room code.")).toBeVisible();
+    await page.locator("#lobby-join-btn").click();
+    await expect(page.locator("#lobby-status")).toHaveText("Enter room code.");
   });
 
   test("two players can host, join, start, and exchange signals", async ({ browser }) => {
+    // 90s is required because PeerJS relay handshakes between two browser peers can spike in CI.
     test.setTimeout(90_000);
 
     const keeperPage = await browser.newPage();
@@ -35,20 +41,23 @@ test.describe("Semaphoria E2E", () => {
       await Promise.all([openSemaphoria(keeperPage), openSemaphoria(captainPage)]);
 
       await keeperPage.getByRole("button", { name: /KEEPER/i }).click();
-      await keeperPage.getByRole("button", { name: "OPEN CHANNEL" }).click();
+      await keeperPage.locator("#lobby-host-btn").click();
 
-      const roomCode = (await keeperPage.locator(".room").textContent())?.trim() ?? "";
+      const roomCode = await readLobbyRoomCode(keeperPage);
       expect(roomCode).toMatch(ROOM_CODE_REGEX);
 
       await captainPage.getByLabel("Room code").fill(roomCode);
-      await captainPage.getByRole("button", { name: "TUNE IN" }).click();
+      await captainPage.locator("#lobby-join-btn").click();
 
-      await expect(keeperPage.getByText("Captain")).toBeVisible({ timeout: 30_000 });
-      await expect(keeperPage.getByRole("button", { name: "START" })).toBeEnabled({
+      // Connection establishment through the relay can take several seconds in CI.
+      await expect(keeperPage.locator("#lobby-players")).toContainText("Captain", {
+        timeout: 30_000,
+      });
+      await expect(keeperPage.locator("#lobby-start-btn")).toBeEnabled({
         timeout: 30_000,
       });
 
-      await keeperPage.getByRole("button", { name: "START" }).click();
+      await keeperPage.locator("#lobby-start-btn").click();
 
       await expect(keeperPage.getByRole("heading", { level: 2, name: "SEMAPHORIA" })).toBeVisible({
         timeout: 20_000,
