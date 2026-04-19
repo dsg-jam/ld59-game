@@ -12,11 +12,10 @@ export default tseslint.config(
     files: ["**/*.{ts,tsx,svelte.ts}"],
     rules: {
       "@typescript-eslint/no-explicit-any": "error",
-      "no-restricted-syntax": [
+      "@typescript-eslint/consistent-type-assertions": [
         "error",
         {
-          selector: "TSAsExpression",
-          message: 'Using "as" casts is banned in this codebase.',
+          assertionStyle: "never",
         },
       ],
     },
