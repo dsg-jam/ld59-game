@@ -230,8 +230,7 @@ export function mount(
 
   // ── NETWORKING ─────────────────────────────────────────────────────────────
   function hostGame() {
-    if (typeof Peer === "undefined")
-      return callbacks.onLobbyStatus("PeerJS failed to load.");
+    if (typeof Peer === "undefined") return callbacks.onLobbyStatus("PeerJS failed to load.");
     resetNet();
     isHost = true;
     mySlot = 0;
@@ -273,14 +272,11 @@ export function mount(
         log("Peer disconnected.", "bad");
       });
     });
-    peer.on("error", (e) =>
-      callbacks.onLobbyStatus("Host peer error: " + describePeerError(e))
-    );
+    peer.on("error", (e) => callbacks.onLobbyStatus("Host peer error: " + describePeerError(e)));
   }
 
   function joinGame(code: string) {
-    if (typeof Peer === "undefined")
-      return callbacks.onLobbyStatus("PeerJS failed to load.");
+    if (typeof Peer === "undefined") return callbacks.onLobbyStatus("PeerJS failed to load.");
     if (!code) return callbacks.onLobbyStatus("Enter room code.");
     resetNet();
     callbacks.onLobbyStatus("Tuning into " + code + "...");
@@ -293,9 +289,7 @@ export function mount(
       conn.on("data", (d) => onGuestMessage(d as GuestMsg));
       conn.on("close", () => callbacks.onLobbyStatus("Disconnected from host."));
     });
-    peer.on("error", (e) =>
-      callbacks.onLobbyStatus("Join peer error: " + describePeerError(e))
-    );
+    peer.on("error", (e) => callbacks.onLobbyStatus("Join peer error: " + describePeerError(e)));
   }
 
   function onHostMessage(d: HostMsg, slot: number) {

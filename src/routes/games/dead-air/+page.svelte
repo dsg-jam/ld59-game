@@ -3,13 +3,15 @@
   import "./style.css";
   import { endState } from "$lib/games/dead-air/endState";
 
-  onMount(() => {
-    void import("$lib/games/dead-air/main");
+  type DeadAirMod = typeof import("$lib/games/dead-air/main");
+  let mod: DeadAirMod | null = null;
+
+  onMount(async () => {
+    mod = await import("$lib/games/dead-air/main");
   });
 
-  onDestroy(async () => {
-    const mod = await import("$lib/games/dead-air/main");
-    mod.destroy();
+  onDestroy(() => {
+    mod?.destroy();
   });
 </script>
 
@@ -94,8 +96,7 @@
           <h3>CAPTURED SIGNALS</h3>
           <div id="capture-list"></div>
           <div id="snippet-list"></div>
-          <button class="danger" id="elim-btn" style="width:100%;margin-top:6px"
-            >[ELIMINATE]</button
+          <button class="danger" id="elim-btn" style="width:100%;margin-top:6px">[ELIMINATE]</button
           >
         </div>
 

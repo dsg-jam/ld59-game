@@ -96,12 +96,7 @@
           <button id="host-btn" onclick={() => controls?.hostGame()}>OPEN CHANNEL</button>
         </div>
         <div style="margin:10px 0;color:var(--dim)">— or —</div>
-        <input
-          id="join-code"
-          maxlength="6"
-          placeholder="ROOM CODE"
-          bind:value={joinCode}
-        />
+        <input id="join-code" maxlength="6" placeholder="ROOM CODE" bind:value={joinCode} />
         <div class="row" style="margin-top:8px">
           <button id="join-btn" onclick={() => controls?.joinGame(joinCode.trim().toUpperCase())}
             >TUNE IN</button

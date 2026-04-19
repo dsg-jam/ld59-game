@@ -1215,7 +1215,7 @@ export function soloGame() {
 
   startGame();
   hostStartRound();
-};
+}
 
 export function hostGame() {
   roomCode = makeCode();
@@ -1287,7 +1287,7 @@ export function hostGame() {
     const lobbyStatus = document.getElementById("lobby-status");
     if (lobbyStatus) lobbyStatus.textContent = "Error: " + err.type;
   });
-};
+}
 
 export function hostStartNow() {
   if (HS.playerIds.length < 2) return;
@@ -1298,7 +1298,7 @@ export function hostStartNow() {
   }
   startGame();
   hostStartRound();
-};
+}
 
 export function joinGame() {
   const joinCodeEl = document.getElementById("join-code") as HTMLInputElement | null;
@@ -1344,7 +1344,7 @@ export function joinGame() {
     const js = document.getElementById("join-status");
     if (js) js.textContent = "Failed: " + err.type + ". Check the code.";
   });
-};
+}
 
 export function onPickCard() {
   if (S.locked || S.selectedCardIdx == null) return;
@@ -1378,13 +1378,13 @@ export function onPickCard() {
     sendToHost({ type: "pick", cardIdx, sel });
     showWait(true);
   }
-};
+}
 
 export function onClear() {
   S.selected = [];
   updateHighlights();
   renderUI();
-};
+}
 
 export function onPass() {
   if (S.locked) return;
@@ -1409,7 +1409,7 @@ export function onPass() {
     sendToHost({ type: "pick", cardIdx: -1, sel: null });
     showWait(true);
   }
-};
+}
 
 // ---- Animation loop ----
 const clock = new THREE.Clock();
