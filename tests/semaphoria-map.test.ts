@@ -22,14 +22,20 @@ function isPathConnected(map: GameMap): boolean {
     const key = queue.shift();
     if (key === undefined) break;
     if (key === goal) return true;
-    const [x, y] = key.split(",").map(Number) as [number, number];
+    const parts = key.split(",");
+    const xPart = parts[0];
+    const yPart = parts[1];
+    if (xPart === undefined || yPart === undefined) continue;
+    const x = parseInt(xPart, 10);
+    const y = parseInt(yPart, 10);
+    if (isNaN(x) || isNaN(y)) break;
 
     const neighbours = [
       [x - 1, y],
       [x + 1, y],
       [x, y - 1],
       [x, y + 1],
-    ] as [number, number][];
+    ] satisfies [number, number][];
 
     for (const [nx, ny] of neighbours) {
       const nk = `${nx},${ny}`;
@@ -154,7 +160,8 @@ test.describe("Semaphoria map generator – path", () => {
 
   test("path is navigable at all difficulty levels", () => {
     for (let diff = 0; diff < DIFFICULTY_CONFIG.length; diff++) {
-      const map = generateMap(777, diff as 0 | 1 | 2);
+      if (diff !== 0 && diff !== 1 && diff !== 2) continue;
+      const map = generateMap(777, diff satisfies 0 | 1 | 2);
       expect(isPathConnected(map)).toBe(true);
     }
   });

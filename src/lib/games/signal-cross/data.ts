@@ -370,15 +370,20 @@ export function makePhone(): string {
 }
 
 export function pick<T>(a: T[]): T {
-  return a[Math.floor(Math.random() * a.length)] as T;
+  const index = Math.floor(Math.random() * a.length);
+  const item = a[index];
+  if (item === undefined) throw new Error("Array is empty");
+  return item;
 }
 
 export function shuffle<T>(a: T[]): T[] {
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    const tmp = a[i] as T;
-    a[i] = a[j] as T;
-    a[j] = tmp;
+    const ai = a[i];
+    const aj = a[j];
+    if (ai === undefined || aj === undefined) continue;
+    a[i] = aj;
+    a[j] = ai;
   }
   return a;
 }

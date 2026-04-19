@@ -128,7 +128,7 @@ export function generateMap(seed: number, difficulty: Difficulty): GameMap {
     Array.from({ length: cols }, (_, x) => ({
       x,
       y,
-      type: "water" as TileType,
+      type: "water" as const,
       onPath: false,
     }))
   );

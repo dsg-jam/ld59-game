@@ -1,7 +1,7 @@
 import Peer from "peerjs";
 import type { DataConnection } from "peerjs";
 import { makeCode } from "$lib/peer";
-import type { Card, ColKey, GameMsg, MoveResult, Pick, ScoreEntry } from "./types.js";
+import type { Card, ColKey, MoveResult, Pick, ScoreEntry } from "./types.js";
 import {
   W,
   H,
@@ -19,6 +19,14 @@ import {
 } from "./types.js";
 import { gs } from "./gameState.svelte.js";
 import type { BlockRiseTrigger, SignalRingTrigger } from "./gameState.svelte.js";
+import {
+  DeconstructRoundStartMsgSchema,
+  DeconstructTurnResultMsgSchema,
+  isCoordinateTuples,
+  cloneTupleArray,
+  isTypedMessage,
+} from "$lib/validators";
+import type { DeconstructRoundStartMsg, DeconstructTurnResultMsg } from "$lib/validators";
 
 // ---- ID counter for animation triggers ----
 let _triggerCounter = 0;
@@ -40,6 +48,46 @@ function setSeed(s: number) {
   _rng = mulberry32(s);
 }
 const rand = () => _rng();
+
+const PHONE_PREFIXES = ["KL5", "MU6", "AT3", "EX1", "HE4", "PE9", "RI2", "OL7"];
+
+export function pick<T>(a: T[]): T {
+  const index = Math.floor(Math.random() * a.length);
+  const item = a[index];
+  if (item === undefined) throw new Error("Array is empty");
+  return item;
+}
+
+export function shuffle<T>(a: T[]): T[] {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const ai = a[i];
+    const aj = a[j];
+    if (ai === undefined || aj === undefined) continue;
+    a[i] = aj;
+    a[j] = ai;
+  }
+  return a;
+}
+
+export function makePhone(): string {
+  const p = PHONE_PREFIXES[Math.floor(Math.random() * PHONE_PREFIXES.length)];
+  return `${p}-${String(Math.floor(Math.random() * 10000)).padStart(4, "0")}`;
+}
+
+/**
+ * Map a transformation function over coordinate tuples with proper type preservation.
+ */
+function mapCoordinates(
+  arr: readonly (readonly [number, number])[],
+  fn: (x: number, y: number) => [number, number]
+): [number, number][] {
+  const result: [number, number][] = [];
+  for (const tuple of arr) {
+    result.push(fn(tuple[0], tuple[1]));
+  }
+  return result;
+}
 
 // ---- Network state ----
 let peer: InstanceType<typeof Peer> | null = null;
@@ -87,15 +135,15 @@ function validates(sel: [number, number][], card: Card): boolean {
   const norm = function (a: [number, number][]) {
     const mx = Math.min(...a.map((p) => p[0] ?? 0));
     const my = Math.min(...a.map((p) => p[1] ?? 0));
-    return a
-      .map((p) => [(p[0] ?? 0) - mx, (p[1] ?? 0) - my] as [number, number])
-      .sort((a, b) => (a[0] ?? 0) - (b[0] ?? 0) || (a[1] ?? 0) - (b[1] ?? 0));
+    return mapCoordinates(a, (x, y) => [(x ?? 0) - mx, (y ?? 0) - my]).sort(
+      (a, b) => (a[0] ?? 0) - (b[0] ?? 0) || (a[1] ?? 0) - (b[1] ?? 0)
+    );
   };
   const s = JSON.stringify(norm(sel));
-  let cells: [number, number][] = card.shape.cells.slice() as [number, number][];
+  let cells: [number, number][] = cloneTupleArray(card.shape.cells);
   for (let r = 0; r < 4; r++) {
     if (JSON.stringify(norm(cells)) === s) return true;
-    cells = cells.map((c) => [-(c[1] ?? 0), c[0] ?? 0] as [number, number]);
+    cells = mapCoordinates(cells, (x, y) => [-(y ?? 0), x ?? 0]);
   }
   return false;
 }
@@ -131,7 +179,7 @@ function generateHand(): Card[] {
       init,
       shape,
       color: COLKEYS[Math.floor(rand() * COLKEYS.length)] ?? "R",
-    } as Card);
+    });
   }
   return h.sort((a, b) => a.init - b.init);
 }
@@ -142,7 +190,7 @@ function cpuFind(card: Card): [number, number][] | null {
     for (let y = 0; y < H; y++) {
       if (topColor(x, y) === card.color) tops.push([x, y]);
     }
-  let cells: [number, number][] = card.shape.cells.slice() as [number, number][];
+  let cells: [number, number][] = cloneTupleArray(card.shape.cells);
   for (let r = 0; r < 4; r++) {
     for (const anchor of tops) {
       const mx = Math.min(...cells.map((p) => p[0] ?? 0));
@@ -423,29 +471,11 @@ function hostResolveTurn() {
 }
 
 // ---- Client-side handlers ----
-type RoundStartMsg = {
-  type: string;
-  grid: ColKey[][][];
-  hand: Card[];
-  turn: number;
-  scores: ScoreEntry[];
-  playerCount: number;
-  names: Record<number, string>;
-  yourSlot: number;
-};
-type TurnResultMsg = {
-  results: MoveResult[];
-  grid: ColKey[][][];
-  scores: ScoreEntry[];
-  turn: number;
-  gameOver: boolean;
-  winnerSlot: number;
-  yourSlot: number;
-  names: Record<number, string>;
-};
+type RoundStartMsg = DeconstructRoundStartMsg;
+type TurnResultMsg = DeconstructTurnResultMsg;
 
 function onRoundStart(data: RoundStartMsg) {
-  gs.grid = JSON.parse(JSON.stringify(data.grid)) as ColKey[][][];
+  gs.grid = JSON.parse(JSON.stringify(data.grid));
   gs.myHand = data.hand;
   gs.selectedCardIdx = null;
   gs.selected = [];
@@ -453,7 +483,11 @@ function onRoundStart(data: RoundStartMsg) {
   gs.turn = data.turn;
   gs.allScores = data.scores;
   gs.playerCount = data.playerCount;
-  gs.playerNames = data.names || {};
+  gs.playerNames = Object.fromEntries(
+    Object.entries(data.names)
+      .map(([k, v]) => [parseInt(k, 10), v])
+      .filter((entry) => Number.isFinite(entry[0]))
+  );
   gs.mySlot = data.yourSlot;
   mySlot = data.yourSlot;
   showWait(false);
@@ -467,7 +501,11 @@ function onRoundStart(data: RoundStartMsg) {
 function onTurnResult(data: TurnResultMsg) {
   gs.allScores = data.scores;
   gs.turn = data.turn;
-  gs.playerNames = data.names || gs.playerNames;
+  gs.playerNames = Object.fromEntries(
+    Object.entries(data.names)
+      .map(([k, v]) => [parseInt(k, 10), v])
+      .filter((entry) => Number.isFinite(entry[0]))
+  );
   gs.locked = false;
   gs.selectedCardIdx = null;
   gs.selected = [];
@@ -501,13 +539,30 @@ function sendToHost(data: unknown) {
 }
 
 function onMessage(data: unknown, fromSlot: number) {
-  const msg = data as GameMsg;
-  if (msg.type === "round-start") onRoundStart(msg as unknown as RoundStartMsg);
-  else if (msg.type === "turn-result") onTurnResult(msg as unknown as TurnResultMsg);
-  else if (msg.type === "player-locked") {
-    log("· " + slotName(msg["slot"] as number) + " transmitted.");
-  } else if (msg.type === "pick" && isHost) {
-    hostOnPick(fromSlot, msg["cardIdx"] as number, msg["sel"] as [number, number][] | null);
+  if (typeof data !== "object" || data === null) return;
+  if (!isTypedMessage(data)) return;
+
+  const obj = data;
+  try {
+    if (obj["type"] === "round-start") {
+      const validated = DeconstructRoundStartMsgSchema.parse(data);
+      onRoundStart(validated);
+    } else if (obj["type"] === "turn-result") {
+      const validated = DeconstructTurnResultMsgSchema.parse(data);
+      onTurnResult(validated);
+    } else if (obj["type"] === "player-locked") {
+      const slot = typeof obj["slot"] === "number" ? obj["slot"] : 0;
+      log("· " + slotName(slot) + " transmitted.");
+    } else if (obj["type"] === "pick" && isHost) {
+      const cardIdx = typeof obj["cardIdx"] === "number" ? obj["cardIdx"] : 0;
+      let sel: [number, number][] | null = null;
+      if (isCoordinateTuples(obj["sel"])) {
+        sel = obj["sel"];
+      }
+      hostOnPick(fromSlot, cardIdx, sel);
+    }
+  } catch {
+    // Invalid message, ignore
   }
 }
 
@@ -541,7 +596,7 @@ export function toggleSel(x: number, y: number) {
       showMsg("Filter saturated — clear to retarget.");
       return;
     }
-    gs.selected = [...gs.selected, [x, y] as [number, number]];
+    gs.selected = [...gs.selected, [x, y]];
   }
   showMsg("");
 }
@@ -603,10 +658,14 @@ export function hostGame() {
       updatePlayerList();
     });
     c.on("data", function (data: unknown) {
-      const msg = data as GameMsg;
-      if (msg.type === "name") {
-        HS.playerNames[slot] =
-          ((msg["name"] as string | undefined) ?? "").slice(0, 16) || "P" + (slot + 1);
+      if (typeof data !== "object" || data === null) return;
+      if (!isTypedMessage(data)) return;
+      const obj = data;
+      if (typeof obj["type"] !== "string") return;
+      if (obj["type"] === "name") {
+        const name =
+          (typeof obj["name"] === "string" ? obj["name"] : "").slice(0, 16) || "P" + (slot + 1);
+        HS.playerNames[slot] = name;
         updatePlayerList();
       } else {
         onMessage(data, slot);
@@ -665,13 +724,23 @@ export function joinGame() {
       gs.joinStatus = "Signal locked. Awaiting transmission…";
     });
     c.on("data", function (data: unknown) {
-      const msg = data as GameMsg;
-      if (msg.type === "slot-assign") {
-        mySlot = msg["slot"] as number;
+      if (typeof data !== "object" || data === null) return;
+      if (!isTypedMessage(data)) return;
+      const msg = data;
+      if (msg["type"] === "slot-assign") {
+        mySlot = typeof msg["slot"] === "number" ? msg["slot"] : -1;
         gs.mySlot = mySlot;
-      } else if (msg.type === "game-start") {
-        gs.playerCount = msg["playerCount"] as number;
-        gs.playerNames = (msg["names"] as Record<number, string>) || {};
+      } else if (msg["type"] === "game-start") {
+        gs.playerCount = typeof msg["playerCount"] === "number" ? msg["playerCount"] : 0;
+        const names = msg["names"];
+        gs.playerNames =
+          typeof names === "object" && names !== null
+            ? Object.fromEntries(
+                Object.entries(names)
+                  .map(([k, v]) => [parseInt(k, 10), v])
+                  .filter((entry) => typeof entry[1] === "string")
+              )
+            : {};
         startGame();
       } else {
         onMessage(data, 0);
@@ -696,7 +765,7 @@ export function onPickCard() {
   gs.locked = true;
 
   const cardIdx = gs.selectedCardIdx;
-  const sel = gs.selected.slice() as [number, number][];
+  const sel = cloneTupleArray(gs.selected);
 
   if (isSolo) {
     hostOnPick(0, cardIdx, sel);

@@ -5,6 +5,7 @@ import {
   makeCode as sharedMakeCode,
 } from "$lib/peer";
 import { endState as endStateStore } from "$lib/games/dead-air/endState";
+import { isGameMessage } from "$lib/validators";
 import {
   type Player,
   type Tower,
@@ -97,14 +98,20 @@ export function destroy(): void {
   const MIME_WEBM = "audio/webm";
   const DEFAULT_OPERATIVE_RANGE = MAX_PLAYERS;
 
-  const $ = (id: string): HTMLElement => {
+  function $<T extends HTMLElement>(id: string, type?: new (...args: never[]) => T): T;
+  function $(id: string): HTMLElement;
+  function $<T extends HTMLElement>(
+    id: string,
+    type?: new (...args: never[]) => T
+  ): T | HTMLElement {
     const el = document.getElementById(id);
     if (!el) throw new Error(`#${id} not found`);
+    if (type && !(el instanceof type)) throw new Error(`#${id} is not ${type.name}`);
     return el;
-  };
-  const $input = (id: string): HTMLInputElement => $(id) as HTMLInputElement;
-  const $btn = (id: string): HTMLButtonElement => $(id) as HTMLButtonElement;
-  const canvas = $("map") as HTMLCanvasElement;
+  }
+  const $input = (id: string): HTMLInputElement => $(id, HTMLInputElement);
+  const $btn = (id: string): HTMLButtonElement => $(id, HTMLButtonElement);
+  const canvas = $("map", HTMLCanvasElement);
   const ctxRaw = canvas.getContext("2d");
   if (!ctxRaw) throw new Error("no ctx");
   const ctx = ctxRaw;
@@ -170,7 +177,15 @@ export function destroy(): void {
   $input("name").value = defaultName();
 
   function describePeerError(err: unknown): string {
-    return sharedDescribePeerError(err as Parameters<typeof sharedDescribePeerError>[0]);
+    if (typeof err !== "object" || err === null) return sharedDescribePeerError(undefined);
+    if (!("type" in err) && !("message" in err)) return sharedDescribePeerError(undefined);
+    const type = "type" in err && typeof err.type === "string" ? err.type : undefined;
+    const message = "message" in err && typeof err.message === "string" ? err.message : undefined;
+    const mapped = {
+      ...(type ? { type } : {}),
+      ...(message ? { message } : {}),
+    };
+    return sharedDescribePeerError(mapped);
   }
 
   function updateNetDot(ok: boolean): void {
@@ -261,7 +276,9 @@ export function destroy(): void {
   function sendToHost(msg: unknown): void {
     if (isHost) {
       if (!myId) return;
-      handleHostMessage(msg as GameMsg, myId);
+      if (isGameMessage(msg)) {
+        handleHostMessage(msg, myId);
+      }
       return;
     }
     sendTo(hostId, msg);
@@ -491,15 +508,15 @@ export function destroy(): void {
     setWarn(micDenied ? "Microphone denied. You can still play without outgoing voice." : "");
   }
 
-  // ── DATA MESSAGES ─────────────────────────────────────────────────────────────
   function handleData(data: unknown, fromId: string): void {
-    if (!data || typeof data !== "object") return;
-    const msg = data as GameMsg;
+    if (!isGameMessage(data)) return;
 
     if (isHost) {
-      handleHostMessage(msg, fromId);
+      handleHostMessage(data, fromId);
       return;
     }
+
+    const msg: GameMsg = data;
 
     switch (msg.t) {
       case "lobby":
@@ -764,12 +781,15 @@ export function destroy(): void {
   // ── AUDIO HELPERS ────────────────────────────────────────────────────────────
   function ensureAudioContext(): void {
     if (!audioCtx) {
-      const AC =
-        window.AudioContext ??
-        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      audioCtx = new AC();
+      try {
+        audioCtx = new window.AudioContext();
+      } catch {
+        throw new Error("AudioContext not available");
+      }
+      if (!audioCtx) throw new Error("AudioContext not available");
       pinkNoiseBuffer = createPinkNoiseBuffer(audioCtx, 2.0);
     }
+    if (!audioCtx) throw new Error("AudioContext not available");
     if (audioCtx.state === "suspended") void audioCtx.resume();
   }
 
@@ -1109,8 +1129,11 @@ export function destroy(): void {
     roles: Array<{ id: string; name: string; role?: string | null }>
   ): void {
     $("status-pill").textContent = "TRANSMISSION LOST";
+    const validRoles = new Set<string>(["researchers", "mimic"]);
+    const isValidRole = (w: string): w is "researchers" | "mimic" => validRoles.has(w);
+    const winnerRole: "researchers" | "mimic" = isValidRole(winner) ? winner : "mimic";
     endStateStore.set({
-      winner: winner as "researchers" | "mimic",
+      winner: winnerRole,
       roles: roles.map((r) => ({ name: r.name, role: String(r.role ?? "").toUpperCase() })),
     });
   }

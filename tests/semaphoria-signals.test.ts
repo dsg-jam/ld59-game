@@ -4,15 +4,19 @@
  * Tests for signal encoding / decoding and the reference card.
  */
 import { test, expect } from "@playwright/test";
-import {
-  encodeSignal,
-  decodePattern,
-  SIGNAL_ALPHABET,
-  SIGNAL_REFERENCE,
-} from "../src/lib/semaphoria/signals";
+import { encodeSignal, decodePattern, SIGNAL_REFERENCE } from "../src/lib/semaphoria/signals";
 import type { SignalCommand, Flash } from "../src/lib/semaphoria/signals";
 
-const COMMANDS = Object.keys(SIGNAL_ALPHABET) as SignalCommand[];
+const COMMANDS: SignalCommand[] = [
+  "go",
+  "left",
+  "right",
+  "stop",
+  "reverse",
+  "rocks-ahead",
+  "rocks-left",
+  "rocks-right",
+];
 
 // ── Encoding ──────────────────────────────────────────────────────────────────
 

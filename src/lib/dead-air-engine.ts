@@ -56,7 +56,7 @@ export const DEFAULT_TOWERS: readonly Readonly<Tower>[] = [
   { id: "A", x: WORLD_W * 0.5, y: 140, progress: 0 },
   { id: "B", x: 250, y: WORLD_H - 200, progress: 0 },
   { id: "C", x: WORLD_W - 250, y: WORLD_H - 200, progress: 0 },
-] as const;
+];
 
 // ── UTILITIES ────────────────────────────────────────────────────────────────
 

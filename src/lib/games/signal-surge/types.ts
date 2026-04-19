@@ -171,24 +171,24 @@ export function getTrackVariant(id: string | null | undefined): TrackVariant {
 }
 
 /** Mario Kart-style descending point scale, indexed by finishing position (0 = 1st). */
-export const CUP_POINTS = [10, 7, 5, 3, 2, 1] as const;
+export const CUP_POINTS: readonly number[] = [10, 7, 5, 3, 2, 1];
 
 export function pointsForPlace(place: number): number {
   return CUP_POINTS[place] ?? 0;
 }
 
-export const PLAYER_COLOR_CSS = [
+export const PLAYER_COLOR_CSS: readonly string[] = [
   "#79f3ff",
   "#ff7ccf",
   "#ffd66b",
   "#8dff9d",
   "#ba7cff",
   "#ff9e6b",
-] as const;
+];
 
-export const PLAYER_COLOR_HEX = [
+export const PLAYER_COLOR_HEX: readonly number[] = [
   0x79f3ff, 0xff7ccf, 0xffd66b, 0x8dff9d, 0xba7cff, 0xff9e6b,
-] as const;
+];
 
 export type ObstacleKind = "noise" | "amp";
 
