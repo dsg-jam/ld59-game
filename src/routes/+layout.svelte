@@ -1,4 +1,8 @@
 <script lang="ts">
+  import "@fontsource/jetbrains-mono/300.css";
+  import "@fontsource/jetbrains-mono/400.css";
+  import "@fontsource/jetbrains-mono/600.css";
+  import "@fontsource/major-mono-display/400.css";
   import type { Snippet } from "svelte";
 
   let { children }: { children: Snippet } = $props();
@@ -9,38 +13,6 @@
 </div>
 
 <style>
-  @font-face {
-    font-family: "JetBrains Mono";
-    src: url("/fonts/JetBrainsMono-300.ttf") format("truetype");
-    font-weight: 300;
-    font-style: normal;
-    font-display: swap;
-  }
-
-  @font-face {
-    font-family: "JetBrains Mono";
-    src: url("/fonts/JetBrainsMono-400.ttf") format("truetype");
-    font-weight: 400;
-    font-style: normal;
-    font-display: swap;
-  }
-
-  @font-face {
-    font-family: "JetBrains Mono";
-    src: url("/fonts/JetBrainsMono-600.ttf") format("truetype");
-    font-weight: 600;
-    font-style: normal;
-    font-display: swap;
-  }
-
-  @font-face {
-    font-family: "Major Mono Display";
-    src: url("/fonts/MajorMonoDisplay-400.ttf") format("truetype");
-    font-weight: 400;
-    font-style: normal;
-    font-display: swap;
-  }
-
   .app-shell {
     min-height: 100vh;
     font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
