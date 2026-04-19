@@ -162,7 +162,7 @@ test.describe("Semaphoria – full game flow", () => {
   });
 
   test("captain can steer and the heading HUD updates", async ({ browser }) => {
-    const { keeperPage: _keeperPage, captainPage } = await startTwoPlayerGame(browser);
+    const { keeperPage, captainPage } = await startTwoPlayerGame(browser);
 
     try {
       // Read the initial heading from the HUD
@@ -179,7 +179,7 @@ test.describe("Semaphoria – full game flow", () => {
       const headingAfter = await headingLocator.textContent();
       expect(headingAfter).not.toBe(headingBefore);
     } finally {
-      await Promise.all([_keeperPage.close(), captainPage.close()]);
+      await Promise.all([keeperPage.close(), captainPage.close()]);
     }
   });
 

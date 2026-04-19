@@ -335,6 +335,8 @@
     // Test event bridge: allows Playwright e2e tests to trigger game-over
     // without waiting for the full timer. Dispatching these events during
     // normal gameplay has no effect and is harmless in production.
+    // Only compiled in when VITE_TEST=true (set by the Playwright webServer command).
+    if (!import.meta.env.VITE_TEST) return;
     const forceEnd = (e: Event) => {
       const result = (e as CustomEvent<"success" | "failure">).detail;
       if (gameState?.phase === "playing") {
