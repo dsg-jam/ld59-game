@@ -51,4 +51,11 @@ export const games: GameEntry[] = [
     path: "/games/signal-surge",
     description: "3-6 player signal packet race through a 3D broadcast channel.",
   },
+  {
+    id: "semaphoria",
+    title: "Semaphoria",
+    tag: "Co-op",
+    path: "/games/semaphoria",
+    description: "Asymmetric lighthouse signalling co-op. Navigate the reef by light alone.",
+  },
 ];
