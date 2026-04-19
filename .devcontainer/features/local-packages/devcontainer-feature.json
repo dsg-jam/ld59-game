@@ -1,0 +1,9 @@
+{
+  "id": "local-packages",
+  "version": "1.0.0",
+  "name": "Local OS Packages",
+  "description": "Installs project-specific Debian packages needed by this workspace.",
+  "installsAfter": [
+    "ghcr.io/devcontainers/features/common-utils"
+  ]
+}
