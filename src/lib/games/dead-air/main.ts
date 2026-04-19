@@ -786,7 +786,6 @@ export function destroy(): void {
       } catch {
         throw new Error("AudioContext not available");
       }
-      if (!audioCtx) throw new Error("AudioContext not available");
       pinkNoiseBuffer = createPinkNoiseBuffer(audioCtx, 2.0);
     }
     if (!audioCtx) throw new Error("AudioContext not available");

@@ -52,10 +52,11 @@
         "eslint.validate": ["javascript", "typescript", "svelte"]
       },
       "extensions": [
-        "svelte.svelte-vscode",
         "dbaeumer.vscode-eslint",
         "esbenp.prettier-vscode",
-        "ms-playwright.playwright"
+        "GitHub.vscode-pull-request-github",
+        "ms-playwright.playwright",
+        "svelte.svelte-vscode"
       ]
     }
   }
