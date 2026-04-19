@@ -1,11 +1,11 @@
 import { test, expect } from "@playwright/test";
 
 const GAMES = [
-  { id: "deconstruct", title: "Deconstruct", path: "/games/deconstruct/" },
-  { id: "signal-1", title: "Signal 1", path: "/games/signal-1/" },
-  { id: "signal-2", title: "Signal 2", path: "/games/signal-2/" },
-  { id: "signal-weave", title: "Signal Weave", path: "/games/signal-weave/" },
-  { id: "dead-air", title: "Dead Air", path: "/games/dead-air/" },
+  { id: "deconstruct", title: "Deconstruct", path: "/games/deconstruct" },
+  { id: "signal-1", title: "Signal 1", path: "/games/signal-1" },
+  { id: "signal-2", title: "Signal 2", path: "/games/signal-2" },
+  { id: "signal-weave", title: "Signal Weave", path: "/games/signal-weave" },
+  { id: "dead-air", title: "Dead Air", path: "/games/dead-air" },
 ] as const;
 
 test.describe("Index page", () => {
