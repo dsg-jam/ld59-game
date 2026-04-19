@@ -1,0 +1,57 @@
+{
+  "name": "ld59-game-dev",
+  "image": "debian:trixie-20260406",
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2.5.7": {
+      "username": "dev",
+      "userUid": "1000",
+      "userGid": "1000",
+      "upgradePackages": true,
+      "installZsh": false,
+      "installOhMyZsh": false,
+      "installOhMyZshConfig": false
+    },
+    "./features/local-packages": {},
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1.9.1": {
+      "enableNonRootDocker": true,
+      "moby": false
+    },
+    "ghcr.io/devcontainers/features/node:1.7.1": {
+      "version": "25.9.0",
+      "nodeGypDependencies": true
+    },
+    "./features/local-playwright": {}
+  },
+  "remoteUser": "dev",
+  "updateRemoteUserUID": true,
+  "postCreateCommand": "bash .devcontainer/scripts/post-create.sh",
+  "forwardPorts": [5173, 4173, 9323],
+  "portsAttributes": {
+    "5173": {
+      "label": "Vite dev server",
+      "onAutoForward": "openPreview"
+    },
+    "4173": {
+      "label": "Vite preview"
+    },
+    "9323": {
+      "label": "Playwright UI"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "editor.formatOnSave": true,
+        "files.eol": "\n",
+        "eslint.validate": ["javascript", "typescript", "svelte"]
+      },
+      "extensions": [
+        "svelte.svelte-vscode",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "ms-playwright.playwright"
+      ]
+    }
+  }
+}

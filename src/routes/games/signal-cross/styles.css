@@ -1,4 +1,4 @@
-.signal-1-page {
+.signal-cross-page {
   --brass: #d8a34a;
   --brass-deep: #7a5a1e;
   --wood: #3a2414;
@@ -12,13 +12,13 @@
   --shadow: rgba(0, 0, 0, 0.55);
 }
 
-.signal-1-page * {
+.signal-cross-page * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
-.signal-1-page {
+.signal-cross-page {
   height: 100%;
   font-family: "Courier New", ui-monospace, monospace;
   color: var(--cream);

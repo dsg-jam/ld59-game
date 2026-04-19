@@ -1,0 +1,10 @@
+{
+  "id": "local-playwright",
+  "version": "1.0.0",
+  "name": "Local Playwright Setup",
+  "description": "Installs Playwright system dependencies and Chromium browser after Node is available.",
+  "installsAfter": ["ghcr.io/devcontainers/features/node"],
+  "containerEnv": {
+    "PLAYWRIGHT_BROWSERS_PATH": "/ms-playwright"
+  }
+}

@@ -9,8 +9,8 @@
     SCORE_CHAOS,
     SCORE_CORRECT,
     SCORE_DENY_RIGHT,
-  } from "$lib/games/signal-1/data";
-  import { sfx } from "$lib/games/signal-1/audio";
+  } from "$lib/games/signal-cross/data";
+  import { sfx } from "$lib/games/signal-cross/audio";
   import type {
     GameEvent,
     GameMode,
@@ -19,7 +19,7 @@
     LogEntry,
     Signal1Controls,
     Ticket,
-  } from "$lib/games/signal-1/types";
+  } from "$lib/games/signal-cross/types";
   import "./styles.css";
 
   type Floater = {
@@ -273,7 +273,7 @@
 
   onMount(() => {
     let disposed = false;
-    void import("$lib/games/signal-1/main").then(({ mount }) => {
+    void import("$lib/games/signal-cross/main").then(({ mount }) => {
       if (disposed) return;
       controls = mount({
         onSnapshot: (s) => {
@@ -602,7 +602,7 @@
   <title>SIGNAL CROSS — LDJAM59</title>
 </svelte:head>
 
-<div class="signal-1-page">
+<div class="signal-cross-page">
   <div class="scanlines"></div>
 
   {#if screen === "title"}

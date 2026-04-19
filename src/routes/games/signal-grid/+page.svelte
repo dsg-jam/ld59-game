@@ -2,11 +2,11 @@
   import { onMount, onDestroy } from "svelte";
   import "./style.css";
 
-  type Signal2Mod = typeof import("$lib/games/signal-2/main");
-  let mod: Signal2Mod | null = null;
+  type SignalGridMod = typeof import("$lib/games/signal-grid/main");
+  let mod: SignalGridMod | null = null;
 
   onMount(async () => {
-    mod = await import("$lib/games/signal-2/main");
+    mod = await import("$lib/games/signal-grid/main");
   });
 
   onDestroy(() => {
@@ -18,7 +18,7 @@
   <title>SIGNAL // ldjam59</title>
 </svelte:head>
 
-<div class="signal-2-page">
+<div class="signal-grid-page">
   <div id="crt">
     <div id="scanlines"></div>
 
