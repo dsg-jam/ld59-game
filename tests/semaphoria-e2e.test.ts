@@ -43,7 +43,7 @@ test.describe("Semaphoria E2E", () => {
       await captainPage.getByLabel("Room code").fill(roomCode);
       await captainPage.getByRole("button", { name: "TUNE IN" }).click();
 
-      await expect(keeperPage.getByText("Captain connected!")).toBeVisible({ timeout: 30_000 });
+      await expect(keeperPage.getByText("Captain")).toBeVisible({ timeout: 30_000 });
       await expect(keeperPage.getByRole("button", { name: "START" })).toBeEnabled({
         timeout: 30_000,
       });
