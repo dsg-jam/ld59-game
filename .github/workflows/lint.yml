@@ -3,7 +3,6 @@ run-name: Lint, Typecheck, and Format (${{ github.event_name }})
 
 on:
   pull_request:
-  merge_group:
   push:
     branches: [main]
 

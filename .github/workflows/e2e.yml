@@ -3,7 +3,6 @@ run-name: E2E Tests (${{ github.event_name }})
 
 on:
   pull_request:
-  merge_group:
   push:
     branches: [main]
 
