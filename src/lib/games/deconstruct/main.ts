@@ -5,8 +5,7 @@ import type { DataConnection } from "peerjs";
 import { makeCode } from "$lib/peer";
 
 // ---- Type definitions ----
-const _COLORS_HEX_CONST = { R: 0xee5555, G: 0x55cc55, B: 0x5599ff, Y: 0xeedd55, P: 0xcc66ff } as const;
-type ColKey = keyof typeof _COLORS_HEX_CONST;
+type ColKey = "R" | "G" | "B" | "Y" | "P";
 type ShapeDef = { name: string; cells: [number, number][] };
 type Card = { init: number; shape: ShapeDef; color: ColKey };
 type ScoreEntry = { slot: number; score: number };

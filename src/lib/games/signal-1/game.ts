@@ -805,10 +805,10 @@ function _buildAgencyQ(type: string, ended: LogEntry[], lvl: LevelDef) {
     if (!CHARS[callerId] || !CHARS[actualId]) return null;
     const distractors = pickChars([callerId, actualId], 3);
     if (distractors.length < 2) return null;
-    const choices = shuffle([actualId, ...distractors]).map(id => ({ label: CHARS[id].name, tag: id }));
+    const choices = shuffle([actualId, ...distractors]).map(id => ({ label: CHARS[id]?.name ?? id, tag: id }));
     const correctIdx = choices.findIndex(c => c.tag === actualId);
     return {
-      text: `"${CHARS[callerId].name.toUpperCase()} — who did you put them through to?"`,
+      text: `"${CHARS[callerId]?.name.toUpperCase() ?? callerId} — who did you put them through to?"`,
       choices, correctIdx,
     };
   }
@@ -817,7 +817,7 @@ function _buildAgencyQ(type: string, ended: LogEntry[], lvl: LevelDef) {
     const count = state.log.filter(e => e.status === "ended" && e.result === "chaos").length;
     const opts = new Set([count, Math.max(0, count - 1), count + 1, count + 2]);
     const arr = shuffle([...opts]).slice(0, 4);
-    while (arr.length < 4) arr.push(arr[arr.length - 1] + 1);
+    while (arr.length < 4) arr.push((arr[arr.length - 1] ?? 0) + 1);
     const choices = arr.map(n => ({ label: String(n), tag: n }));
     const correctIdx = choices.findIndex(c => c.tag === count);
     return {
@@ -834,14 +834,16 @@ function _buildAgencyQ(type: string, ended: LogEntry[], lvl: LevelDef) {
     }
     if (!byOp.size) return null;
     const picks = [...byOp.entries()];
-    const [opId, entry] = picks[Math.floor(Math.random() * picks.length)];
+    const picked = picks[Math.floor(Math.random() * picks.length)];
+    if (!picked) return null;
+    const [opId, entry] = picked;
     const op = state.players.find(p => p.id === opId);
     if (!op) return null;
     const callerId = entry.from;
     if (!CHARS[callerId]) return null;
     const distractors = pickChars([callerId], 3);
     if (distractors.length < 2) return null;
-    const choices = shuffle([callerId, ...distractors]).map(id => ({ label: CHARS[id].name, tag: id }));
+    const choices = shuffle([callerId, ...distractors]).map(id => ({ label: CHARS[id]?.name ?? id, tag: id }));
     const correctIdx = choices.findIndex(c => c.tag === callerId);
     return {
       text: `"Operator ${op.name} — who was the last caller you routed?"`,
@@ -856,7 +858,7 @@ function _buildAgencyQ(type: string, ended: LogEntry[], lvl: LevelDef) {
     if (!CHARS[actualId]) return null;
     const distractors = pickChars([actualId], 3);
     if (distractors.length < 2) return null;
-    const choices = shuffle([actualId, ...distractors]).map(id => ({ label: CHARS[id].name, tag: id }));
+    const choices = shuffle([actualId, ...distractors]).map(id => ({ label: CHARS[id]?.name ?? id, tag: id }));
     const correctIdx = choices.findIndex(c => c.tag === actualId);
     return {
       text: `"A line was CUT EARLY. Which recipient was mid-call?"`,
@@ -872,10 +874,10 @@ function _buildAgencyQ(type: string, ended: LogEntry[], lvl: LevelDef) {
     if (!CHARS[callerId]) return null;
     const distractors = pickChars([callerId, actualId], 3);
     if (distractors.length < 2) return null;
-    const choices = shuffle([callerId, ...distractors]).map(id => ({ label: CHARS[id].name, tag: id }));
+    const choices = shuffle([callerId, ...distractors]).map(id => ({ label: CHARS[id]?.name ?? id, tag: id }));
     const correctIdx = choices.findIndex(c => c.tag === callerId);
     return {
-      text: `"Who most recently called ${CHARS[actualId].name.toUpperCase()}?"`,
+      text: `"Who most recently called ${CHARS[actualId]?.name.toUpperCase() ?? actualId}?"`,
       choices, correctIdx,
     };
   }
@@ -1120,7 +1122,7 @@ function broadcastState() {
 }
 function broadcastEvent(ev: unknown) {
   Net.broadcast({ type: "event", event: ev });
-  applyEventLocally(ev);
+  applyEventLocally(ev as Record<string, unknown>);
 }
 function applyStateLocally(snap: Partial<GameState> & Record<string, unknown>) {
   Object.assign(state, {
@@ -1145,7 +1147,7 @@ function applyEventLocally(ev: Record<string, unknown>) {
   else if (ev.type === "connect") {
     if (ev.correct) sfx.connect(); else sfx.chaos();
   } else if (ev.type === "disconnected") {
-    const rect = plugRect(ev.toId);
+    const rect = plugRect(String(ev.toId ?? ""));
     if (ev.result === "cut") {
       sfx.penalty();
       if (rect) floater(`−${PENALTY_EARLY} EARLY CUT`, rect.x, rect.y - 20, "chaos");
@@ -1160,7 +1162,7 @@ function applyEventLocally(ev: Record<string, unknown>) {
     sfx.line();
   } else if (ev.type === "timeout") {
     sfx.penalty();
-    const rect = plugRect(ev.fromId);
+    const rect = plugRect(String(ev.fromId ?? ""));
     if (rect) floater(`−${ev.penalty ?? PENALTY_TIMEOUT} TIMEOUT`, rect.x, rect.y - 20, "chaos");
   } else if (ev.type === "tick") {
     sfx.tick();
@@ -1168,14 +1170,14 @@ function applyEventLocally(ev: Record<string, unknown>) {
     sfx.stamp();
   } else if (ev.type === "denied") {
     sfx.stamp();
-    const rect = plugRect(ev.fromId);
+    const rect = plugRect(String(ev.fromId ?? ""));
     if (rect) {
       if (ev.correct) floater(`+${SCORE_DENY_RIGHT} DENIED`, rect.x, rect.y - 20, "score");
       else floater(`−${PENALTY_DENY_WRONG} WRONG DENY`, rect.x, rect.y - 20, "chaos");
     }
   } else if (ev.type === "badApprove") {
     sfx.penalty();
-    const rect = plugRect(ev.fromId);
+    const rect = plugRect(String(ev.fromId ?? ""));
     if (rect) floater(`−${PENALTY_APPROVE_BAD} BAD APPROVE`, rect.x, rect.y - 20, "chaos");
   } else if (ev.type === "agencyRing") {
     sfx.agency();
@@ -1204,6 +1206,7 @@ Net.onClientDisconnect = (peerId) => {
     const idx = state.players.findIndex(p => p.id === peerId);
     if (idx >= 0) {
       const pl = state.players[idx];
+      if (!pl) return;
       // Abandon any live connections from this player (no penalty — treat as graceful)
       state.tickets.forEach(t => {
         if (t.status === "live" && t.connection?.byPlayer === pl.id) {
@@ -1332,9 +1335,9 @@ function bindUI() {
     Net.status("opening host channel...", "");
     Net.host(name, () => {
       state.players = [{
-        id: Net.myId,
+        id: Net.myId ?? "",
         name: name.toUpperCase().slice(0,14),
-        color: PLAYER_COLORS[0],
+        color: PLAYER_COLORS[0] ?? "#fff",
         cables: CABLES_PER_PLAYER,
         maxCables: CABLES_PER_PLAYER,
         selected: null,
@@ -1576,23 +1579,25 @@ function broadcastLobbyState() {
 }
 
 function updateHud() {
-  if ($("level-num"))    $("level-num")!.textContent = String(state.levelIdx + 1);
-  if ($("correct-val"))  $("correct-val")!.textContent = `${state.correctCount} / ${state.goal}`;
-  if ($("team-score"))   $("team-score")!.textContent = String(state.teamScore + state.teamChaos);
-  if ($("team-pen"))     $("team-pen")!.textContent = "-" + state.teamPenalty;
+  const levelNumEl = $("level-num");    if (levelNumEl)   levelNumEl.textContent = String(state.levelIdx + 1);
+  const correctValEl = $("correct-val"); if (correctValEl) correctValEl.textContent = `${state.correctCount} / ${state.goal}`;
+  const teamScoreEl = $("team-score");  if (teamScoreEl)  teamScoreEl.textContent = String(state.teamScore + state.teamChaos);
+  const teamPenEl = $("team-pen");      if (teamPenEl)    teamPenEl.textContent = "-" + state.teamPenalty;
   const totalMax = state.players.reduce((s,p) => s + p.maxCables, 0);
   const free = state.players.reduce((s,p) => s + p.cables, 0);
-  if ($("cables-free"))  $("cables-free")!.textContent = `${free} / ${totalMax}`;
-  if ($("hud-room"))     $("hud-room")!.textContent = Net.roomCode || "---";
-  if ($("hud-mode")) {
+  const cablesFreeEl = $("cables-free"); if (cablesFreeEl) cablesFreeEl.textContent = `${free} / ${totalMax}`;
+  const hudRoomEl = $("hud-room");      if (hudRoomEl)    hudRoomEl.textContent = Net.roomCode || "---";
+  const hudModeEl = $("hud-mode");
+  if (hudModeEl) {
     const m = state.gameMode || "classic";
     const iAmSv = m === "supervisor" && Net.myId === state.supervisorId;
-    $("hud-mode")!.textContent = m === "classic" ? "CLASSIC"
-                                : m === "verify" ? "VERIFY"
-                                : (iAmSv ? "SUPERVISOR (YOU)" : "SUPERVISOR");
+    hudModeEl.textContent = m === "classic" ? "CLASSIC"
+                           : m === "verify" ? "VERIFY"
+                           : (iAmSv ? "SUPERVISOR (YOU)" : "SUPERVISOR");
   }
   const pct = Math.max(0, state.duration > 0 ? (state.timeLeft / state.duration) : 0) * 100;
-  if ($("timer-fill"))   ($("timer-fill") as HTMLElement).style.width = pct + "%";
+  const timerFillEl = $("timer-fill") as HTMLElement | null;
+  if (timerFillEl) timerFillEl.style.width = pct + "%";
 }
 
 function renderBoard() {
@@ -1647,7 +1652,7 @@ function renderBoard() {
 
     let color = null;
     if (claimer) color = claimer.color;
-    else if (liveTicket) color = state.players.find(p => p.id === liveTicket.connection.byPlayer)?.color;
+    else if (liveTicket) color = state.players.find(p => p.id === liveTicket.connection?.byPlayer)?.color;
     const prev = el.style.getPropertyValue("--claimColor");
     if (color) { if (prev !== color) el.style.setProperty("--claimColor", color); }
     else if (prev) el.style.removeProperty("--claimColor");
@@ -1692,11 +1697,11 @@ function renderQueue() {
     const key = "r" + t.id;
     want.add(key);
     let div = queueEls.get(key);
-    const from = CHARS[t.from], to = CHARS[t.to];
+    const from = CHARS[t.from], to = t.to ? CHARS[t.to] : null;
     const slip = t.slip;
     const showSlipPreview = (state.gameMode === "supervisor") || (state.gameMode === "verify" && t.approval !== "approved");
-    const requestName = (showSlipPreview && slip) ? slip.requestName : to.name;
-    const requestEmoji = (showSlipPreview && slip) ? (CHARS[slip.requestId]?.emoji || to.emoji) : to.emoji;
+    const requestName = (showSlipPreview && slip) ? slip.requestName : (to?.name ?? "?");
+    const requestEmoji = (showSlipPreview && slip) ? (CHARS[slip.requestId]?.emoji || to?.emoji || "?") : (to?.emoji ?? "?");
     if (!div) {
       div = document.createElement("div");
       div.className = "ticket";
@@ -1708,7 +1713,7 @@ function renderQueue() {
         </div>` : "";
       div.innerHTML = `
         <span class="num">#${String(t.id).padStart(3,"0")}</span>
-        <div class="row"><span class="emoji">${from.emoji}</span><b>${escape(from.name)}</b></div>
+        <div class="row"><span class="emoji">${from?.emoji ?? ""}</span><b>${escape(from?.name ?? t.from)}</b></div>
         <div class="arrow">│ WANTS ▼</div>
         <div class="row"><span class="emoji">${requestEmoji}</span><b class="req-name">${escape(requestName)}</b></div>
         <div class="note">${escape(t.note || "")}</div>
@@ -1746,8 +1751,10 @@ function renderQueue() {
     const key = "l" + t.id;
     want.add(key);
     let div = queueEls.get(key);
-    const from = CHARS[t.from], to = CHARS[t.connection.actualTo];
-    const owner = state.players.find(p => p.id === t.connection.byPlayer);
+    const conn = t.connection;
+    if (!conn) return;
+    const from = CHARS[t.from], to = CHARS[conn.actualTo];
+    const owner = state.players.find(p => p.id === conn.byPlayer);
     const color = owner?.color || "#68c6ff";
     if (!div) {
       div = document.createElement("div");
@@ -1755,7 +1762,7 @@ function renderQueue() {
       div.dataset.tid = t.id;
       div.innerHTML = `
         <span class="num">LIVE</span>
-        <div class="row"><span class="emoji">${from.emoji}</span>${escape(from.name)} ↔ <span class="emoji">${to.emoji}</span>${escape(to.name)}</div>
+        <div class="row"><span class="emoji">${from?.emoji ?? ""}</span>${escape(from?.name ?? t.from)} ↔ <span class="emoji">${to?.emoji ?? ""}</span>${escape(to?.name ?? conn.actualTo)}</div>
         <div class="note">cable by ${escape(owner?.name || "—")}</div>
       `;
       div.addEventListener("click", () => onCableClick(t.id));
@@ -1909,6 +1916,7 @@ function renderLog() {
     const have = linesEl.childElementCount;
     for (let i = have; i < entry.lines.length; i++) {
       const l = entry.lines[i];
+      if (!l) continue;
       const sp = document.createElement("span");
       sp.className = "line" + (l.s === "sys" ? " system" : "");
       const speakerName = CHARS[l.s]?.name || "";
@@ -1930,7 +1938,6 @@ function renderSummary() {
 
   const total = state.teamScore + state.teamChaos - state.teamPenalty;
   const passed = state.correctCount >= state.goal;
-  const lvl = LEVELS[state.levelIdx];
   const lastLevel = state.levelIdx + 1 >= LEVELS.length;
 
   const summary = document.createElement("div");
@@ -1955,22 +1962,29 @@ function renderSummary() {
   `).join("");
   lb.appendChild(ops);
 
-  if ($("end-title")) $("end-title").textContent = passed
-    ? (lastLevel ? "FINAL SHIFT CLEARED • PUNCH OUT" : `${lvl.title} • CLEARED`)
-    : `${lvl.title} • SUPERVISOR DISAPPOINTED`;
-  if ($("end-blurb")) $("end-blurb").textContent = passed
-    ? (lastLevel ? "The board goes dark. The crew did it." : lvl.subtitle)
-    : `Crew needed ${state.goal} correct routes. Got ${state.correctCount}.`;
-
-  document.querySelectorAll(".host-only").forEach(el => el.style.display = Net.isHost ? "" : "none");
-  if ($("end-wait")) $("end-wait").style.display = Net.isHost ? "none" : "";
-  if ($("next-btn")) $("next-btn").textContent = passed ? (lastLevel ? "PLAY AGAIN ▸" : "NEXT SHIFT ▸") : "RETRY SHIFT ▸";
+  if ($("end-title")) {
+    const lvl2 = LEVELS[state.levelIdx];
+    const endTitle = $("end-title") as HTMLElement;
+    endTitle.textContent = passed
+      ? (lastLevel ? "FINAL SHIFT CLEARED • PUNCH OUT" : `${lvl2?.title ?? ""} • CLEARED`)
+      : `${lvl2?.title ?? ""} • SUPERVISOR DISAPPOINTED`;
+  }
+  if ($("end-blurb")) {
+    const lvl2 = LEVELS[state.levelIdx];
+    const endBlurb = $("end-blurb") as HTMLElement;
+    endBlurb.textContent = passed
+      ? (lastLevel ? "The board goes dark. The crew did it." : lvl2?.subtitle ?? "")
+      : `Crew needed ${state.goal} correct routes. Got ${state.correctCount}.`;
+  }
+  document.querySelectorAll(".host-only").forEach(el => (el as HTMLElement).style.display = Net.isHost ? "" : "none");
+  const endWaitEl = $("end-wait"); if (endWaitEl) endWaitEl.style.display = Net.isHost ? "none" : "";
+  const nextBtnEl = $("next-btn"); if (nextBtnEl) nextBtnEl.textContent = passed ? (lastLevel ? "PLAY AGAIN ▸" : "NEXT SHIFT ▸") : "RETRY SHIFT ▸";
 }
 
 /* ============================================================
    CABLES (persistent) / FLOATERS / TOAST
    ============================================================ */
-function plugRect(id) {
+function plugRect(id: string) {
   const el = $("board")?.querySelector(`[data-id="${id}"]`);
   if (!el) return null;
   const r = el.getBoundingClientRect();
@@ -1993,9 +2007,11 @@ function renderCables() {
   const want = new Set();
   live.forEach(t => {
     want.add(t.id);
-    const a = plugRect(t.from), b = plugRect(t.connection.actualTo);
+    const conn = t.connection;
+    if (!conn) return;
+    const a = plugRect(t.from), b = plugRect(conn.actualTo);
     if (!a || !b) return;
-    const owner = state.players.find(p => p.id === t.connection.byPlayer);
+    const owner = state.players.find(p => p.id === conn.byPlayer);
     const color = owner?.color || "#68c6ff";
     const d = `M ${a.x} ${a.y+8} Q ${(a.x+b.x)/2} ${Math.max(a.y,b.y)+100}, ${b.x} ${b.y+8}`;
     let g = cableEls.get(t.id);
@@ -2015,7 +2031,7 @@ function renderCables() {
       ca.setAttribute("r","7"); cb.setAttribute("r","7");
       g.append(hit, main, high, ca, cb);
       g.addEventListener("click", () => onCableClick(t.id));
-      cableSvg.appendChild(g);
+      if (cableSvg) cableSvg.appendChild(g);
       cableEls.set(t.id, g);
     }
     const [hit, main, high, ca, cb] = [g.children[0], g.children[1], g.children[2], g.children[3], g.children[4]];
@@ -2030,7 +2046,7 @@ function renderCables() {
   }
 }
 
-function floater(text, x, y, kind = "score") {
+function floater(text: string, x: number, y: number, kind = "score") {
   const el = document.createElement("div");
   el.className = `floater ${kind}`;
   el.textContent = text;
@@ -2040,8 +2056,8 @@ function floater(text, x, y, kind = "score") {
   setTimeout(() => el.remove(), 1200);
 }
 
-function showToast(msg) {
-  const t = $("toast");
+function showToast(msg: string) {
+  const t = $("toast") as (HTMLElement & { _h?: ReturnType<typeof setTimeout> }) | null;
   if (!t) return;
   t.textContent = msg;
   t.classList.remove("hidden");
@@ -2052,17 +2068,17 @@ function showToast(msg) {
 /* ============================================================
    SLIP MODAL
    ============================================================ */
-function openSlipModal(ticket, role) {
+function openSlipModal(ticket: Ticket, role: string) {
   const m = $("slip-modal");
   if (!m || !ticket.slip) return;
   slipModalTicketId = ticket.id;
   m.dataset.role = role; // "verify" or "supervisor"
-  $("slip-num").textContent = "#" + ticket.slip.slipNum;
-  $("slip-caller").textContent = ticket.slip.callerName;
-  $("slip-line").textContent = ticket.slip.line;
-  $("slip-req").textContent = ticket.slip.requestName;
-  $("slip-flag").style.display = ticket.slip.flagged ? "" : "none";
-  $("slip-hint").textContent = role === "supervisor"
+  const slipNum = $("slip-num"); if (slipNum) slipNum.textContent = "#" + ticket.slip.slipNum;
+  const slipCaller = $("slip-caller"); if (slipCaller) slipCaller.textContent = ticket.slip.callerName;
+  const slipLine = $("slip-line"); if (slipLine) slipLine.textContent = ticket.slip.line;
+  const slipReq = $("slip-req"); if (slipReq) slipReq.textContent = ticket.slip.requestName;
+  const slipFlag = $("slip-flag"); if (slipFlag) slipFlag.style.display = ticket.slip.flagged ? "" : "none";
+  const slipHint = $("slip-hint"); if (slipHint) slipHint.textContent = role === "supervisor"
     ? "Cross-check against INCOMING. Stamp carefully."
     : "Double-check caller's request. Approve or deny.";
   m.classList.remove("hidden");
@@ -2074,19 +2090,20 @@ function closeSlipModal() {
   slipModalTicketId = null;
 }
 /* ---------- Agency modal ---------- */
-let agencyModalTicketId = null;
-function openAgencyModal(ticket) {
+let agencyModalTicketId: number | null = null;
+function openAgencyModal(ticket: Ticket) {
   const m = $("agency-modal");
   if (!m || !ticket || !ticket.agencyQ) return;
   if (ticket.status !== "ringing") return;
   agencyModalTicketId = ticket.id;
-  $("agency-q").textContent = ticket.agencyQ.text;
+  const agencyQ = $("agency-q"); if (agencyQ) agencyQ.textContent = ticket.agencyQ.text;
   const row = $("agency-choices");
+  if (!row) return;
   row.innerHTML = "";
   ticket.agencyQ.choices.forEach((c, i) => {
     const b = document.createElement("button");
     b.className = "agency-choice";
-    b.textContent = c.label;
+    b.textContent = String(c.label);
     b.addEventListener("click", () => {
       sendAction({ type: "agencyAnswer", ticketId: ticket.id, choiceIdx: i });
       closeAgencyModal();
@@ -2154,10 +2171,13 @@ function loop() {
 
   // Spawn scheduled calls
   const lvl = LEVELS[state.levelIdx];
-  const elapsed = state.duration - state.timeLeft;
-  while (state.nextCallIdx < lvl.calls.length && lvl.calls[state.nextCallIdx].at <= elapsed) {
-    hostSpawnTicket(lvl.calls[state.nextCallIdx]);
-    state.nextCallIdx++;
+  if (lvl) {
+    const elapsed = state.duration - state.timeLeft;
+    while (state.nextCallIdx < lvl.calls.length && (lvl.calls[state.nextCallIdx]?.at ?? Infinity) <= elapsed) {
+      const call = lvl.calls[state.nextCallIdx];
+      if (call) hostSpawnTicket(call);
+      state.nextCallIdx++;
+    }
   }
 
   let dirty = false;
@@ -2167,8 +2187,10 @@ function loop() {
   state.tickets.forEach(t => {
     if (t.status !== "live") return;
     const c = t.connection;
+    if (!c) return;
     if (c.lineIdx < c.lines.length && nowMs >= c.nextLineAt) {
       const line = c.lines[c.lineIdx];
+      if (!line) return;
       const entry = state.log.find(e => e.ticketId === t.id);
       if (entry) entry.lines.push(line);
       c.lineIdx += 1;
@@ -2177,7 +2199,7 @@ function loop() {
         c.completedAt = nowMs;
       } else {
         const lvlNow = LEVELS[state.levelIdx];
-        c.nextLineAt = nowMs + (lvlNow.lineIntervalMs || LINE_INTERVAL_MS);
+        c.nextLineAt = nowMs + (lvlNow?.lineIntervalMs || LINE_INTERVAL_MS);
       }
       dirty = true;
       broadcastEvent({ type: "line", ticketId: t.id });
@@ -2254,7 +2276,7 @@ function clientLoop() {
 /* ============================================================
    Misc
    ============================================================ */
-function escape(s) { return String(s).replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c])); }
+function escape(s: unknown) { return String(s).replace(/[&<>"]/g, c => (({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" } as Record<string,string>)[c] ?? c)); }
 
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", bindUI);
