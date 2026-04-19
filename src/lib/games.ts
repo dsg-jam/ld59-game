@@ -17,17 +17,17 @@ export const games: GameEntry[] = [
     description: "3D tabletop signal puzzle with solo and multiplayer modes.",
   },
   {
-    id: "signal-1",
-    title: "Signal 1",
+    id: "signal-cross",
+    title: "Signal Cross",
     tag: "Series",
-    path: "/games/signal-1",
+    path: "/games/signal-cross",
     description: "Switchboard routing chaos with character calls.",
   },
   {
-    id: "signal-2",
-    title: "Signal 2",
+    id: "signal-grid",
+    title: "Signal Grid",
     tag: "Series",
-    path: "/games/signal-2",
+    path: "/games/signal-grid",
     description: "Tile routing puzzle with programmable parts.",
   },
   {

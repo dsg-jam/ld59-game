@@ -2,11 +2,11 @@
   import { onMount, onDestroy } from "svelte";
   import "./styles.css";
 
-  type Signal1Mod = typeof import("$lib/games/signal-1/game");
-  let mod: Signal1Mod | null = null;
+  type SignalCrossMod = typeof import("$lib/games/signal-cross/game");
+  let mod: SignalCrossMod | null = null;
 
   onMount(async () => {
-    mod = await import("$lib/games/signal-1/game");
+    mod = await import("$lib/games/signal-cross/game");
   });
 
   onDestroy(() => {
@@ -18,7 +18,7 @@
   <title>SIGNAL CROSS — LDJAM59</title>
 </svelte:head>
 
-<div class="signal-1-page">
+<div class="signal-cross-page">
   <div class="scanlines"></div>
 
   <!-- ================= TITLE ================= -->
