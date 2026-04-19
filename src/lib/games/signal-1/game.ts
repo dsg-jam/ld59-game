@@ -1,5 +1,40 @@
 // Legacy game logic migrated from JavaScript; keep no-check until this file is incrementally typed.
 import Peer from "peerjs";
+import type { DataConnection } from "peerjs";
+
+/* ---- Type definitions ---- */
+type CharDef = { name: string; emoji: string };
+type DialogLine = { s: string; t: string };
+type Slip = { slipNum: string; callerName: string; line: string; requestId: string; requestName: string; dirty: boolean; flagged: boolean };
+type AgencyQuestion = { text: string; choices: { label: string; tag: unknown }[]; correctIdx: number };
+type Connection = { byPlayer: string; actualTo: string; correct: boolean; lines: DialogLine[]; lineIdx: number; nextLineAt: number; completed: boolean; completedAt: number | null };
+type Ticket = { id: number; kind?: string; from: string; to: string | null; note: string; status: string; ringingSince: number; ringDurationMs: number; timeoutAt: number; connection: Connection | null; slip: Slip | null; approval: string; reviewer: string | null; agencyQ?: AgencyQuestion; agencyPickedBy?: string | null };
+type Player = { id: string; name: string; color: string; cables: number; maxCables: number; selected: string | null };
+type LogEntry = { ticketId: number; from: string; actual: string; intended: string; byPlayer: string; correct: boolean; lines: DialogLine[]; status: string; result: string | null };
+type CallDef = { from: string; to: string; note: string; at: number };
+type LevelDef = { title: string; subtitle: string; duration: number; ringTimeoutSec: number; lineIntervalMs: number; chars: string[]; calls: CallDef[]; goal: number; restricted: string[] };
+type NetObj = {
+  peer: InstanceType<typeof Peer> | null;
+  isHost: boolean; myId: string | null; myName: string; myColor: string; roomCode: string | null;
+  hostConn: DataConnection | null; clientConns: Map<string, DataConnection>;
+  onMessage: ((peerId: string, data: unknown) => void) | null;
+  onClientConnect: ((conn: DataConnection) => void) | null;
+  onClientDisconnect: ((peerId: string) => void) | null;
+  status(msg: string, kind?: string): void;
+  host(name: string, onReady?: () => void): void;
+  _tryHost(onReady?: () => void, attempt?: number): void;
+  join(code: string, name: string, onReady?: () => void): void;
+  broadcast(msg: unknown): void;
+  sendToHost(msg: unknown): void;
+  leave(): void;
+};
+type GameState = {
+  phase: string; levelIdx: number; timeLeft: number; duration: number; goal: number;
+  nextCallIdx: number; teamScore: number; teamChaos: number; teamPenalty: number;
+  correctCount: number; players: Player[]; tickets: Ticket[]; log: LogEntry[];
+  levelTitle: string; levelSubtitle: string; gameMode: string; supervisorId: string | null;
+  _timeoutCount?: number; _agencyNextAt?: number;
+};
 
 
 /* ============================================================
@@ -24,7 +59,7 @@ import Peer from "peerjs";
    ============================================================ */
 
 /* ---------- Characters ---------- */
-const CHARS = {
+const CHARS: Record<string, CharDef> = {
   mom:       { name: "Mom",           emoji: "👩" },
   butcher:   { name: "The Butcher",   emoji: "🔪" },
   mayor:     { name: "Mayor Pibbley", emoji: "🎩" },
@@ -41,7 +76,7 @@ const CHARS = {
 };
 
 /* ---------- Levels ---------- */
-const LEVELS = [
+const LEVELS: LevelDef[] = [
   {
     title: "FIRST SHIFT",
     subtitle: "Tuesday. 7:02pm. The board will not wait.",
@@ -112,7 +147,7 @@ const LEVELS = [
 ];
 
 /* ---------- Dialogue: correct routes ---------- */
-const CORRECT = {
+const CORRECT: Record<string, DialogLine[]> = {
   "henderson>butcher": [
     { s: "henderson", t: "Marty dear, quick question about the pot roast." },
     { s: "butcher",   t: "Three-twenty-five, ma'am. Three hours. Like Sunday." },
@@ -227,7 +262,7 @@ const CORRECT = {
 };
 
 /* ---------- Dialogue: misconnects ---------- */
-const WRONG = {
+const WRONG: Record<string, DialogLine[]> = {
   "henderson>ghost": [
     { s: "henderson", t: "Marty?? Connection is AWFUL." },
     { s: "ghost",     t: "ooooooOOOOOoooo……" },
@@ -374,8 +409,9 @@ function makePhone() {
   const p = PHONE_PREFIXES[Math.floor(Math.random() * PHONE_PREFIXES.length)];
   return `${p}-${String(Math.floor(Math.random() * 10000)).padStart(4,"0")}`;
 }
-function makeSlip(call, levelIdx) {
+function makeSlip(call: CallDef, levelIdx: number) {
   const lvl = LEVELS[levelIdx];
+  if (!lvl) return null;
   const restricted = lvl.restricted || [];
   const flagged = restricted.includes(call.from) || restricted.includes(call.to);
   const dirtyReq = Math.random() < DIRTY_SLIP_CHANCE;
@@ -385,28 +421,28 @@ function makeSlip(call, levelIdx) {
   let requestId = call.to;
   if (dirtyReq) {
     const pool = lvl.chars.filter(c => c !== call.to && c !== call.from);
-    if (pool.length) requestId = pool[Math.floor(Math.random() * pool.length)];
+    if (pool.length) requestId = pool[Math.floor(Math.random() * pool.length)] ?? call.to;
   }
-  let callerName = CHARS[call.from].name;
+  let callerName = CHARS[call.from]?.name ?? call.from;
   if (forgedName) {
     const pool = lvl.chars.filter(c => c !== call.from);
-    if (pool.length) callerName = CHARS[pool[Math.floor(Math.random() * pool.length)]].name;
+    if (pool.length) callerName = CHARS[pool[Math.floor(Math.random() * pool.length)] ?? call.from]?.name ?? call.from;
   }
   return {
     slipNum: String(100 + Math.floor(Math.random() * 900)),
     callerName,
     line: makePhone(),
     requestId,
-    requestName: CHARS[requestId].name,
+    requestName: CHARS[requestId]?.name ?? requestId,
     dirty,
     flagged,
   };
 }
 
 /* ---------- Audio ---------- */
-let audioCtx;
-function ac() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); return audioCtx; }
-function beep(f, d=0.08, type="square", v=0.06) {
+let audioCtx: AudioContext | null = null;
+function ac() { if (!audioCtx) audioCtx = new AudioContext(); return audioCtx; }
+function beep(f: number, d=0.08, type: OscillatorType="square", v=0.06) {
   try {
     const c = ac();
     const o = c.createOscillator(), g = c.createGain();
@@ -430,24 +466,24 @@ const sfx = {
   stamp:    () => { beep(200,0.04,"square",0.08); setTimeout(()=>beep(90,0.12,"sawtooth",0.07), 50); },
   agency:   () => { beep(140,0.22,"triangle",0.09); setTimeout(()=>beep(180,0.22,"triangle",0.08), 240); setTimeout(()=>beep(110,0.30,"sawtooth",0.07), 500); },
 };
-function shuffle(a) {
+function shuffle<T>(a: T[]): T[] {
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
+    const tmp = a[i] as T; a[i] = a[j] as T; a[j] = tmp;
   }
   return a;
 }
 function unlockAudio() {
   try { const c = ac(); if (c.state === "suspended") c.resume(); beep(1,0.001,"sine",0.0001); } catch { /* ignore */ }
 }
-const $ = id => document.getElementById(id);
-const screens = {
+const $ = (id: string) => document.getElementById(id);
+const screens: Record<string, HTMLElement | null> = {
   get title() { return $("title-screen"); },
   get lobby() { return $("lobby-screen"); },
   get game()  { return $("game-screen");  },
   get end()   { return $("end-screen");   },
 };
-function showScreen(name) {
+function showScreen(name: string) {
   ["title","lobby","game","end"].forEach(k => {
     const el = screens[k];
     if (el) el.classList.remove("active");
@@ -459,7 +495,7 @@ function showScreen(name) {
 /* ============================================================
    NETWORK LAYER
    ============================================================ */
-const Net = {
+const Net: NetObj = {
   peer: null,
   isHost: false,
   myId: null,
@@ -471,31 +507,31 @@ const Net = {
   onMessage: null,
   onClientConnect: null,
   onClientDisconnect: null,
-  status(msg, kind="") {
+  status(msg: string, kind="") {
     const el = $("net-status");
     if (!el) return;
     el.textContent = msg;
     el.className = "net-status " + kind;
   },
 
-  host(name, onReady) {
+  host(name: string, onReady?: () => void) {
     this.isHost = true;
     this.myName = name;
     this._tryHost(onReady);
   },
-  _tryHost(onReady, attempt = 0) {
+  _tryHost(onReady?: () => void, attempt = 0) {
     const code = makeRoomCode();
     this.roomCode = code;
     this.peer = new Peer(code);
-    this.peer.on("open", (id) => {
+    this.peer.on("open", (id: string) => {
       this.myId = id;
       this.status("HOST READY — code: " + code, "ok");
       if (onReady) onReady();
     });
-    this.peer.on("connection", (conn) => {
+    this.peer.on("connection", (conn: DataConnection) => {
       this.clientConns.set(conn.peer, conn);
       conn.on("open", () => { if (this.onClientConnect) this.onClientConnect(conn); });
-      conn.on("data", (data) => { if (this.onMessage) this.onMessage(conn.peer, data); });
+      conn.on("data", (data: unknown) => { if (this.onMessage) this.onMessage(conn.peer, data); });
       conn.on("close", () => {
         this.clientConns.delete(conn.peer);
         if (this.onClientDisconnect) this.onClientDisconnect(conn.peer);
@@ -507,7 +543,7 @@ const Net = {
     });
     this.peer.on("error", (err) => {
       if (err.type === "unavailable-id" && attempt < 4) {
-        try { this.peer.destroy(); } catch { /* ignore */ }
+        try { if (this.peer) this.peer.destroy(); } catch { /* ignore */ }
         this._tryHost(onReady, attempt + 1);
       } else {
         this.status("HOST ERROR: " + err.type, "err");
@@ -515,12 +551,13 @@ const Net = {
     });
   },
 
-  join(code, name, onReady) {
+  join(code: string, name: string, onReady?: () => void) {
     this.isHost = false;
     this.myName = name;
     this.roomCode = code;
     this.peer = new Peer();
     this.peer.on("open", () => {
+      if (!this.peer) return;
       this.myId = this.peer.id;
       const conn = this.peer.connect(code, { reliable: true, metadata: { name } });
       this.hostConn = conn;
@@ -529,7 +566,7 @@ const Net = {
         conn.send({ type: "hello", name });
         if (onReady) onReady();
       });
-      conn.on("data", (data) => { if (this.onMessage) this.onMessage(code, data); });
+      conn.on("data", (data: unknown) => { if (this.onMessage) this.onMessage(code, data); });
       conn.on("close", () => {
         this.status("DISCONNECTED", "err");
         if (this.onClientDisconnect) this.onClientDisconnect(code);
@@ -539,12 +576,12 @@ const Net = {
     this.peer.on("error", (err) => { this.status("JOIN ERROR: " + err.type, "err"); });
   },
 
-  broadcast(msg) {
+  broadcast(msg: unknown) {
     for (const conn of this.clientConns.values()) {
       if (conn.open) { try { conn.send(msg); } catch { /* ignore */ } }
     }
   },
-  sendToHost(msg) {
+  sendToHost(msg: unknown) {
     if (this.hostConn && this.hostConn.open) { try { this.hostConn.send(msg); } catch { /* ignore */ } }
   },
   leave() {
@@ -567,7 +604,7 @@ function makeRoomCode() {
 /* ============================================================
    STATE
    ============================================================ */
-const state = {
+const state: GameState = {
   phase: "lobby",
   levelIdx: 0,
   timeLeft: 0,
@@ -587,11 +624,11 @@ const state = {
   supervisorId: null,
 };
 let lobbyMode = "classic";
-let lobbySupervisorId = null;
-let slipModalTicketId = null;
+let lobbySupervisorId: string | null = null;
+let slipModalTicketId: number | null = null;
 let _nextTicketId = 1;
 let lastTick = 0;
-let timerHandle = null;
+let timerHandle: number | null = null;
 let _broadcastAccum = 0;
 
 /* ---------- Reconciliation caches ---------- */
@@ -601,7 +638,7 @@ const opEls = new Map();            // playerId -> element
 const logEls = new Map();           // ticketId -> element (+ .linesEl cached)
 const cableEls = new Map();         // ticketId -> svg <g>
 let renderedLevelIdx = -1;
-let cableSvg = null;
+let cableSvg: SVGElement | null = null;
 
 /* ---------- Client timer interpolation anchors ---------- */
 let snapTimeLeft = 0;      // last server-reported timeLeft
@@ -609,19 +646,20 @@ let snapTakenAt = 0;       // performance.now() when we received it
 
 /* ---------- Utilities ---------- */
 function myPlayer() { return state.players.find(p => p.id === Net.myId); }
-function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
-function findLivePlug(plugId) {
+function pick<T>(a: T[]): T { return a[Math.floor(Math.random() * a.length)] as T; }
+function findLivePlug(plugId: string) {
   return state.tickets.find(t =>
     t.status === "live" && (t.from === plugId || t.connection?.actualTo === plugId)
   );
 }
-function isPlugBusy(plugId) {
+function isPlugBusy(plugId: string) {
   return !!findLivePlug(plugId);
 }
 
 /* ---------- Host: level lifecycle ---------- */
-function hostStartLevel(idx) {
+function hostStartLevel(idx: number) {
   const lvl = LEVELS[idx];
+  if (!lvl) return;
   state.phase = "playing";
   state.levelIdx = idx;
   state.timeLeft = lvl.duration;
@@ -683,7 +721,7 @@ function hostEndLevel() {
   broadcastState();
 }
 
-function hostSpawnTicket(call) {
+function hostSpawnTicket(call: CallDef) {
   const now = Date.now();
   const slip = state.gameMode === "classic" ? null : makeSlip(call, state.levelIdx);
   const approval =
@@ -691,7 +729,7 @@ function hostSpawnTicket(call) {
     state.gameMode === "verify"  ? "pending" :
     /* supervisor */               "awaiting-stamp";
   const lvl = LEVELS[state.levelIdx];
-  const ringMs = (lvl.ringTimeoutSec ? lvl.ringTimeoutSec * 1000 : RING_TIMEOUT_MS);
+  const ringMs = (lvl?.ringTimeoutSec ? lvl.ringTimeoutSec * 1000 : RING_TIMEOUT_MS);
   state.tickets.push({
     id: _nextTicketId++,
     from: call.from,
@@ -739,6 +777,7 @@ function hostSpawnAgency() {
 
 function buildAgencyQuestion() {
   const lvl = LEVELS[state.levelIdx];
+  if (!lvl) return null;
   // Log is newest-first; include only completed entries with a result
   const ended = state.log.filter(e =>
     e.status === "ended" && (e.result === "routed" || e.result === "chaos" || e.result === "cut")
@@ -751,8 +790,8 @@ function buildAgencyQuestion() {
   return null;
 }
 
-function _buildAgencyQ(type, ended, lvl) {
-  const pickChars = (except, n) => {
+function _buildAgencyQ(type: string, ended: LogEntry[], lvl: LevelDef) {
+  const pickChars = (except: string[], n: number) => {
     const pool = lvl.chars.filter(c => !except.includes(c) && c !== "agency");
     shuffle(pool);
     return pool.slice(0, n);
@@ -845,22 +884,22 @@ function _buildAgencyQ(type, ended, lvl) {
 }
 
 /* ---------- Dialogue selection ---------- */
-function getExchangeLines(fromId, actualId, expectedId) {
+function getExchangeLines(fromId: string, actualId: string, expectedId: string): DialogLine[] {
   const correct = actualId === expectedId;
   const key = `${fromId}>${actualId}`;
-  let base;
+  let base: DialogLine[];
   if (correct) {
     base = CORRECT[key] || [
-      { s: fromId, t: `Hello, ${CHARS[actualId].name}?` },
+      { s: fromId, t: `Hello, ${CHARS[actualId]?.name ?? actualId}?` },
       { s: actualId, t: "Speaking." },
       { s: fromId, t: "Just a quick one." },
       { s: actualId, t: "Understood. Goodbye." },
     ];
   } else if (WRONG[key]) {
-    base = WRONG[key];
+    base = WRONG[key] as DialogLine[];
   } else {
-    const expectName = CHARS[expectedId].name;
-    const actualName = CHARS[actualId].name;
+    const expectName = CHARS[expectedId]?.name ?? expectedId;
+    const actualName = CHARS[actualId]?.name ?? actualId;
     base = [
       { s: fromId,   t: pick(WRONG_FALLBACK_A).replace("[EXPECT]", expectName) },
       { s: actualId, t: pick(WRONG_FALLBACK_B).replace("[ACTUAL]", actualName) },
@@ -871,15 +910,16 @@ function getExchangeLines(fromId, actualId, expectedId) {
 }
 
 /* ---------- Host: handle actions ---------- */
-function hostHandleAction(playerId, msg) {
+function hostHandleAction(playerId: string | null, msg: Record<string, unknown>) {
+  if (!playerId) return;
   const p = state.players.find(x => x.id === playerId);
   if (!p) return;
   if (state.phase !== "playing") return;
 
   if (msg.type === "select") {
     if (p.selected) return;
-    if (isPlugBusy(msg.plugId)) return;
-    const other = state.players.find(x => x.selected === msg.plugId);
+    if (isPlugBusy(msg.plugId as string)) return;
+    const other = state.players.find(x => x.selected === (msg.plugId as string));
     if (other) return;
     const ticket = state.tickets.find(t => t.from === msg.plugId && t.status === "ringing" && t.kind !== "agency");
     if (!ticket) return;
@@ -889,12 +929,12 @@ function hostHandleAction(playerId, msg) {
     if (state.gameMode === "verify" && ticket.approval !== "approved") {
       // Selecting a not-yet-approved ticket opens review (reviewer = this player)
       if (ticket.reviewer && ticket.reviewer !== p.id) return;
-      p.selected = msg.plugId;
+      p.selected = msg.plugId as string | null;
       ticket.reviewer = p.id;
       broadcastState();
       return;
     }
-    p.selected = msg.plugId;
+    p.selected = msg.plugId as string | null;
     broadcastState();
   }
 
@@ -937,7 +977,7 @@ function hostHandleAction(playerId, msg) {
     if (!ticket) return;
     if (ticket.agencyPickedBy) return;
     ticket.agencyPickedBy = p.id;
-    const correct = Number(msg.choiceIdx) === ticket.agencyQ.correctIdx;
+    const correct = Number(msg.choiceIdx) === ticket.agencyQ?.correctIdx;
     if (correct) state.teamScore += SCORE_AGENCY;
     else state.teamPenalty += PENALTY_AGENCY;
     ticket.status = "done";
@@ -992,15 +1032,15 @@ function hostHandleAction(playerId, msg) {
     const ticket = state.tickets.find(t => t.from === p.selected && t.status === "ringing");
     if (!ticket) return;
     if (state.gameMode !== "classic" && ticket.approval !== "approved") return;
-    if (isPlugBusy(msg.toId) || isPlugBusy(ticket.from)) return;
+    if (isPlugBusy(msg.toId as string) || isPlugBusy(ticket.from)) return;
 
-    const correct = ticket.to === msg.toId;
-    const lines = getExchangeLines(ticket.from, msg.toId, ticket.to);
+    const correct = ticket.to === (msg.toId as string);
+    const lines = getExchangeLines(ticket.from, msg.toId as string, ticket.to ?? "");
     const now = Date.now();
     ticket.status = "live";
     ticket.connection = {
       byPlayer: p.id,
-      actualTo: msg.toId,
+      actualTo: msg.toId as string,
       correct,
       lines,
       lineIdx: 0,
@@ -1014,8 +1054,8 @@ function hostHandleAction(playerId, msg) {
     state.log.unshift({
       ticketId: ticket.id,
       from: ticket.from,
-      actual: msg.toId,
-      intended: ticket.to,
+      actual: msg.toId as string,
+      intended: ticket.to ?? "",
       byPlayer: p.id,
       correct,
       lines: [],
@@ -1032,6 +1072,7 @@ function hostHandleAction(playerId, msg) {
     const ticket = state.tickets.find(t => t.id === msg.ticketId && t.status === "live");
     if (!ticket) return;
     const conn = ticket.connection;
+    if (!conn) return;
     const connector = state.players.find(x => x.id === conn.byPlayer);
     const entry = state.log.find(e => e.ticketId === ticket.id);
 
@@ -1077,11 +1118,11 @@ function broadcastState() {
   Net.broadcast(snap);
   applyStateLocally(snap);
 }
-function broadcastEvent(ev) {
+function broadcastEvent(ev: unknown) {
   Net.broadcast({ type: "event", event: ev });
   applyEventLocally(ev);
 }
-function applyStateLocally(snap) {
+function applyStateLocally(snap: Partial<GameState> & Record<string, unknown>) {
   Object.assign(state, {
     phase: snap.phase, levelIdx: snap.levelIdx,
     timeLeft: snap.timeLeft, duration: snap.duration, goal: snap.goal,
@@ -1092,14 +1133,14 @@ function applyStateLocally(snap) {
     gameMode: snap.gameMode || "classic",
     supervisorId: snap.supervisorId || null,
   });
-  snapTimeLeft = snap.timeLeft;
+  snapTimeLeft = snap.timeLeft ?? 0;
   snapTakenAt = performance.now();
   render();
   reconcileSlipModal();
   reconcileAgencyModal();
   ensureClientLoop();
 }
-function applyEventLocally(ev) {
+function applyEventLocally(ev: Record<string, unknown>) {
   if (ev.type === "ring") sfx.ring();
   else if (ev.type === "connect") {
     if (ev.correct) sfx.connect(); else sfx.chaos();
@@ -1177,14 +1218,15 @@ Net.onClientDisconnect = (peerId) => {
     setTimeout(() => { Net.leave(); resetLocal(); showScreen("title"); }, 1500);
   }
 };
-Net.onMessage = (peerId, msg) => {
+Net.onMessage = (peerId, rawMsg) => {
+  const msg = rawMsg as Record<string, unknown>;
   if (Net.isHost) {
     if (msg.type === "hello") {
       if (!state.players.find(p => p.id === peerId)) {
-        const color = PLAYER_COLORS[state.players.length % PLAYER_COLORS.length];
+        const color = PLAYER_COLORS[state.players.length % PLAYER_COLORS.length] ?? "#fff";
         state.players.push({
           id: peerId,
-          name: (msg.name || "OP").toUpperCase().slice(0,14),
+          name: ((msg.name as string | undefined) ?? "OP").toUpperCase().slice(0,14),
           color,
           cables: CABLES_PER_PLAYER,
           maxCables: CABLES_PER_PLAYER,
@@ -1197,11 +1239,11 @@ Net.onMessage = (peerId, msg) => {
       hostHandleAction(peerId, msg);
     }
   } else {
-    if (msg.type === "state") applyStateLocally(msg);
-    else if (msg.type === "event") applyEventLocally(msg.event);
+    if (msg.type === "state") applyStateLocally(msg as Partial<GameState> & Record<string, unknown>);
+    else if (msg.type === "event") applyEventLocally(msg.event as Record<string, unknown>);
     else if (msg.type === "lobby") {
-      lobbyMode = msg.mode || "classic";
-      lobbySupervisorId = msg.supervisorId || null;
+      lobbyMode = (msg.mode as string) || "classic";
+      lobbySupervisorId = (msg.supervisorId as string | null) || null;
       renderLobby();
     }
   }
@@ -1210,7 +1252,7 @@ Net.onMessage = (peerId, msg) => {
 /* ============================================================
    INPUT
    ============================================================ */
-function onPlugClick(plugId) {
+function onPlugClick(plugId: string) {
   if (state.phase !== "playing") return;
   const me = myPlayer();
   if (!me) return;
@@ -1261,12 +1303,12 @@ function onPlugClick(plugId) {
   sfx.select();
 }
 
-function onCableClick(ticketId) {
+function onCableClick(ticketId: number) {
   if (state.phase !== "playing") return;
   sendAction({ type: "disconnect", ticketId });
 }
 
-function sendAction(msg) {
+function sendAction(msg: Record<string, unknown>) {
   if (Net.isHost) hostHandleAction(Net.myId, msg);
   else Net.sendToHost(msg);
 }
@@ -1274,10 +1316,10 @@ function sendAction(msg) {
 /* ============================================================
    UI HOOKS
    ============================================================ */
-function on(id, ev, fn) { const el = $(id); if (el) el.addEventListener(ev, fn); }
+function on(id: string, ev: string, fn: EventListener) { const el = $(id); if (el) el.addEventListener(ev, fn); }
 
 function readName() {
-  const inp = $("name-input");
+  const inp = $("name-input") as HTMLInputElement | null;
   let n = (inp?.value || "").trim();
   if (!n) { n = "OP-" + Math.floor(100 + Math.random()*900); if (inp) inp.value = n; }
   return n;
@@ -1297,11 +1339,11 @@ function bindUI() {
         maxCables: CABLES_PER_PLAYER,
         selected: null,
       }];
-      Net.myColor = PLAYER_COLORS[0];
+      Net.myColor = PLAYER_COLORS[0] ?? "#fff";
       lobbyMode = "classic";
       lobbySupervisorId = Net.myId;
-      if ($("room-code")) $("room-code").textContent = Net.roomCode;
-      if ($("hud-room"))  $("hud-room").textContent  = Net.roomCode;
+      const rc = $("room-code"); if (rc) rc.textContent = Net.roomCode;
+      const hr = $("hud-room"); if (hr) hr.textContent = Net.roomCode;
       showScreen("lobby");
       renderLobby();
     });
@@ -1310,12 +1352,12 @@ function bindUI() {
   on("join-btn", "click", () => {
     unlockAudio();
     const name = readName();
-    const code = ($("room-input")?.value || "").trim().toUpperCase();
+    const code = (($("room-input") as HTMLInputElement | null)?.value || "").trim().toUpperCase();
     if (!code) { Net.status("enter a room code first", "err"); return; }
     Net.status("connecting...", "");
     Net.join(code, name, () => {
-      if ($("room-code")) $("room-code").textContent = code;
-      if ($("hud-room"))  $("hud-room").textContent  = code;
+      const rc2 = $("room-code"); if (rc2) rc2.textContent = code;
+      const hr2 = $("hud-room"); if (hr2) hr2.textContent = code;
       showScreen("lobby");
       renderLobby();
     });
@@ -1347,7 +1389,7 @@ function bindUI() {
     showScreen("game");
   });
 
-  on("room-input", "input", (e) => { e.target.value = e.target.value.toUpperCase(); });
+  on("room-input", "input", (e) => { const t = e.target as HTMLInputElement; t.value = t.value.toUpperCase(); });
 
   // Mode picker (host only — everyone else's clicks ignored)
   const modeDescs = {
@@ -1365,7 +1407,7 @@ function bindUI() {
   });
   on("supervisor-select", "change", (e) => {
     if (!Net.isHost) return;
-    lobbySupervisorId = e.target.value || null;
+    lobbySupervisorId = (e.target as HTMLSelectElement).value || null;
     broadcastLobbyState();
   });
 
@@ -1394,7 +1436,7 @@ function bindUI() {
   });
 
   // Store mode descs for renderLobby
-  window._modeDescs = modeDescs;
+  (window as Window & { _modeDescs?: Record<string,string> })._modeDescs = modeDescs;
 
   document.addEventListener("contextmenu", (e) => {
     if (state.phase === "playing" && screens.game?.classList.contains("active")) {
@@ -1451,7 +1493,8 @@ function resetLocal() {
 function render() {
   if (state.phase === "lobby")  renderLobby();
   if (state.phase === "playing") {
-    if (!screens.game.classList.contains("active")) showScreen("game");
+    const gameScreen = screens.game;
+    if (gameScreen && !gameScreen.classList.contains("active")) showScreen("game");
     renderBoard();
     renderQueue();
     renderOperators();
@@ -1460,7 +1503,8 @@ function render() {
     updateHud();
   }
   if (state.phase === "ended") {
-    if (!screens.end.classList.contains("active")) showScreen("end");
+    const endScreen = screens.end;
+    if (endScreen && !endScreen.classList.contains("active")) showScreen("end");
     renderSummary();
   }
 }
@@ -1480,12 +1524,12 @@ function renderLobby() {
     `;
     el.appendChild(row);
   });
-  if ($("lobby-start-btn")) $("lobby-start-btn").style.display = Net.isHost ? "" : "none";
-  if ($("lobby-wait")) $("lobby-wait").style.display = Net.isHost ? "none" : "";
+  if ($("lobby-start-btn")) ($("lobby-start-btn") as HTMLElement).style.display = Net.isHost ? "" : "none";
+  if ($("lobby-wait")) ($("lobby-wait") as HTMLElement).style.display = Net.isHost ? "none" : "";
 
   // Mode buttons
   ["classic","verify","supervisor"].forEach(m => {
-    const b = $(`mode-${m}`);
+    const b = $(`mode-${m}`) as HTMLButtonElement | null;
     if (!b) return;
     b.classList.toggle("active", lobbyMode === m);
     b.disabled = !Net.isHost;
@@ -1493,16 +1537,17 @@ function renderLobby() {
   });
   const desc = $("mode-desc");
   if (desc) {
-    const base = (window._modeDescs && window._modeDescs[lobbyMode]) || "";
+    const modeDescsWin = (window as Window & { _modeDescs?: Record<string,string> })._modeDescs;
+    const base = (modeDescsWin && modeDescsWin[lobbyMode]) || "";
     desc.textContent = lobbyMode === "supervisor" && state.players.length < 2
       ? "Supervisor mode requires 2+ operators."
       : base;
   }
 
   // Supervisor picker
-  const pick = $("supervisor-pick");
-  if (pick) pick.style.display = lobbyMode === "supervisor" ? "" : "none";
-  const sel = $("supervisor-select");
+  const pick2 = $("supervisor-pick");
+  if (pick2) pick2.style.display = lobbyMode === "supervisor" ? "" : "none";
+  const sel = $("supervisor-select") as HTMLSelectElement | null;
   if (sel) {
     const prev = lobbySupervisorId || state.players[0]?.id || "";
     sel.innerHTML = "";
@@ -1516,12 +1561,12 @@ function renderLobby() {
     sel.disabled = !Net.isHost;
     // Ensure lobbySupervisorId is one of the current players
     if (!state.players.some(p => p.id === lobbySupervisorId)) {
-      lobbySupervisorId = state.players[0]?.id || null;
+      lobbySupervisorId = state.players[0]?.id ?? null;
     }
   }
 
   // Disable Start if supervisor mode with <2 players
-  const startBtn = $("lobby-start-btn");
+  const startBtn = $("lobby-start-btn") as HTMLButtonElement | null;
   if (startBtn) startBtn.disabled = lobbyMode === "supervisor" && state.players.length < 2;
 }
 
@@ -1531,29 +1576,29 @@ function broadcastLobbyState() {
 }
 
 function updateHud() {
-  if ($("level-num"))    $("level-num").textContent = state.levelIdx + 1;
-  if ($("correct-val"))  $("correct-val").textContent = `${state.correctCount} / ${state.goal}`;
-  if ($("team-score"))   $("team-score").textContent = state.teamScore + state.teamChaos;
-  if ($("team-pen"))     $("team-pen").textContent = "-" + state.teamPenalty;
+  if ($("level-num"))    $("level-num")!.textContent = String(state.levelIdx + 1);
+  if ($("correct-val"))  $("correct-val")!.textContent = `${state.correctCount} / ${state.goal}`;
+  if ($("team-score"))   $("team-score")!.textContent = String(state.teamScore + state.teamChaos);
+  if ($("team-pen"))     $("team-pen")!.textContent = "-" + state.teamPenalty;
   const totalMax = state.players.reduce((s,p) => s + p.maxCables, 0);
   const free = state.players.reduce((s,p) => s + p.cables, 0);
-  if ($("cables-free"))  $("cables-free").textContent = `${free} / ${totalMax}`;
-  if ($("hud-room"))     $("hud-room").textContent = Net.roomCode || "---";
+  if ($("cables-free"))  $("cables-free")!.textContent = `${free} / ${totalMax}`;
+  if ($("hud-room"))     $("hud-room")!.textContent = Net.roomCode || "---";
   if ($("hud-mode")) {
     const m = state.gameMode || "classic";
     const iAmSv = m === "supervisor" && Net.myId === state.supervisorId;
-    $("hud-mode").textContent = m === "classic" ? "CLASSIC"
+    $("hud-mode")!.textContent = m === "classic" ? "CLASSIC"
                                 : m === "verify" ? "VERIFY"
                                 : (iAmSv ? "SUPERVISOR (YOU)" : "SUPERVISOR");
   }
   const pct = Math.max(0, state.duration > 0 ? (state.timeLeft / state.duration) : 0) * 100;
-  if ($("timer-fill"))   $("timer-fill").style.width = pct + "%";
+  if ($("timer-fill"))   ($("timer-fill") as HTMLElement).style.width = pct + "%";
 }
 
 function renderBoard() {
   const lvl = LEVELS[state.levelIdx];
   const board = $("board");
-  if (!board) return;
+  if (!board || !lvl) return;
 
   // Full rebuild only if level changed
   if (renderedLevelIdx !== state.levelIdx) {
@@ -1564,6 +1609,7 @@ function renderBoard() {
     board.style.gridTemplateColumns = `repeat(${cols}, 92px)`;
     lvl.chars.forEach(id => {
       const c = CHARS[id];
+      if (!c) return;
       const el = document.createElement("div");
       el.className = "plug";
       el.dataset.id = id;
@@ -2187,7 +2233,7 @@ function loop() {
 /* ============================================================
    CLIENT LOOP — local time interpolation + ring-bar updates
    ============================================================ */
-let clientHandle = null;
+let clientHandle: number | null = null;
 function ensureClientLoop() {
   if (Net.isHost) return;        // host runs the authoritative loop()
   if (clientHandle) return;
