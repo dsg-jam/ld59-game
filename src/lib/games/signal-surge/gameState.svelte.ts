@@ -1,6 +1,7 @@
-import type { GameSnapshot, LobbyPlayer, FinishEntry, LogEntry } from "./types.js";
+import type { GameSnapshot, LobbyPlayer, FinishEntry, LogEntry, CupStanding } from "./types.js";
+import { DEFAULT_TRACK_ID } from "./types.js";
 
-export type Phase = "lobby" | "game" | "end";
+export type Phase = "lobby" | "game" | "raceEnd" | "cupEnd";
 
 export const gs = $state({
   phase: "lobby" as Phase,
@@ -24,6 +25,14 @@ export const gs = $state({
   hudBursts: 0,
   hudPlace: "-",
   hudTotal: 0,
+  selectedTrackId: DEFAULT_TRACK_ID,
+  activeTrackId: DEFAULT_TRACK_ID,
+  cupStandings: [] as CupStanding[],
+  cupTrackIndex: 0,
+  cupTotalTracks: 0,
+  nextTrackName: "",
+  canAdvanceTrack: false,
+  cupComplete: false,
 });
 
 let nextLogId = 0;
@@ -54,4 +63,11 @@ export function resetState(): void {
   gs.hudBursts = 0;
   gs.hudPlace = "-";
   gs.hudTotal = 0;
+  gs.activeTrackId = DEFAULT_TRACK_ID;
+  gs.cupStandings = [];
+  gs.cupTrackIndex = 0;
+  gs.cupTotalTracks = 0;
+  gs.nextTrackName = "";
+  gs.canAdvanceTrack = false;
+  gs.cupComplete = false;
 }
