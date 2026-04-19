@@ -2765,6 +2765,18 @@ function escape(s: unknown) {
   );
 }
 
+/** Stop RAF loops and release global listeners on route teardown. */
+export function destroy(): void {
+  if (timerHandle) {
+    cancelAnimationFrame(timerHandle);
+    timerHandle = null;
+  }
+  if (clientHandle) {
+    cancelAnimationFrame(clientHandle);
+    clientHandle = null;
+  }
+}
+
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", bindUI);
 } else {

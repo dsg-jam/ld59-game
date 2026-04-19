@@ -1,17 +1,21 @@
 <script lang="ts">
-  import "$lib/styles/base.css";
+  import "normalize.css";
+  import "@fontsource/jetbrains-mono/300.css";
+  import "@fontsource/jetbrains-mono/400.css";
+  import "@fontsource/jetbrains-mono/600.css";
+  import "@fontsource/major-mono-display/400.css";
   import type { Snippet } from "svelte";
 
   let { children }: { children: Snippet } = $props();
 </script>
 
-<svelte:head>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Major+Mono+Display&family=JetBrains+Mono:wght@300;400;600&display=swap"
-    rel="stylesheet"
-  />
-</svelte:head>
+<div class="app-shell">
+  {@render children()}
+</div>
 
-{@render children()}
+<style>
+  .app-shell {
+    min-height: 100vh;
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+</style>

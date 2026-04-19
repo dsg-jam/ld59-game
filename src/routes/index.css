@@ -1,4 +1,4 @@
-:root {
+.index-page {
   --bg: #0a0a0a;
   --bg-raise: #121212;
   --ink: #f2e6c8;
@@ -8,18 +8,15 @@
   --line: #2a2620;
 }
 
-* {
+.index-page * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
-html,
-body {
+.index-page {
   height: 100%;
-}
-
-body {
+  min-height: 100vh;
   font-family: "JetBrains Mono", monospace;
   font-weight: 300;
   background: var(--bg);
@@ -30,7 +27,7 @@ body {
 }
 
 /* CRT scanlines */
-body::before {
+.index-page::before {
   content: "";
   position: fixed;
   inset: 0;
@@ -46,7 +43,7 @@ body::before {
 }
 
 /* Vignette */
-body::after {
+.index-page::after {
   content: "";
   position: fixed;
   inset: 0;

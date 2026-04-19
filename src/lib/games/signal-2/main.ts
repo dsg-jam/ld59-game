@@ -1331,9 +1331,10 @@ function drawSignal(s: Signal) {
 }
 
 // Animate signals smoothly
+let _rafHandle = 0;
 function rafLoop() {
   draw();
-  requestAnimationFrame(rafLoop);
+  _rafHandle = requestAnimationFrame(rafLoop);
 }
 
 // ---------------- Buttons ----------------
@@ -1500,6 +1501,16 @@ function init() {
   loadLevel(0);
   rafLoop();
   bootScreen();
+}
+
+/** Stop the RAF loop and release the simulation timer on route teardown. */
+export function destroy(): void {
+  cancelAnimationFrame(_rafHandle);
+  _rafHandle = 0;
+  if (state.timer) {
+    clearTimeout(state.timer);
+    state.timer = null;
+  }
 }
 
 init();

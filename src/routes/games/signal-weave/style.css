@@ -1,4 +1,4 @@
-:root {
+.signal-weave-page {
   --bg: #06080f;
   --ink: #d7e5ff;
   --dim: #7d8cb1;
@@ -8,15 +8,12 @@
   --good: #8dff9d;
   --warn: #ffb36b;
 }
-* {
+.signal-weave-page * {
   box-sizing: border-box;
 }
-html,
-body {
+.signal-weave-page {
   height: 100%;
   margin: 0;
-}
-body {
   background: radial-gradient(circle at 30% 20%, #0b1230, #06080f 60%);
   color: var(--ink);
   font:
@@ -27,7 +24,7 @@ body {
     monospace;
   overflow: hidden;
 }
-body::before {
+.signal-weave-page::before {
   content: "";
   position: fixed;
   inset: 0;

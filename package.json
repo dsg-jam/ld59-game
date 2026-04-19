@@ -14,11 +14,14 @@
     "ban-js": "bash -lc 'set -euo pipefail; files=$(git ls-files \"*.js\" \"*.mjs\" \"*.cjs\"); if [ -n \"$files\" ]; then echo \"JavaScript files are not allowed:\"; echo \"$files\"; exit 1; fi'"
   },
   "dependencies": {
+    "normalize.css": "^8.0.1",
     "peerjs": "^1.5.4",
     "three": "^0.184.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@fontsource/jetbrains-mono": "^5.2.8",
+    "@fontsource/major-mono-display": "^5.2.8",
     "@playwright/test": "^1.59.1",
     "@sveltejs/adapter-static": "^3.0.10",
     "@sveltejs/kit": "^2.57.1",
