@@ -71,7 +71,7 @@ export interface GameState {
 
 export function createInitialState(seed: number, difficulty: Difficulty): GameState {
   const map = generateMap(seed, difficulty);
-  const config = DIFFICULTY_CONFIG[difficulty] ?? DIFFICULTY_CONFIG[0]!;
+  const config = DIFFICULTY_CONFIG[difficulty];
   return {
     phase: "lobby",
     map,
@@ -152,7 +152,8 @@ function startNextFlashStep(state: GameState, pattern: FlashPattern, index: numb
       activeFlash: { flash: null, timeLeft: SIG_WORD_GAP, nextIndex: -2 },
     };
   }
-  const f = pattern[index]!;
+  const f = pattern[index];
+  if (!f) return state;
   const duration = f.type === "dot" ? SIG_DOT : SIG_DASH;
   const isLast = index === pattern.length - 1;
   return {
@@ -267,11 +268,8 @@ export function sendSignal(state: GameState, command: SignalCommand): GameState 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 
 /** Derive game stats from a completed state. */
-export function deriveStats(
-  state: GameState,
-  _totalDurationS: number
-): GameStats {
-  const config = DIFFICULTY_CONFIG[state.difficulty] ?? DIFFICULTY_CONFIG[0]!;
+export function deriveStats(state: GameState): GameStats {
+  const config = DIFFICULTY_CONFIG[state.difficulty];
   return {
     timeTaken: config.timerS - state.timeRemaining,
     signalsSent: state.signalsSent,

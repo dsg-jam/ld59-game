@@ -1,7 +1,6 @@
 <script lang="ts">
-  import type { SignalCommand } from "$lib/semaphoria/signals";
   import { SIGNAL_REFERENCE } from "$lib/semaphoria/signals";
-  import { SIG_COLOR_HEX } from "$lib/semaphoria/constants";
+  import type { SignalCommand } from "$lib/semaphoria/signals";
 
   let {
     onSignal,
@@ -20,9 +19,12 @@
     yellow: "#ffdd00",
   };
 
-  // Group commands for visual layout
-  const DIRECTION_CMDS: SignalCommand[] = ["go", "left", "right", "stop", "reverse"];
-  const HAZARD_CMDS: SignalCommand[] = ["rocks-ahead", "rocks-left", "rocks-right"];
+  const DIRECTION_ENTRIES = SIGNAL_REFERENCE.filter((e) =>
+    (["go", "left", "right", "stop", "reverse"] as readonly string[]).includes(e.command)
+  );
+  const HAZARD_ENTRIES = SIGNAL_REFERENCE.filter((e) =>
+    (["rocks-ahead", "rocks-left", "rocks-right"] as readonly string[]).includes(e.command)
+  );
 
   const canSend = $derived(!disabled && cooldown <= 0);
 
@@ -44,10 +46,6 @@
       onSignal(cmd);
     }
   }
-
-  function getEntry(cmd: SignalCommand) {
-    return SIGNAL_REFERENCE.find((r) => r.command === cmd)!;
-  }
 </script>
 
 <svelte:window onkeydown={handleKey} />
@@ -55,13 +53,12 @@
 <div class="signal-panel" aria-label="Signal panel">
   <div class="section-label">NAVIGATION</div>
   <div class="signal-grid nav-grid">
-    {#each DIRECTION_CMDS as cmd, i (cmd)}
-      {@const entry = getEntry(cmd)}
+    {#each DIRECTION_ENTRIES as entry, i (entry.command)}
       <button
         class="sig-btn"
         aria-label="Send signal: {entry.label}"
         disabled={!canSend}
-        onclick={() => onSignal(cmd)}
+        onclick={() => onSignal(entry.command)}
         title="{entry.description} [key: {i + 1}]"
       >
         <span class="btn-pattern">
@@ -80,13 +77,12 @@
 
   <div class="section-label" style="margin-top: 10px;">HAZARDS</div>
   <div class="signal-grid hazard-grid">
-    {#each HAZARD_CMDS as cmd, i (cmd)}
-      {@const entry = getEntry(cmd)}
+    {#each HAZARD_ENTRIES as entry, i (entry.command)}
       <button
         class="sig-btn hazard"
         aria-label="Send signal: {entry.label}"
         disabled={!canSend}
-        onclick={() => onSignal(cmd)}
+        onclick={() => onSignal(entry.command)}
         title="{entry.description} [key: {i + 6}]"
       >
         <span class="btn-pattern">

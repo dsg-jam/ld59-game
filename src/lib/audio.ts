@@ -119,7 +119,7 @@ export function collisionCrunch(): void {
 export function proximityRumble(intensity: number): void {
   if (intensity <= 0) return;
   try {
-    const ctx = getAudioContext();
+    getAudioContext();
     const freq = 40 + intensity * 20;
     const vol = intensity * 0.04;
     blip(freq, 0.06, "sawtooth", vol);

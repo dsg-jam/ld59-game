@@ -10,7 +10,8 @@
   useTask((dt) => {
     time += dt;
     if (meshRef?.material instanceof THREE.ShaderMaterial) {
-      meshRef.material.uniforms["uTime"]!.value = time;
+      const uTime = meshRef.material.uniforms["uTime"];
+      if (uTime) uTime.value = time;
     }
   });
 

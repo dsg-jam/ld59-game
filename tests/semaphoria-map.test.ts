@@ -19,7 +19,8 @@ function isPathConnected(map: GameMap): boolean {
   const queue = [start];
 
   while (queue.length > 0) {
-    const key = queue.shift()!;
+    const key = queue.shift();
+    if (key === undefined) break;
     if (key === goal) return true;
     const [x, y] = key.split(",").map(Number) as [number, number];
 
@@ -97,8 +98,8 @@ test.describe("Semaphoria map generator – structure", () => {
     const map = generateMap(42, 0);
     for (let y = 0; y < map.rows; y++) {
       for (let x = 0; x < map.cols; x++) {
-        expect(map.tiles[y]![x]!.x).toBe(x);
-        expect(map.tiles[y]![x]!.y).toBe(y);
+        expect(map.tiles[y]?.[x]?.x).toBe(x);
+        expect(map.tiles[y]?.[x]?.y).toBe(y);
       }
     }
   });
@@ -114,16 +115,18 @@ test.describe("Semaphoria map generator – path", () => {
 
   test("path starts at the start tile", () => {
     const map = generateMap(42, 0);
-    const first = map.path[0]!;
-    expect(first.x).toBe(map.startX);
-    expect(first.y).toBe(map.startY);
+    const first = map.path[0];
+    expect(first).toBeDefined();
+    expect(first?.x).toBe(map.startX);
+    expect(first?.y).toBe(map.startY);
   });
 
   test("path ends at the harbor tile", () => {
     const map = generateMap(42, 0);
-    const last = map.path[map.path.length - 1]!;
-    expect(last.x).toBe(map.harborX);
-    expect(last.y).toBe(map.harborY);
+    const last = map.path[map.path.length - 1];
+    expect(last).toBeDefined();
+    expect(last?.x).toBe(map.harborX);
+    expect(last?.y).toBe(map.harborY);
   });
 
   test("path tiles are marked as onPath", () => {

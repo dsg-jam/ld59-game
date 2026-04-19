@@ -10,7 +10,7 @@
 
   useTask(() => {
     if (meshRef?.material instanceof THREE.ShaderMaterial) {
-      meshRef.material.uniforms["uCenter"]!.value.set(ship.x, ship.y);
+      meshRef.material.uniforms["uCenter"]?.value.set(ship.x, ship.y);
     }
   });
 

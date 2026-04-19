@@ -93,8 +93,8 @@ test.describe("Semaphoria engine – timer", () => {
   test("difficulty 2 starts with shorter timer", () => {
     const easy = makeState(0);
     const hard = makeState(2);
-    const easyTimer = DIFFICULTY_CONFIG[0]!.timerS;
-    const hardTimer = DIFFICULTY_CONFIG[2]!.timerS;
+    const easyTimer = DIFFICULTY_CONFIG[0].timerS;
+    const hardTimer = DIFFICULTY_CONFIG[2].timerS;
     expect(easy.timeRemaining).toBe(easyTimer);
     expect(hard.timeRemaining).toBe(hardTimer);
     expect(hardTimer).toBeLessThan(easyTimer);
@@ -161,22 +161,22 @@ test.describe("Semaphoria engine – deriveStats", () => {
   test("deriveStats reflects phase as result", () => {
     let s = makePlayingState();
     s = tick(s, 99999, NO_INPUT, null); // timeout → failure
-    const stats = deriveStats(s, 0);
+    const stats = deriveStats(s);
     expect(stats.result).toBe("failure");
   });
 
   test("deriveStats includes signalsSent and nearMisses", () => {
     const s = makePlayingState();
-    const stats = deriveStats(s, 0);
+    const stats = deriveStats(s);
     expect(typeof stats.signalsSent).toBe("number");
     expect(typeof stats.nearMisses).toBe("number");
   });
 
   test("timeTaken equals timerS minus remaining", () => {
     let s = makePlayingState(0);
-    const configTimer = DIFFICULTY_CONFIG[0]!.timerS;
+    const configTimer = DIFFICULTY_CONFIG[0].timerS;
     s = tick(s, 10, NO_INPUT, null); // advance 10 seconds
-    const stats = deriveStats(s, 0);
+    const stats = deriveStats(s);
     // timeTaken ≈ 10 (may be slightly off due to drift/collision checks)
     expect(stats.timeTaken).toBeCloseTo(configTimer - s.timeRemaining, 0);
   });

@@ -17,7 +17,6 @@
   } = $props();
 
   let beamRef: THREE.Group | undefined;
-  let spotRef: THREE.SpotLight | undefined;
   let time = $state(0);
 
   const beamColor = $derived(
@@ -73,9 +72,6 @@
     penumbra={0.4}
     distance={40}
     castShadow={false}
-    oncreate={(ref) => {
-      spotRef = ref as THREE.SpotLight;
-    }}
   />
 
   <!-- Rotating beam cone (visual) -->

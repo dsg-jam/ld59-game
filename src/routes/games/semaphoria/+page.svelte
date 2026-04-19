@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
+  import { SvelteSet } from "svelte/reactivity";
   import { Canvas } from "@threlte/core";
   import Peer from "peerjs";
   import type { DataConnection } from "peerjs";
@@ -81,7 +82,7 @@
 
   // ── Key handling for Captain ───────────────────────────────────────────────
 
-  const keysHeld = new Set<string>();
+  const keysHeld = new SvelteSet<string>();
 
   function updateCaptainInput(): void {
     const left = keysHeld.has("ArrowLeft") || keysHeld.has("a");
@@ -112,7 +113,7 @@
     const msg = raw as NetMsg;
     switch (msg.t) {
       case "game-start":
-        startGame(msg.seed, msg.difficulty, false);
+        startGame(msg.seed, msg.difficulty);
         break;
       case "role":
         myRole = msg.role;
@@ -218,12 +219,12 @@
     const seed = Math.floor(Math.random() * SEED_MAX);
     const difficulty = 0 as 0 | 1 | 2;
     send({ t: "game-start", seed, difficulty });
-    startGame(seed, difficulty, true);
+    startGame(seed, difficulty);
   }
 
   // ── Game lifecycle ─────────────────────────────────────────────────────────
 
-  function startGame(seed: number, difficulty: 0 | 1 | 2, _host: boolean): void {
+  function startGame(seed: number, difficulty: 0 | 1 | 2): void {
     let state = createInitialState(seed, difficulty);
     state = startCountdown(state);
     gameState = state;
@@ -342,7 +343,7 @@
 
   const stats = $derived(
     gameState && (gameState.phase === "success" || gameState.phase === "failure")
-      ? deriveStats(gameState, 0)
+      ? deriveStats(gameState)
       : null
   );
 </script>

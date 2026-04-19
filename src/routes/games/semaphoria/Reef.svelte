@@ -11,9 +11,9 @@
     seed?: number;
   } = $props();
 
-  // Use a deterministic pseudo-random from the tile position for variety
+  // Use a deterministic pseudo-random from tile position + seed for variety
   const rng = (offset: number): number => {
-    const s = (x * 31 + y * 97 + offset * 13) & 0xffff;
+    const s = (x * 31 + y * 97 + seed * 53 + offset * 13) & 0xffff;
     return (s * 9301 + 49297) % 233280 / 233280;
   };
 

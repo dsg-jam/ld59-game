@@ -71,8 +71,9 @@ function generatePath(
   // Connect consecutive waypoints: first horizontal, then vertical
   const pathTiles: { x: number; y: number }[] = [];
   for (let wi = 0; wi < waypoints.length - 1; wi++) {
-    const from = waypoints[wi]!;
-    const to = waypoints[wi + 1]!;
+    const from = waypoints[wi];
+    const to = waypoints[wi + 1];
+    if (!from || !to) continue;
 
     // Horizontal segment
     const xDir = to.x > from.x ? 1 : to.x < from.x ? -1 : 0;
@@ -115,7 +116,7 @@ export function generateMap(seed: number, difficulty: Difficulty): GameMap {
   const rng = makePRNG(seed);
   const cols = GRID_COLS;
   const rows = GRID_ROWS;
-  const config = DIFFICULTY_CONFIG[difficulty] ?? DIFFICULTY_CONFIG[0]!;
+  const config = DIFFICULTY_CONFIG[difficulty];
 
   // Start at bottom-centre, harbor at top-centre
   const startX = Math.floor(cols / 2);

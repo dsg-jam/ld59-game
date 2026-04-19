@@ -73,7 +73,7 @@ export interface DifficultyConfig {
   label: string;
 }
 
-export const DIFFICULTY_CONFIG: readonly DifficultyConfig[] = [
+export const DIFFICULTY_CONFIG: readonly [DifficultyConfig, DifficultyConfig, DifficultyConfig] = [
   { reefDensity: 0.12, timerS: 150, pathTurns: 3, label: "CALM" },
   { reefDensity: 0.22, timerS: 120, pathTurns: 5, label: "CHOPPY" },
   { reefDensity: 0.32, timerS: 90, pathTurns: 7, label: "TEMPEST" },
