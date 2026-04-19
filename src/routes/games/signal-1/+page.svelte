@@ -1,9 +1,14 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import "./styles.css";
 
   onMount(() => {
     void import("$lib/games/signal-1/game");
+  });
+
+  onDestroy(async () => {
+    const mod = await import("$lib/games/signal-1/game");
+    mod.destroy();
   });
 </script>
 

@@ -1,10 +1,15 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import "./style.css";
   import { endState } from "$lib/games/dead-air/endState";
 
   onMount(() => {
     void import("$lib/games/dead-air/main");
+  });
+
+  onDestroy(async () => {
+    const mod = await import("$lib/games/dead-air/main");
+    mod.destroy();
   });
 </script>
 

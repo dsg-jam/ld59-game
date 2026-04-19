@@ -1373,7 +1373,7 @@ export function destroy(): void {
     if (selected) sendToHost({ t: "mimicElim", target: selected.id });
   });
 
-  window.addEventListener("keydown", (e) => {
+  const _keydown = (e: KeyboardEvent) => {
     if (
       ["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowLeft", "ArrowDown", "ArrowRight"].includes(
         e.code
@@ -1382,12 +1382,20 @@ export function destroy(): void {
       keys.add(e.code);
       e.preventDefault();
     }
-  });
-  window.addEventListener("keyup", (e) => {
+  };
+  const _keyup = (e: KeyboardEvent) => {
     keys.delete(e.code);
-  });
-
+  };
+  window.addEventListener("keydown", _keydown);
+  window.addEventListener("keyup", _keyup);
   window.addEventListener("resize", resizeCanvas);
+
+  _cleanupListeners = () => {
+    window.removeEventListener("keydown", _keydown);
+    window.removeEventListener("keyup", _keyup);
+    window.removeEventListener("resize", resizeCanvas);
+  };
+
   renderLobbyPlayers();
-  requestAnimationFrame(loop);
+  _raf = requestAnimationFrame(loop);
 })();

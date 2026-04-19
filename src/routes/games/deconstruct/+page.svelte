@@ -1,28 +1,24 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import "./style.css";
 
-  type GameWindow = Window &
-    typeof globalThis & {
-      hostGame?: () => void;
-      joinGame?: () => void;
-      hostStartNow?: () => void;
-      soloGame?: () => void;
-      onPickCard?: () => void;
-      onClear?: () => void;
-      onPass?: () => void;
-    };
+  type DeconMod = typeof import("$lib/games/deconstruct/main");
+  let mod: DeconMod | null = null;
 
-  const soloGame = (): void => (window as GameWindow).soloGame?.();
-  const hostGame = (): void => (window as GameWindow).hostGame?.();
-  const joinGame = (): void => (window as GameWindow).joinGame?.();
-  const hostStartNow = (): void => (window as GameWindow).hostStartNow?.();
-  const onPickCard = (): void => (window as GameWindow).onPickCard?.();
-  const onClear = (): void => (window as GameWindow).onClear?.();
-  const onPass = (): void => (window as GameWindow).onPass?.();
+  const soloGame = () => mod?.soloGame();
+  const hostGame = () => mod?.hostGame();
+  const joinGame = () => mod?.joinGame();
+  const hostStartNow = () => mod?.hostStartNow();
+  const onPickCard = () => mod?.onPickCard();
+  const onClear = () => mod?.onClear();
+  const onPass = () => mod?.onPass();
 
-  onMount(() => {
-    void import("$lib/games/deconstruct/main");
+  onMount(async () => {
+    mod = await import("$lib/games/deconstruct/main");
+  });
+
+  onDestroy(() => {
+    mod?.destroy();
   });
 </script>
 
