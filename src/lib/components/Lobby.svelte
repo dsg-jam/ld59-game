@@ -29,7 +29,8 @@
   {#if subtitle}<p>{subtitle}</p>{/if}
   <button onclick={onHost}>OPEN CHANNEL</button>
   <div class="or">— or —</div>
-  <input bind:value={joinCode} maxlength="6" placeholder="ROOM CODE" />
+  <label for="lobby-join-code">Room code</label>
+  <input id="lobby-join-code" bind:value={joinCode} maxlength="6" placeholder="ROOM CODE" />
   <button onclick={() => onJoin(joinCode)}>TUNE IN</button>
   {#if roomCode}
     <p>Share this code:</p>
