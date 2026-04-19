@@ -49,7 +49,7 @@ export const games: GameEntry[] = [
     title: "Signal Surge",
     tag: "Multiplayer",
     path: "/games/signal-surge",
-    description: "3-6 player signal packet race through a 3D broadcast channel.",
+    description: "2-6 player signal packet cup — race every track, GP scoring wins.",
   },
   {
     id: "semaphoria",
