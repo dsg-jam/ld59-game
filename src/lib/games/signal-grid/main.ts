@@ -107,13 +107,18 @@ const PIPE_SHAPES: PipeShapeDef[] = [
 const DEFAULT_PIPE: PipeShapeDef = { name: "H", glyph: "━", conn: [E, W] };
 
 // ---------------- DOM ----------------
-function getEl<T extends HTMLElement>(id: string): T {
+function getEl(id: string): HTMLElement;
+function getEl<T extends HTMLElement>(id: string, constructor: new () => T): T;
+function getEl<T extends HTMLElement>(id: string, constructor?: new () => T): HTMLElement | T {
   const el = document.getElementById(id);
   if (!el) throw new Error(`Element #${id} not found`);
-  return el as T;
+  if (constructor && !(el instanceof constructor)) {
+    throw new Error(`Element #${id} is not ${constructor.name}`);
+  }
+  return el;
 }
-const $ = <T extends HTMLElement>(id: string): T => getEl<T>(id);
-const board = $<HTMLCanvasElement>("board");
+const $ = (id: string): HTMLElement => getEl(id);
+const board = getEl("board", HTMLCanvasElement);
 const rawCtx = board.getContext("2d");
 if (!rawCtx) throw new Error("2d context not available");
 const ctx: CanvasRenderingContext2D = rawCtx;
@@ -166,14 +171,14 @@ function makeTile(type: string, props: Partial<Tile> = {}): Tile {
     dir: props.dir ?? 0,
     x: props.x ?? 0,
     y: props.y ?? 0,
-    fixed: props.fixed,
-    seq: props.seq,
-    period: props.period,
-    offset: props.offset,
-    loop: props.loop,
-    expected: props.expected,
-    _emittedIdx: props._emittedIdx,
   };
+  if (props.fixed !== undefined) t.fixed = props.fixed;
+  if (props.seq !== undefined) t.seq = props.seq;
+  if (props.period !== undefined) t.period = props.period;
+  if (props.offset !== undefined) t.offset = props.offset;
+  if (props.loop !== undefined) t.loop = props.loop;
+  if (props.expected !== undefined) t.expected = props.expected;
+  if (props._emittedIdx !== undefined) t._emittedIdx = props._emittedIdx;
   if (type === "pipe" && props.shape == null) t.shape = 0;
   if (type === "amp" && props.n == null) t.n = 1;
   if (type === "mul" && props.n == null) t.n = 2;
@@ -281,13 +286,17 @@ function loadLevel(idx: number) {
   // Install fixed tiles
   lvl.fixed.forEach((f) => {
     const row = state.grid[f.y];
-    if (row) row[f.x] = makeTile(f.kind, { ...f, fixed: true } as Partial<Tile>);
+    if (row) row[f.x] = makeTile(f.kind, { ...f, fixed: true });
   });
   (lvl.walls ?? []).forEach((w) => {
     const row = state.grid[w.y];
     if (row) row[w.x] = makeTile("wall", { ...w, fixed: true });
   });
-  state.bin = { ...(lvl.bin ?? {}) } as Record<string, number>;
+  const nextBin: Record<string, number> = {};
+  for (const [k, v] of Object.entries(lvl.bin ?? {})) {
+    if (typeof v === "number") nextBin[k] = v;
+  }
+  state.bin = nextBin;
   state.signals = [];
   state.tick = 0;
   state.running = false;
@@ -476,8 +485,8 @@ function renderInspector() {
   }
   insp.innerHTML = html;
   ["i-shape", "i-axis", "i-op"].forEach((id) => {
-    const el = document.getElementById(id) as HTMLSelectElement | null;
-    if (!el) return;
+    const el = document.getElementById(id);
+    if (!(el instanceof HTMLSelectElement)) return;
     el.onchange = () => {
       if (!state.selected) return;
       const sel2 = state.selected;
@@ -489,8 +498,8 @@ function renderInspector() {
       draw();
     };
   });
-  const nEl = document.getElementById("i-n") as HTMLInputElement | null;
-  if (nEl)
+  const nEl = document.getElementById("i-n");
+  if (nEl instanceof HTMLInputElement)
     nEl.oninput = () => {
       if (!state.selected) return;
       const sel3 = state.selected;
@@ -567,8 +576,8 @@ function placeToolAt(x: number, y: number, fromDir: number | null): boolean {
     }
     // Only debit bin when adding a new pipe (not when upgrading an existing one).
     if (!existing || existing.type !== "pipe") {
-      if ((state.bin.pipe ?? 0) <= 0) return false;
-      state.bin.pipe = (state.bin.pipe ?? 1) - 1;
+      if ((state.bin["pipe"] ?? 0) <= 0) return false;
+      state.bin["pipe"] = (state.bin["pipe"] ?? 1) - 1;
     }
     row[x] = makeTile("pipe", { shape: shapeIdx });
     return true;
@@ -586,7 +595,12 @@ function placeToolAt(x: number, y: number, fromDir: number | null): boolean {
 }
 
 // Drag state
-const drag = { active: false, button: -1, last: null as Cell | null, placed: false };
+const drag: { active: boolean; button: number; last: (Cell & {}) | null; placed: boolean } = {
+  active: false,
+  button: -1,
+  last: null,
+  placed: false,
+};
 
 function dirFromTo(from: Cell, to: Cell): number | null {
   if (to.x === from.x && to.y === from.y - 1) return N;
@@ -1383,8 +1397,9 @@ $("btn-clear").onclick = () => {
   draw();
 };
 $("speed").oninput = (e) => {
-  const target = e.target as HTMLInputElement | null;
-  const v = parseInt(target?.value ?? "0", 10);
+  const target = e.target;
+  if (!(target instanceof HTMLInputElement)) return;
+  const v = parseInt(target.value ?? "0", 10);
   state.speedMs = Math.round(550 - v * 25);
 };
 
@@ -1454,8 +1469,8 @@ function bootScreen() {
 
 // ---------------- Keyboard ----------------
 document.addEventListener("keydown", (e) => {
-  const target = e.target as HTMLElement | null;
-  if (target && (target.tagName === "INPUT" || target.tagName === "SELECT")) return;
+  const target = e.target;
+  if (target instanceof HTMLInputElement || target instanceof HTMLSelectElement) return;
   const k = e.key.toLowerCase();
   if (k === " ") {
     e.preventDefault();

@@ -7,18 +7,19 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "playwright test",
+    "test:container": "xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 MESA_GL_VERSION_OVERRIDE=3.3 playwright test --headed",
     "lint": "eslint .",
     "format": "prettier --write .",
     "typecheck": "svelte-kit sync && tsc --noEmit",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "ban-js": "bash -lc 'set -euo pipefail; files=$(git ls-files \"*.js\" \"*.mjs\" \"*.cjs\"); if [ -n \"$files\" ]; then echo \"JavaScript files are not allowed:\"; echo \"$files\"; exit 1; fi'"
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
   },
   "dependencies": {
     "@threlte/core": "^8.5.9",
     "@threlte/extras": "^9.14.8",
     "normalize.css": "^8.0.1",
     "peerjs": "^1.5.4",
-    "three": "^0.184.0"
+    "three": "^0.184.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -28,6 +29,7 @@
     "@sveltejs/adapter-static": "^3.0.10",
     "@sveltejs/kit": "^2.57.1",
     "@sveltejs/vite-plugin-svelte": "^7.0.0",
+    "@tsconfig/bases": "^1.0.23",
     "@types/node": "^25.6.0",
     "@types/three": "^0.184.0",
     "eslint": "^10.2.1",

@@ -44,7 +44,7 @@
     {/if}
     <button id="lobby-start-btn" disabled={!canStart} onclick={onStart}>START</button>
   {/if}
-  {#if status}<p id="lobby-status" class="status">{status}</p>{/if}
+  <p id="lobby-status" class="status">{status}</p>
 </div>
 
 <style>

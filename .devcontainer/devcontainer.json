@@ -29,14 +29,19 @@
   "portsAttributes": {
     "5173": {
       "label": "Vite dev server",
-      "onAutoForward": "openPreview"
+      "onAutoForward": "notify"
     },
     "4173": {
-      "label": "Vite preview"
+      "label": "Vite preview",
+      "onAutoForward": "notify"
     },
     "9323": {
-      "label": "Playwright UI"
+      "label": "Playwright UI",
+      "onAutoForward": "notify"
     }
+  },
+  "otherPortsAttributes": {
+    "onAutoForward": "silent"
   },
   "customizations": {
     "vscode": {

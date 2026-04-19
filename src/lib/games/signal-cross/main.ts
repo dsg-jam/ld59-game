@@ -66,6 +66,12 @@ type NetMsg =
   | { type: "lobby"; mode: GameMode; supervisorId: string | null }
   | { type: "action"; action: ActionMsg };
 
+function isNetMsg(data: unknown): data is NetMsg {
+  if (typeof data !== "object" || data === null) return false;
+  if (!("type" in data) || typeof data.type !== "string") return false;
+  return ["hello", "state", "event", "lobby", "action"].includes(data.type);
+}
+
 function makeRoomCode(): string {
   return `${ROOM_PREFIX}${makeCode(4)}`;
 }
@@ -80,8 +86,30 @@ export function mount(callbacks: Signal1Callbacks): Signal1Controls {
   let roomCode = "";
 
   // ── AUTHORITATIVE / MIRRORED STATE ─────────────────────────────────────────
-  const state = {
-    phase: "lobby" as "lobby" | "playing" | "ended",
+  type GameStateType = {
+    phase: "lobby" | "playing" | "ended";
+    levelIdx: number;
+    timeLeft: number;
+    duration: number;
+    goal: number;
+    nextCallIdx: number;
+    teamScore: number;
+    teamChaos: number;
+    teamPenalty: number;
+    correctCount: number;
+    players: Player[];
+    tickets: Ticket[];
+    log: LogEntry[];
+    levelTitle: string;
+    levelSubtitle: string;
+    gameMode: GameMode;
+    supervisorId: string | null;
+    timeoutCount: number;
+    agencyNextAt: number;
+  };
+
+  const state: GameStateType = {
+    phase: "lobby",
     levelIdx: 0,
     timeLeft: 0,
     duration: 0,
@@ -91,13 +119,13 @@ export function mount(callbacks: Signal1Callbacks): Signal1Controls {
     teamChaos: 0,
     teamPenalty: 0,
     correctCount: 0,
-    players: [] as Player[],
-    tickets: [] as Ticket[],
-    log: [] as LogEntry[],
+    players: [],
+    tickets: [],
+    log: [],
     levelTitle: "",
     levelSubtitle: "",
-    gameMode: "classic" as GameMode,
-    supervisorId: null as string | null,
+    gameMode: "classic",
+    supervisorId: null,
     timeoutCount: 0,
     agencyNextAt: 0,
   };
@@ -237,7 +265,11 @@ export function mount(callbacks: Signal1Callbacks): Signal1Controls {
           /* ignore */
         }
       });
-      conn.on("data", (data) => handleHostMessage(conn.peer, data as NetMsg));
+      conn.on("data", (data: unknown) => {
+        if (isNetMsg(data)) {
+          handleHostMessage(conn.peer, data);
+        }
+      });
       const drop = (): void => {
         clientConns.delete(conn.peer);
         const idx = state.players.findIndex((p) => p.id === conn.peer);
@@ -283,7 +315,11 @@ export function mount(callbacks: Signal1Callbacks): Signal1Controls {
         setNetStatus("CONNECTED TO " + code, "ok");
         conn.send({ type: "hello", name });
       });
-      conn.on("data", (data) => handleGuestMessage(data as NetMsg));
+      conn.on("data", (data: unknown) => {
+        if (isNetMsg(data)) {
+          handleGuestMessage(data);
+        }
+      });
       conn.on("close", () => {
         setNetStatus("DISCONNECTED", "err");
         callbacks.onToast("Host disconnected. Returning to title.");
@@ -681,13 +717,14 @@ export function mount(callbacks: Signal1Callbacks): Signal1Controls {
       shuffle(pool);
       return pool.slice(0, n);
     };
-    for (const type of shuffle([
+    const eventTypes = [
       "whoSpokeTo",
       "crossedCount",
       "whoRoutedByOp",
       "whoCutEarly",
       "lastCallerTo",
-    ] as const)) {
+    ] satisfies readonly string[];
+    for (const type of shuffle(eventTypes)) {
       if (type === "whoSpokeTo") {
         const ref = ended.find((e) => e.result !== "cut");
         if (!ref) continue;
@@ -826,16 +863,19 @@ export function mount(callbacks: Signal1Callbacks): Signal1Controls {
         { s: fromId, t: "Just a quick one." },
         { s: actualId, t: "Understood. Goodbye." },
       ];
-    } else if (WRONG[key]) {
-      base = WRONG[key] as DialogLine[];
     } else {
-      const expectName = CHARS[expectedId]?.name ?? expectedId;
-      const actualName = CHARS[actualId]?.name ?? actualId;
-      base = [
-        { s: fromId, t: pick(WRONG_FALLBACK_A).replace("[EXPECT]", expectName) },
-        { s: actualId, t: pick(WRONG_FALLBACK_B).replace("[ACTUAL]", actualName) },
-        { s: fromId, t: pick(WRONG_FALLBACK_C) },
-      ];
+      const wrongLines = WRONG[key];
+      if (wrongLines && Array.isArray(wrongLines)) {
+        base = wrongLines;
+      } else {
+        const expectName = CHARS[expectedId]?.name ?? expectedId;
+        const actualName = CHARS[actualId]?.name ?? actualId;
+        base = [
+          { s: fromId, t: pick(WRONG_FALLBACK_A).replace("[EXPECT]", expectName) },
+          { s: actualId, t: pick(WRONG_FALLBACK_B).replace("[ACTUAL]", actualName) },
+          { s: fromId, t: pick(WRONG_FALLBACK_C) },
+        ];
+      }
     }
     return [...base, { s: "sys", t: pick(CLOSERS) }];
   }

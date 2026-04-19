@@ -3,8 +3,40 @@ import { DEFAULT_TRACK_ID } from "./types.js";
 
 export type Phase = "lobby" | "game" | "raceEnd" | "cupEnd";
 
-export const gs = $state({
-  phase: "lobby" as Phase,
+type GameStateType = {
+  phase: Phase;
+  mySlot: number;
+  slotLabel: string;
+  operatorName: string;
+  joinCode: string;
+  roomCode: string;
+  roomWrapVisible: boolean;
+  startEnabled: boolean;
+  lobbyStatus: string;
+  netStatus: string;
+  lobbyPlayers: LobbyPlayer[];
+  snapshot: GameSnapshot | null;
+  countdownLabel: string;
+  winnerName: string;
+  finishOrder: FinishEntry[];
+  logs: LogEntry[];
+  pendingLane: number;
+  hudProgress: string;
+  hudBursts: number;
+  hudPlace: string;
+  hudTotal: number;
+  selectedTrackId: string;
+  activeTrackId: string;
+  cupStandings: CupStanding[];
+  cupTrackIndex: number;
+  cupTotalTracks: number;
+  nextTrackName: string;
+  canAdvanceTrack: boolean;
+  cupComplete: boolean;
+};
+
+export const gs: GameStateType = $state({
+  phase: "lobby",
   mySlot: -1,
   slotLabel: "--",
   operatorName: "",
@@ -14,12 +46,12 @@ export const gs = $state({
   startEnabled: false,
   lobbyStatus: "",
   netStatus: "Idle.",
-  lobbyPlayers: [] as LobbyPlayer[],
-  snapshot: null as GameSnapshot | null,
+  lobbyPlayers: [],
+  snapshot: null,
   countdownLabel: "",
   winnerName: "",
-  finishOrder: [] as FinishEntry[],
-  logs: [] as LogEntry[],
+  finishOrder: [],
+  logs: [],
   pendingLane: 2,
   hudProgress: "0.0",
   hudBursts: 0,
@@ -27,7 +59,7 @@ export const gs = $state({
   hudTotal: 0,
   selectedTrackId: DEFAULT_TRACK_ID,
   activeTrackId: DEFAULT_TRACK_ID,
-  cupStandings: [] as CupStanding[],
+  cupStandings: [],
   cupTrackIndex: 0,
   cupTotalTracks: 0,
   nextTrackName: "",

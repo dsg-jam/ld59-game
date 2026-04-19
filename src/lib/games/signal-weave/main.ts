@@ -38,6 +38,20 @@ type GuestMsg =
   | { t: "end"; harmony: string }
   | { t: "reject"; reason?: string };
 
+function isHostMsg(value: unknown): value is HostMsg {
+  if (typeof value !== "object" || value === null) return false;
+  if (!("t" in value) || typeof value.t !== "string") return false;
+  if (value.t === "ping") return true;
+  if (value.t === "offset") return "v" in value && typeof value["v"] === "number";
+  return false;
+}
+
+function isGuestMsg(value: unknown): value is GuestMsg {
+  if (typeof value !== "object" || value === null) return false;
+  if (!("t" in value) || typeof value.t !== "string") return false;
+  return ["hello", "start", "state", "burst", "end", "reject"].includes(value.t);
+}
+
 /** Callbacks the page provides so the game engine can update UI reactively. */
 export interface SignalWeaveCallbacks {
   onLobbyStatus(text: string): void;
@@ -263,7 +277,11 @@ export function mount(
         callbacks.onLobbyStatus("Operator connected. Ready to begin.");
         log("Second operator tuned in.");
       });
-      c.on("data", (d) => onHostMessage(d as HostMsg, 1));
+      c.on("data", (d: unknown) => {
+        if (isHostMsg(d)) {
+          onHostMessage(d, 1);
+        }
+      });
       c.on("close", () => {
         state.players = 1;
         conns[1] = null;
@@ -286,7 +304,11 @@ export function mount(
       if (!p) throw new Error("No peer");
       conn = p.connect(PEER_PREFIX + code, { reliable: true });
       conn.on("open", () => callbacks.onLobbyStatus("Connected. Awaiting host start."));
-      conn.on("data", (d) => onGuestMessage(d as GuestMsg));
+      conn.on("data", (d: unknown) => {
+        if (isGuestMsg(d)) {
+          onGuestMessage(d);
+        }
+      });
       conn.on("close", () => callbacks.onLobbyStatus("Disconnected from host."));
     });
     peer.on("error", (e) => callbacks.onLobbyStatus("Join peer error: " + describePeerError(e)));

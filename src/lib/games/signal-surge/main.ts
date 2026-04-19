@@ -82,6 +82,20 @@ interface RejectMsg {
 }
 type GuestMsg = HelloBackMsg | StartMsg | StateMsg | RaceEndMsg | CupEndMsg | RejectMsg;
 
+function isHostMsg(value: unknown): value is HostMsg {
+  if (typeof value !== "object" || value === null) return false;
+  if (!("t" in value) || typeof value.t !== "string") return false;
+  if (value.t === "intent") return true;
+  if (value.t === "helloJoin") return "name" in value && typeof value["name"] === "string";
+  return false;
+}
+
+function isGuestMsg(value: unknown): value is GuestMsg {
+  if (typeof value !== "object" || value === null) return false;
+  if (!("t" in value) || typeof value.t !== "string") return false;
+  return ["hello", "start", "state", "raceEnd", "cupEnd", "reject"].includes(value.t);
+}
+
 interface HostPlayer {
   slot: number;
   id: string;
@@ -165,7 +179,7 @@ function sendToHost(msg: HostMsg): void {
 }
 
 function colorForSlot(slot: number): string {
-  return PLAYER_COLOR_CSS[slot] ?? PLAYER_COLOR_CSS[0];
+  return PLAYER_COLOR_CSS[slot] ?? "#ffffff";
 }
 
 function lobbyPlayersList(): LobbyPlayer[] {
@@ -544,7 +558,11 @@ function handleGuestMessage(msg: GuestMsg): void {
 
 function addConn(conn: DataConnection): void {
   conns.set(conn.peer, conn);
-  conn.on("data", (d) => handleHostMessage(d as HostMsg, conn.peer));
+  conn.on("data", (d: unknown) => {
+    if (isHostMsg(d)) {
+      handleHostMessage(d, conn.peer);
+    }
+  });
   conn.on("close", () => {
     conns.delete(conn.peer);
     if (isHost && hostPlayers.delete(conn.peer)) {
@@ -653,7 +671,11 @@ export function joinGame(code: string, name: string): void {
       c.send({ t: "helloJoin", name: myName });
       gs.lobbyStatus = "Connected. Awaiting host start.";
     });
-    c.on("data", (d) => handleGuestMessage(d as GuestMsg));
+    c.on("data", (d: unknown) => {
+      if (isGuestMsg(d)) {
+        handleGuestMessage(d);
+      }
+    });
     c.on("close", () => {
       gs.lobbyStatus = "Disconnected from host.";
     });

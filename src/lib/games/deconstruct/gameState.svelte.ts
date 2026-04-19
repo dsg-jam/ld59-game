@@ -22,29 +22,56 @@ export type SignalRingTrigger = {
 export type LogEntry = { text: string; kind?: string };
 export type PlayerListEntry = { slot: number; name: string; color: string };
 
-export const gs = $state({
-  phase: "lobby" as "lobby" | "game",
-  grid: [] as ColKey[][][],
-  myHand: [] as Card[],
-  selectedCardIdx: null as number | null,
-  selected: [] as [number, number][],
-  allScores: [] as ScoreEntry[],
+export type GameState = {
+  phase: "lobby" | "game";
+  grid: ColKey[][][];
+  myHand: Card[];
+  selectedCardIdx: number | null;
+  selected: [number, number][];
+  allScores: ScoreEntry[];
+  turn: number;
+  locked: boolean;
+  playerCount: number;
+  playerNames: Record<number, string>;
+  mySlot: number;
+  isSolo: boolean;
+  risingBlockTriggers: BlockRiseTrigger[];
+  signalRingTriggers: SignalRingTrigger[];
+  logEntries: LogEntry[];
+  msgText: string;
+  msgKind: string;
+  showWait: boolean;
+  roomCode: string;
+  playerList: PlayerListEntry[];
+  lobbyStatus: string;
+  joinStatus: string;
+  joinCodeInput: string;
+  lobbyPanel: "menu" | "waiting" | "joining";
+};
+
+export const gs = $state<GameState>({
+  phase: "lobby",
+  grid: [],
+  myHand: [],
+  selectedCardIdx: null,
+  selected: [],
+  allScores: [],
   turn: 1,
   locked: false,
   playerCount: 1,
-  playerNames: {} as Record<number, string>,
+  playerNames: {},
   mySlot: 0,
   isSolo: false,
-  risingBlockTriggers: [] as BlockRiseTrigger[],
-  signalRingTriggers: [] as SignalRingTrigger[],
-  logEntries: [] as LogEntry[],
+  risingBlockTriggers: [],
+  signalRingTriggers: [],
+  logEntries: [],
   msgText: "",
   msgKind: "",
   showWait: false,
   roomCode: "",
-  playerList: [] as PlayerListEntry[],
+  playerList: [],
   lobbyStatus: "",
   joinStatus: "",
   joinCodeInput: "",
-  lobbyPanel: "menu" as "menu" | "waiting" | "joining",
+  lobbyPanel: "menu",
 });

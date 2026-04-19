@@ -1,11 +1,11 @@
 {
-  "extends": "./.svelte-kit/tsconfig.json",
+  "extends": [
+    "@tsconfig/bases/recommended",
+    "@tsconfig/bases/strictest",
+    "./.svelte-kit/tsconfig.json"
+  ],
   "compilerOptions": {
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
     "allowJs": false,
-    "target": "ES2025",
-    "verbatimModuleSyntax": true,
-    "skipLibCheck": true
+    "target": "ES2025"
   }
 }

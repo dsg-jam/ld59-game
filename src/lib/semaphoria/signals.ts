@@ -21,6 +21,17 @@ export type SignalCommand =
   | "rocks-left"
   | "rocks-right";
 
+const SIGNAL_COMMANDS: SignalCommand[] = [
+  "go",
+  "left",
+  "right",
+  "stop",
+  "reverse",
+  "rocks-ahead",
+  "rocks-left",
+  "rocks-right",
+];
+
 // ── SIGNAL ALPHABET ───────────────────────────────────────────────────────────
 
 /**
@@ -73,10 +84,8 @@ export function encodeSignal(command: SignalCommand): FlashPattern {
  * Returns the matched command or `null` if the pattern is unrecognised.
  */
 export function decodePattern(pattern: readonly Flash[]): SignalCommand | null {
-  for (const [cmd, reference] of Object.entries(SIGNAL_ALPHABET) as [
-    SignalCommand,
-    FlashPattern,
-  ][]) {
+  for (const cmd of SIGNAL_COMMANDS) {
+    const reference = SIGNAL_ALPHABET[cmd];
     if (flashPatternsMatch(pattern, reference)) return cmd;
   }
   return null;

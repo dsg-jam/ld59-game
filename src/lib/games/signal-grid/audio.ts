@@ -5,6 +5,10 @@ export const Audio = (() => {
   let ctx: AudioContext | null = null;
   let muted = false;
 
+  function isValidOscillatorType(type: unknown): type is OscillatorType {
+    return type === "sine" || type === "square" || type === "sawtooth" || type === "triangle";
+  }
+
   function ensure() {
     if (!ctx) ctx = getAudioContext();
     if (ctx.state === "suspended") ctx.resume();
@@ -13,7 +17,8 @@ export const Audio = (() => {
 
   function blip(freq = 660, dur = 0.06, type = "square", vol = 0.06) {
     if (muted) return;
-    sharedBlip(freq, dur, type as OscillatorType, vol);
+    const oscType: OscillatorType = isValidOscillatorType(type) ? type : "square";
+    sharedBlip(freq, dur, oscType, vol);
   }
 
   function chord(freqs: number[], dur = 0.18, type = "sine", vol = 0.05) {

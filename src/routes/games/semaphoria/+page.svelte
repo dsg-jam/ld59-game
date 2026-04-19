@@ -23,7 +23,6 @@
   import type { GameState, PlayerRole, CaptainInput } from "$lib/semaphoria/engine";
   import { SIGNAL_REFERENCE, encodeSignal } from "$lib/semaphoria/signals";
   import type { SignalCommand, FlashPattern } from "$lib/semaphoria/signals";
-  import type { SigColor } from "$lib/semaphoria/constants";
   import { SEED_MAX } from "$lib/semaphoria/constants";
   import {
     signalFlash,
@@ -262,7 +261,7 @@
       const newFlash = getCurrentFlashColor(gameState);
       if (newFlash !== prevFlash && newFlash && gameState.activeFlash?.flash) {
         const f = gameState.activeFlash.flash;
-        signalFlash(f.type, f.color as SigColor);
+        signalFlash(f.type, f.color);
       }
 
       // Network: captain sends position to keeper
@@ -363,7 +362,7 @@
 
   const flashColorRaw = $derived(gameState ? getCurrentFlashColor(gameState) : null);
   const isFlashing = $derived(!!flashColorRaw);
-  const flashColor = $derived(flashColorRaw as SigColor | null);
+  const flashColor = $derived(flashColorRaw);
 
   const stats = $derived(
     gameState && (gameState.phase === "success" || gameState.phase === "failure")
