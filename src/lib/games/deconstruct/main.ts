@@ -1199,20 +1199,8 @@ function startGame() {
   document.getElementById("ui-overlay")?.classList.remove("hidden");
 }
 
-type DeconWin = Window &
-  typeof globalThis & {
-    soloGame: () => void;
-    hostGame: () => void;
-    hostStartNow: () => void;
-    joinGame: () => void;
-    onPickCard: () => void;
-    onClear: () => void;
-    onPass: () => void;
-  };
-const dw = window as DeconWin;
-
 // Solo mode
-dw.soloGame = function () {
+export function soloGame() {
   isSolo = true;
   isHost = true;
   mySlot = 0;
@@ -1227,9 +1215,9 @@ dw.soloGame = function () {
 
   startGame();
   hostStartRound();
-};
+}
 
-dw.hostGame = function () {
+export function hostGame() {
   roomCode = makeCode();
   isHost = true;
   isSolo = false;
@@ -1299,9 +1287,9 @@ dw.hostGame = function () {
     const lobbyStatus = document.getElementById("lobby-status");
     if (lobbyStatus) lobbyStatus.textContent = "Error: " + err.type;
   });
-};
+}
 
-dw.hostStartNow = function () {
+export function hostStartNow() {
   if (HS.playerIds.length < 2) return;
   HS.started = true;
   HS.N = HS.playerIds.length;
@@ -1310,9 +1298,9 @@ dw.hostStartNow = function () {
   }
   startGame();
   hostStartRound();
-};
+}
 
-dw.joinGame = function () {
+export function joinGame() {
   const joinCodeEl = document.getElementById("join-code") as HTMLInputElement | null;
   const code = (joinCodeEl?.value ?? "").toUpperCase().trim();
   if (!code || code.length < 3) return;
@@ -1356,9 +1344,9 @@ dw.joinGame = function () {
     const js = document.getElementById("join-status");
     if (js) js.textContent = "Failed: " + err.type + ". Check the code.";
   });
-};
+}
 
-dw.onPickCard = function () {
+export function onPickCard() {
   if (S.locked || S.selectedCardIdx == null) return;
   const card = S.myHand[S.selectedCardIdx];
   if (!card || !validates(S.selected, card)) {
@@ -1390,15 +1378,15 @@ dw.onPickCard = function () {
     sendToHost({ type: "pick", cardIdx, sel });
     showWait(true);
   }
-};
+}
 
-dw.onClear = function () {
+export function onClear() {
   S.selected = [];
   updateHighlights();
   renderUI();
-};
+}
 
-dw.onPass = function () {
+export function onPass() {
   if (S.locked) return;
   S.locked = true;
   renderUI();
@@ -1421,12 +1409,13 @@ dw.onPass = function () {
     sendToHost({ type: "pick", cardIdx: -1, sel: null });
     showWait(true);
   }
-};
+}
 
 // ---- Animation loop ----
 const clock = new THREE.Clock();
+let _animRaf = 0;
 function animate() {
-  requestAnimationFrame(animate);
+  _animRaf = requestAnimationFrame(animate);
   const dt = clock.getDelta();
   orbitCtl.update();
 
@@ -1499,10 +1488,18 @@ function animate() {
   renderer.render(scene, camera);
 }
 
-window.addEventListener("resize", function () {
+const _onResize = function () {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
-});
+};
+window.addEventListener("resize", _onResize);
+
+/** Stop animation loop and release resize listener on route teardown. */
+export function destroy(): void {
+  cancelAnimationFrame(_animRaf);
+  _animRaf = 0;
+  window.removeEventListener("resize", _onResize);
+}
 
 animate();

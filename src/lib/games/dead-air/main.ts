@@ -33,6 +33,20 @@ import {
   dist,
 } from "$lib/dead-air-engine";
 
+// Module-level lifecycle state – populated when the IIFE runs on first import.
+let _raf = 0;
+let _cleanupListeners: (() => void) | null = null;
+
+/** Stop the game loop and release global event listeners / peer connection. */
+export function destroy(): void {
+  cancelAnimationFrame(_raf);
+  _raf = 0;
+  if (_cleanupListeners) {
+    _cleanupListeners();
+    _cleanupListeners = null;
+  }
+}
+
 (() => {
   interface PlayerSnap {
     id: string;
@@ -1326,7 +1340,7 @@ import {
     }
 
     drawMap(now);
-    requestAnimationFrame(loop);
+    _raf = requestAnimationFrame(loop);
   }
 
   // ── EVENTS ───────────────────────────────────────────────────────────────────
@@ -1359,7 +1373,7 @@ import {
     if (selected) sendToHost({ t: "mimicElim", target: selected.id });
   });
 
-  window.addEventListener("keydown", (e) => {
+  const _keydown = (e: KeyboardEvent) => {
     if (
       ["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowLeft", "ArrowDown", "ArrowRight"].includes(
         e.code
@@ -1368,12 +1382,20 @@ import {
       keys.add(e.code);
       e.preventDefault();
     }
-  });
-  window.addEventListener("keyup", (e) => {
+  };
+  const _keyup = (e: KeyboardEvent) => {
     keys.delete(e.code);
-  });
-
+  };
+  window.addEventListener("keydown", _keydown);
+  window.addEventListener("keyup", _keyup);
   window.addEventListener("resize", resizeCanvas);
+
+  _cleanupListeners = () => {
+    window.removeEventListener("keydown", _keydown);
+    window.removeEventListener("keyup", _keyup);
+    window.removeEventListener("resize", resizeCanvas);
+  };
+
   renderLobbyPlayers();
-  requestAnimationFrame(loop);
+  _raf = requestAnimationFrame(loop);
 })();
