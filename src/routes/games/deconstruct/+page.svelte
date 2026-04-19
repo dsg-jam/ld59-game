@@ -31,6 +31,13 @@
     }
   };
 
+  function handleCardKeydown(e: KeyboardEvent, idx: number) {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      selectCard(idx);
+    }
+  }
+
   function slotName(slot: number): string {
     if (slot === gs.mySlot) return "You";
     return gs.playerNames[slot] || (gs.isSolo ? "CPU" : "P" + (slot + 1));
@@ -62,7 +69,9 @@
               <div class="or-divider">&mdash; multiplayer &mdash;</div>
               <button onclick={hostGame}>OPEN CHANNEL</button>
               <div class="or-divider" style="opacity:0.3;font-size:12px;">&mdash; or &mdash;</div>
+              <label for="decon-join-code" style="opacity:0.6;font-size:12px;">Frequency ID (room code)</label>
               <input
+                id="decon-join-code"
                 maxlength="6"
                 placeholder="FREQ ID"
                 spellcheck="false"
@@ -147,7 +156,7 @@
               onclick={() => selectCard(idx)}
               role="button"
               tabindex="0"
-              onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectCard(idx); } }}
+              onkeydown={(e) => handleCardKeydown(e, idx)}
             >
               <div class="card-num">Δ{card.init}</div>
               <div class="card-label">{card.shape.name}</div>

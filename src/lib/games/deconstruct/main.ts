@@ -1,7 +1,7 @@
 import Peer from "peerjs";
 import type { DataConnection } from "peerjs";
 import { makeCode } from "$lib/peer";
-import type { Card, ColKey, GameMsg, MoveResult, Pick, ScoreEntry, ShapeDef } from "./types.js";
+import type { Card, ColKey, GameMsg, MoveResult, Pick, ScoreEntry } from "./types.js";
 import {
   W,
   H,
@@ -19,6 +19,12 @@ import {
 } from "./types.js";
 import { gs } from "./gameState.svelte.js";
 import type { BlockRiseTrigger, SignalRingTrigger } from "./gameState.svelte.js";
+
+// ---- ID counter for animation triggers ----
+let _triggerCounter = 0;
+function nextTriggerId(prefix: string): string {
+  return `${prefix}-${++_triggerCounter}`;
+}
 
 // ---- Seeded RNG (mulberry32) ----
 let _rng = Math.random;
@@ -127,9 +133,12 @@ function generateHand(): Card[] {
     if (inits.has(init)) continue;
     inits.add(init);
     const maxIdx = Math.min(SHAPES.length - 1, Math.floor(init / 4));
+    const shapeIdx = Math.floor(rand() * (maxIdx + 1));
+    const shape = SHAPES[shapeIdx] ?? SHAPES[0];
+    if (!shape) continue;
     h.push({
       init,
-      shape: SHAPES[Math.floor(rand() * (maxIdx + 1))] ?? (SHAPES[0] as ShapeDef),
+      shape,
       color: COLKEYS[Math.floor(rand() * COLKEYS.length)] ?? "R",
     } as Card);
   }
@@ -207,7 +216,7 @@ function animateBlockRemoval(sel: [number, number][], heights: number[][]) {
       const [wx, wy, wz] = gridToWorld(bx, by, topZ);
       const colorKey = gs.grid[bx]?.[by]?.[topZ] ?? "R";
       triggers.push({
-        id: `rise-${bx}-${by}-${Date.now()}-${Math.random()}`,
+        id: nextTriggerId(`rise-${bx}-${by}`),
         colorKey,
         worldX: wx,
         worldY: wy,
@@ -236,7 +245,7 @@ function spawnSignalRipples(
     const topZ = Math.max(0, h - 1);
     const [wx, wy, wz] = gridToWorld(bx, by, topZ);
     triggers.push({
-      id: `ring-${bx}-${by}-${Date.now()}-${Math.random()}`,
+      id: nextTriggerId(`ring-${bx}-${by}`),
       worldX: wx,
       worldZ: wz,
       worldY: wy,

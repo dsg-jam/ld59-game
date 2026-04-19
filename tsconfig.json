@@ -5,6 +5,7 @@
     "noUncheckedIndexedAccess": true,
     "allowJs": false,
     "target": "ES2025",
-    "verbatimModuleSyntax": true
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true
   }
 }
