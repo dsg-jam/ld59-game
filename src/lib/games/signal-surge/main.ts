@@ -11,13 +11,14 @@ import type {
   PlayerSnap,
   LobbyPlayer,
   FinishEntry,
+  TrackVariant,
+  CupStanding,
 } from "./types.js";
 import {
   PEER_PREFIX,
   MAX_PLAYERS,
   MIN_PLAYERS,
   LANE_COUNT,
-  TRACK_LENGTH,
   BASE_SPEED,
   NOISE_SLOW,
   NOISE_DURATION,
@@ -29,12 +30,14 @@ import {
   NETWORK_TICK_RATE,
   ROOM_CODE_LENGTH,
   COUNTDOWN_SECONDS,
-  OBSTACLE_CELL_STRIDE,
   OBSTACLE_START_Z,
   FINISH_GRACE_SECONDS,
   NAME_MAX,
   PLAYER_COLOR_CSS,
+  TRACK_VARIANTS,
   clampLane,
+  getTrackVariant,
+  pointsForPlace,
 } from "./types.js";
 
 interface IntentMsg {
@@ -59,16 +62,25 @@ interface StateMsg {
   t: "state";
   s: GameSnapshot;
 }
-interface EndMsg {
-  t: "end";
+interface RaceEndMsg {
+  t: "raceEnd";
   winnerSlot: number;
   order: number[];
+  standings: CupStanding[];
+  trackIndex: number;
+  totalTracks: number;
+  nextTrackName: string;
+  cupComplete: boolean;
+}
+interface CupEndMsg {
+  t: "cupEnd";
+  standings: CupStanding[];
 }
 interface RejectMsg {
   t: "reject";
   reason?: string;
 }
-type GuestMsg = HelloBackMsg | StartMsg | StateMsg | EndMsg | RejectMsg;
+type GuestMsg = HelloBackMsg | StartMsg | StateMsg | RaceEndMsg | CupEndMsg | RejectMsg;
 
 interface HostPlayer {
   slot: number;
@@ -95,18 +107,19 @@ function createRng(seed: number): () => number {
   };
 }
 
-function buildObstacles(seed: number): Obstacle[] {
+function buildObstacles(seed: number, variant: TrackVariant): Obstacle[] {
   const rng = createRng(seed);
   const obstacles: Obstacle[] = [];
   let id = 0;
-  for (let z = OBSTACLE_START_Z; z < TRACK_LENGTH - 8; z += OBSTACLE_CELL_STRIDE) {
-    const occupancy = Math.min(LANE_COUNT - 1, 1 + Math.floor(rng() * 3));
+  const maxOccupancy = Math.min(LANE_COUNT - 1, variant.maxLanesOccupied);
+  for (let z = OBSTACLE_START_Z; z < variant.trackLength - 8; z += variant.obstacleStride) {
+    const occupancy = 1 + Math.floor(rng() * maxOccupancy);
     const lanes = new Set<number>();
     while (lanes.size < occupancy) {
       lanes.add(Math.floor(rng() * LANE_COUNT));
     }
     for (const lane of lanes) {
-      const kind: ObstacleKind = rng() < 0.28 ? "amp" : "noise";
+      const kind: ObstacleKind = rng() < variant.ampRatio ? "amp" : "noise";
       obstacles.push({ id: id++, kind, lane, z: z + (rng() - 0.5) * 1.4 });
     }
   }
@@ -129,6 +142,10 @@ let hostWinnerSlot: number | null = null;
 let hostFinishOrder: number[] = [];
 let hostGraceTimer = 0;
 let hostObstacles: Obstacle[] = [];
+let hostTrackVariant: TrackVariant = getTrackVariant(null);
+const hostCupStandings = new Map<number, CupStanding>();
+let hostCupOrder: TrackVariant[] = [];
+let hostCupTrackIndex = 0;
 
 let gameLoop: GameLoop | null = null;
 let netTimer = 0;
@@ -181,8 +198,9 @@ function buildSnapshot(): GameSnapshot {
     countdown: hostCountdown,
     players,
     obstacles: hostObstacles,
-    trackLength: TRACK_LENGTH,
+    trackLength: hostTrackVariant.trackLength,
     laneCount: LANE_COUNT,
+    trackId: hostTrackVariant.id,
     winnerSlot: hostWinnerSlot,
     order: hostFinishOrder,
   };
@@ -190,6 +208,7 @@ function buildSnapshot(): GameSnapshot {
 
 function publishSnapshot(s: GameSnapshot): void {
   gs.snapshot = s;
+  gs.activeTrackId = s.trackId;
   if (s.countdown > 0 && s.running) {
     gs.countdownLabel = Math.ceil(s.countdown).toString();
   } else if (s.running && !s.finished) {
@@ -197,7 +216,7 @@ function publishSnapshot(s: GameSnapshot): void {
   }
   const me = s.players.find((p) => p.slot === gs.mySlot);
   if (me) {
-    gs.hudProgress = ((me.z / TRACK_LENGTH) * 100).toFixed(1);
+    gs.hudProgress = ((me.z / s.trackLength) * 100).toFixed(1);
     gs.hudBursts = me.burstsLeft;
     const sorted = [...s.players].sort((a, b) => b.z - a.z);
     const place = sorted.findIndex((p) => p.slot === gs.mySlot) + 1;
@@ -239,7 +258,7 @@ function hostTick(dt: number): void {
     if (p.finished) continue;
     if (p.lane !== p.targetLane) p.lane = clampLane(p.lane + Math.sign(p.targetLane - p.lane));
     const prevZ = p.z;
-    p.z = Math.min(TRACK_LENGTH, p.z + speedFor(p) * dt);
+    p.z = Math.min(hostTrackVariant.trackLength, p.z + speedFor(p) * dt);
 
     for (const obs of hostObstacles) {
       if (p.consumed.has(obs.id)) continue;
@@ -253,7 +272,7 @@ function hostTick(dt: number): void {
       }
     }
 
-    if (!p.finished && p.z >= TRACK_LENGTH) {
+    if (!p.finished && p.z >= hostTrackVariant.trackLength) {
       p.finished = true;
       p.finishTime = hostTime;
       hostFinishOrder.push(p.slot);
@@ -274,34 +293,48 @@ function hostTick(dt: number): void {
   }
 }
 
-function emitEndToUI(winnerSlot: number, order: number[]): void {
-  const byId = [...hostPlayers.values()];
-  const bySlot = new Map(byId.map((p) => [p.slot, p]));
-  const winner = bySlot.get(winnerSlot);
-  const details: FinishEntry[] = order
+function standingsArray(): CupStanding[] {
+  return [...hostCupStandings.values()].sort((a, b) => {
+    if (b.points !== a.points) return b.points - a.points;
+    return a.lastPlace - b.lastPlace;
+  });
+}
+
+function applyStandingsToLocalUI(
+  standings: CupStanding[],
+  order: FinishEntry[],
+  winnerName: string,
+  cupComplete: boolean,
+  trackIndex: number,
+  totalTracks: number,
+  nextTrackName: string
+): void {
+  gs.winnerName = winnerName;
+  gs.finishOrder = order;
+  gs.cupStandings = standings;
+  gs.cupTrackIndex = trackIndex;
+  gs.cupTotalTracks = totalTracks;
+  gs.nextTrackName = nextTrackName;
+  gs.cupComplete = cupComplete;
+  gs.canAdvanceTrack = !cupComplete;
+  gs.phase = cupComplete ? "cupEnd" : "raceEnd";
+}
+
+function finishDetailsFromHost(order: number[]): FinishEntry[] {
+  const bySlot = new Map([...hostPlayers.values()].map((p) => [p.slot, p]));
+  return order
     .map((s) => bySlot.get(s))
     .filter((p): p is HostPlayer => !!p)
     .map((p) => ({ slot: p.slot, name: p.name, color: p.color }));
-  if (winner) {
-    gs.winnerName = winner.name;
-    gs.finishOrder = details;
-    gs.phase = "end";
-  }
 }
 
-function emitGuestEnd(winnerSlot: number, order: number[]): void {
+function finishDetailsFromSnapshot(order: number[]): FinishEntry[] {
   const players = gs.snapshot?.players ?? [];
   const bySlot = new Map(players.map((p) => [p.slot, p]));
-  const winner = bySlot.get(winnerSlot);
-  const details: FinishEntry[] = order
+  return order
     .map((s) => bySlot.get(s))
     .filter((p): p is PlayerSnap => !!p)
     .map((p) => ({ slot: p.slot, name: p.name, color: p.color }));
-  if (winner) {
-    gs.winnerName = winner.name;
-    gs.finishOrder = details;
-    gs.phase = "end";
-  }
 }
 
 function endRound(): void {
@@ -311,17 +344,67 @@ function endRound(): void {
   const remaining = [...hostPlayers.values()].filter((p) => !p.finished).sort((a, b) => b.z - a.z);
   for (const p of remaining) hostFinishOrder.push(p.slot);
   sendState();
-  if (hostWinnerSlot !== null) {
-    broadcast({ t: "end", winnerSlot: hostWinnerSlot, order: hostFinishOrder });
-    emitEndToUI(hostWinnerSlot, hostFinishOrder);
+  if (hostWinnerSlot === null) return;
+
+  // Award points Mario Kart style.
+  hostFinishOrder.forEach((slot, idx) => {
+    const entry = hostCupStandings.get(slot);
+    if (!entry) return;
+    entry.points += pointsForPlace(idx);
+    entry.lastPlace = idx + 1;
+  });
+
+  const standings = standingsArray();
+  hostCupTrackIndex += 1;
+  const cupComplete = hostCupTrackIndex >= hostCupOrder.length;
+  const nextVariant = cupComplete ? null : (hostCupOrder[hostCupTrackIndex] ?? null);
+  const nextTrackName = nextVariant?.name ?? "";
+  const details = finishDetailsFromHost(hostFinishOrder);
+  const winner = [...hostPlayers.values()].find((p) => p.slot === hostWinnerSlot);
+
+  broadcast({
+    t: "raceEnd",
+    winnerSlot: hostWinnerSlot,
+    order: hostFinishOrder,
+    standings,
+    trackIndex: hostCupTrackIndex,
+    totalTracks: hostCupOrder.length,
+    nextTrackName,
+    cupComplete,
+  });
+  if (cupComplete) broadcast({ t: "cupEnd", standings });
+
+  applyStandingsToLocalUI(
+    standings,
+    details,
+    winner?.name ?? "",
+    cupComplete,
+    hostCupTrackIndex,
+    hostCupOrder.length,
+    nextTrackName
+  );
+}
+
+function prepareCup(): void {
+  hostCupOrder = [...TRACK_VARIANTS];
+  hostCupTrackIndex = 0;
+  hostCupStandings.clear();
+  for (const p of hostPlayers.values()) {
+    hostCupStandings.set(p.slot, {
+      slot: p.slot,
+      name: p.name,
+      color: p.color,
+      points: 0,
+      lastPlace: 0,
+    });
   }
 }
 
-function beginRound(): void {
-  if (!isHost) return;
-  if (hostPlayers.size < MIN_PLAYERS || hostPlayers.size > MAX_PLAYERS) return;
+function resetRoundState(variant: TrackVariant): void {
+  hostTrackVariant = variant;
+  gs.activeTrackId = hostTrackVariant.id;
   const seed = (Math.random() * 0xffffffff) >>> 0;
-  hostObstacles = buildObstacles(seed);
+  hostObstacles = buildObstacles(seed, hostTrackVariant);
   hostTime = 0;
   hostCountdown = COUNTDOWN_SECONDS;
   hostRunning = true;
@@ -346,18 +429,45 @@ function beginRound(): void {
     p.finishTime = null;
     p.consumed = new Set();
   });
+}
 
+function beginRound(): void {
+  if (!isHost) return;
+  if (hostPlayers.size < MIN_PLAYERS || hostPlayers.size > MAX_PLAYERS) return;
+  const variant = hostCupOrder[hostCupTrackIndex];
+  if (!variant) return;
+  resetRoundState(variant);
+  gs.cupTrackIndex = hostCupTrackIndex;
+  gs.cupTotalTracks = hostCupOrder.length;
   sendState();
   broadcast({ t: "start" });
   gs.phase = "game";
-  pushLog("Broadcast channel open. Packets staged.");
+  pushLog(`Track ${hostCupTrackIndex + 1}/${hostCupOrder.length}: ${variant.name}.`);
+}
+
+function startCup(): void {
+  if (!isHost) return;
+  if (hostPlayers.size < MIN_PLAYERS || hostPlayers.size > MAX_PLAYERS) return;
+  prepareCup();
+  gs.cupStandings = standingsArray();
+  gs.cupTotalTracks = hostCupOrder.length;
+  gs.cupTrackIndex = 0;
+  gs.cupComplete = false;
+  beginRound();
+}
+
+function advanceToNextRound(): void {
+  if (!isHost) return;
+  if (hostCupTrackIndex >= hostCupOrder.length) return;
+  beginRound();
 }
 
 function handleHostMessage(msg: HostMsg, fromId: string): void {
   if (msg.t === "helloJoin") {
     const c = conns.get(fromId);
-    if (hostRunning || hostFinished) {
-      if (c && c.open) c.send({ t: "reject", reason: "Race already in progress." });
+    const cupStarted = hostCupOrder.length > 0;
+    if (cupStarted || hostRunning) {
+      if (c && c.open) c.send({ t: "reject", reason: "Cup already in progress." });
       return;
     }
     if (hostPlayers.size >= MAX_PLAYERS) {
@@ -407,11 +517,26 @@ function handleGuestMessage(msg: GuestMsg): void {
     gs.lobbyStatus = "Linked as packet " + (msg.slot + 1) + ".";
   } else if (msg.t === "start") {
     gs.phase = "game";
-    pushLog("Host launched the race.");
+    pushLog("Host launched the track.");
   } else if (msg.t === "state") {
     publishSnapshot(msg.s);
-  } else if (msg.t === "end") {
-    emitGuestEnd(msg.winnerSlot, msg.order);
+  } else if (msg.t === "raceEnd") {
+    const details = finishDetailsFromSnapshot(msg.order);
+    const winner = msg.standings.find((s) => s.slot === msg.winnerSlot);
+    applyStandingsToLocalUI(
+      msg.standings,
+      details,
+      winner?.name ?? "",
+      msg.cupComplete,
+      msg.trackIndex,
+      msg.totalTracks,
+      msg.nextTrackName
+    );
+  } else if (msg.t === "cupEnd") {
+    gs.cupStandings = msg.standings;
+    gs.cupComplete = true;
+    gs.canAdvanceTrack = false;
+    gs.phase = "cupEnd";
   } else if (msg.t === "reject") {
     gs.lobbyStatus = msg.reason ?? "Unable to join channel.";
   }
@@ -445,6 +570,10 @@ function resetNet(): void {
   isHost = false;
   myId = null;
   hostObstacles = [];
+  hostTrackVariant = getTrackVariant(null);
+  hostCupStandings.clear();
+  hostCupOrder = [];
+  hostCupTrackIndex = 0;
   hostTime = 0;
   hostCountdown = COUNTDOWN_SECONDS;
   hostRunning = false;
@@ -535,7 +664,11 @@ export function joinGame(code: string, name: string): void {
 }
 
 export function startGame(): void {
-  if (isHost && hostPlayers.size >= MIN_PLAYERS) beginRound();
+  startCup();
+}
+
+export function nextTrack(): void {
+  advanceToNextRound();
 }
 
 function setLane(lane: number): void {

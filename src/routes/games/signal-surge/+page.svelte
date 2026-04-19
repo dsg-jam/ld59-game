@@ -32,6 +32,11 @@
   function onStart(): void {
     mod?.startGame();
   }
+  function onNextTrack(): void {
+    mod?.nextTrack();
+  }
+
+  const isHostUI = $derived(gs.mySlot === 0);
 </script>
 
 <svelte:head>
@@ -49,8 +54,8 @@
     <div id="lobby" role="dialog" aria-modal="true" aria-labelledby="surge-lobby-title">
       <div class="card">
         <h1 id="surge-lobby-title">SIGNAL SURGE</h1>
-        <p>Three to six operators race packets down a broadcast channel.</p>
-        <p>Ride amplifiers, dodge noise, fire bursts. First carrier through wins.</p>
+        <p>Two to six operators race packets through a broadcast cup.</p>
+        <p>Every round cycles to the next track. Points award like a GP — highest total wins.</p>
 
         <label class="field" for="surge-name">
           <span>Operator callsign</span>
@@ -100,10 +105,10 @@
               {/each}
             </div>
             <button type="button" disabled={!gs.startEnabled} onclick={onStart}>
-              LAUNCH RACE
+              LAUNCH CUP
             </button>
             {#if !gs.startEnabled}
-              <div class="hint">Need at least 3 operators to launch.</div>
+              <div class="hint">Need at least 2 operators to launch.</div>
             {/if}
           </div>
         {/if}
@@ -113,20 +118,69 @@
     </div>
   {/if}
 
-  {#if gs.phase === "end"}
-    <div id="endscreen" role="dialog" aria-modal="true" aria-labelledby="surge-end-title">
+  {#if gs.phase === "raceEnd"}
+    <div id="endscreen" role="dialog" aria-modal="true" aria-labelledby="surge-race-end-title">
       <div class="card">
-        <h1 id="surge-end-title">CHANNEL CLEARED</h1>
+        <h1 id="surge-race-end-title">
+          TRACK {gs.cupTrackIndex}/{gs.cupTotalTracks} CLEARED
+        </h1>
         <p>Winner: <strong>{gs.winnerName}</strong></p>
-        <ol class="order">
-          {#each gs.finishOrder as entry, idx (entry.slot)}
+        <div class="results-grid">
+          <div class="results-col">
+            <h3>TRACK FINISH</h3>
+            <ol class="order">
+              {#each gs.finishOrder as entry, idx (entry.slot)}
+                <li style:color={entry.color}>
+                  <span class="place">{String(idx + 1).padStart(2, "0")}</span>
+                  {entry.name}
+                </li>
+              {/each}
+            </ol>
+          </div>
+          <div class="results-col">
+            <h3>CUP STANDINGS</h3>
+            <ol class="order">
+              {#each gs.cupStandings as entry, idx (entry.slot)}
+                <li style:color={entry.color}>
+                  <span class="place">{String(idx + 1).padStart(2, "0")}</span>
+                  {entry.name} <span class="points">{entry.points} pts</span>
+                </li>
+              {/each}
+            </ol>
+          </div>
+        </div>
+        {#if isHostUI}
+          <button type="button" onclick={onNextTrack}>
+            NEXT TRACK{gs.nextTrackName ? ` — ${gs.nextTrackName}` : ""}
+          </button>
+        {:else}
+          <p class="hint">Waiting for host to launch {gs.nextTrackName || "next track"}…</p>
+        {/if}
+      </div>
+    </div>
+  {/if}
+
+  {#if gs.phase === "cupEnd"}
+    <div id="endscreen" role="dialog" aria-modal="true" aria-labelledby="surge-cup-end-title">
+      <div class="card">
+        <h1 id="surge-cup-end-title">CUP COMPLETE</h1>
+        {#if gs.cupStandings[0]}
+          <p>
+            Cup champion: <strong style:color={gs.cupStandings[0].color}
+              >{gs.cupStandings[0].name}</strong
+            >
+            with {gs.cupStandings[0].points} pts
+          </p>
+        {/if}
+        <ol class="order final">
+          {#each gs.cupStandings as entry, idx (entry.slot)}
             <li style:color={entry.color}>
               <span class="place">{String(idx + 1).padStart(2, "0")}</span>
-              {entry.name}
+              {entry.name} <span class="points">{entry.points} pts</span>
             </li>
           {/each}
         </ol>
-        <p class="hint">Refresh to start a new race.</p>
+        <p class="hint">Refresh to run the cup again.</p>
       </div>
     </div>
   {/if}
@@ -137,6 +191,11 @@
       <div class="chip">PLACE <b>{gs.hudPlace}/{gs.hudTotal}</b></div>
       <div class="chip">PROGRESS <b>{gs.hudProgress}%</b></div>
       <div class="chip">BURSTS <b>{gs.hudBursts}</b></div>
+      {#if gs.cupTotalTracks > 0}
+        <div class="chip">
+          TRACK <b>{gs.cupTrackIndex + 1}/{gs.cupTotalTracks}</b>
+        </div>
+      {/if}
       {#if gs.countdownLabel}
         <div class="chip countdown">T-{gs.countdownLabel}</div>
       {/if}

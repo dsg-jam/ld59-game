@@ -198,6 +198,30 @@ input[type="text"] {
   color: var(--dim);
   margin-right: 6px;
 }
+.order .points {
+  color: var(--dim);
+  font-size: 12px;
+  margin-left: 6px;
+  letter-spacing: 0.08em;
+}
+.results-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin: 12px 0;
+}
+.results-col h3 {
+  margin: 0 0 6px;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: var(--acc);
+}
+.results-col .order {
+  padding-left: 20px;
+}
+#endscreen .card {
+  max-width: 540px;
+}
 
 /* In-game HUD */
 .hud {
