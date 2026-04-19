@@ -11,6 +11,7 @@ import {
   SHAPES,
   MAX_PLAYERS,
   PEER_PREFIX,
+  PLAYER_CSS,
   TOTAL_ROUNDS,
   MAX_INITIATIVE,
   WINNER_TIED,
@@ -538,14 +539,6 @@ function onMessage(data: unknown, fromSlot: number) {
 
 // ---- Lobby / PeerJS ----
 function updatePlayerList() {
-  const PLAYER_CSS = [
-    "#03dac6",
-    "#cf6679",
-    "#fdd835",
-    "#3700b3",
-    "#ff7043",
-    "#66bb6a",
-  ];
   gs.playerList = HS.playerIds.map((_, i) => ({
     slot: i,
     name:
