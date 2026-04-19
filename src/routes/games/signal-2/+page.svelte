@@ -11,8 +11,9 @@
   <title>SIGNAL // ldjam59</title>
 </svelte:head>
 
-<div id="crt">
-  <div id="scanlines"></div>
+<div class="signal-2-page">
+  <div id="crt">
+    <div id="scanlines"></div>
 
   <header id="topbar">
     <div class="logo">
@@ -98,7 +99,8 @@
     </div>
   </div>
 
-  <div id="boot" class="boot">
-    <pre id="boot-text"></pre>
+    <div id="boot" class="boot">
+      <pre id="boot-text"></pre>
+    </div>
   </div>
 </div>

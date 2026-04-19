@@ -1,4 +1,4 @@
-:root {
+.signal-1-page {
   --brass: #d8a34a;
   --brass-deep: #7a5a1e;
   --wood: #3a2414;
@@ -12,14 +12,13 @@
   --shadow: rgba(0, 0, 0, 0.55);
 }
 
-* {
+.signal-1-page * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
-html,
-body {
+.signal-1-page {
   height: 100%;
   font-family: "Courier New", ui-monospace, monospace;
   color: var(--cream);
@@ -27,8 +26,6 @@ body {
   overflow: hidden;
   user-select: none;
   -webkit-user-select: none;
-}
-body {
   position: relative;
   min-height: 100vh;
 }
