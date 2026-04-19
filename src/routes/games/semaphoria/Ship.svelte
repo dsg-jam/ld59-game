@@ -15,11 +15,17 @@
   let targetPos = $derived(new THREE.Vector3(ship.x, 0, ship.y));
   let targetRot = $derived(Math.PI - ship.heading);
 
-  // Smooth camera-follow lerp
-  let smoothX = $state(ship.x);
-  let smoothY = $state(ship.y);
+  // Smooth camera-follow lerp — initialised to 0 and set on first useTask frame
+  let smoothX = $state(0);
+  let smoothY = $state(0);
+  let shipInitialised = false;
 
   useTask((dt) => {
+    if (!shipInitialised) {
+      smoothX = ship.x;
+      smoothY = ship.y;
+      shipInitialised = true;
+    }
     const lerpK = 1 - Math.exp(-dt * 8);
     smoothX += (ship.x - smoothX) * lerpK;
     smoothY += (ship.y - smoothY) * lerpK;

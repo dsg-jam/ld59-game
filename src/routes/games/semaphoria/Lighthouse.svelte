@@ -16,7 +16,7 @@
     isFlashing?: boolean;
   } = $props();
 
-  let beamRef: THREE.Mesh | undefined;
+  let beamRef: THREE.Group | undefined;
   let spotRef: THREE.SpotLight | undefined;
   let time = $state(0);
 
@@ -82,7 +82,7 @@
   <T.Group
     position.y={4.6}
     oncreate={(ref) => {
-      beamRef = ref as THREE.Mesh;
+      beamRef = ref as THREE.Group;
     }}
   >
     <T.Mesh rotation.x={Math.PI / 2} position.z={3}>

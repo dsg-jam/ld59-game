@@ -26,8 +26,9 @@
 
   let camRef: THREE.PerspectiveCamera | undefined;
 
-  const LIGHTHOUSE_X = -2.5;
-  const LIGHTHOUSE_Z = map.rows / 2;
+  // The lighthouse position is outside the grid, static per map
+  const LIGHTHOUSE_X = $derived(-2.5);
+  const LIGHTHOUSE_Z = $derived(map.rows / 2);
 
   // Collect visible reef tiles
   const visibleReefs = $derived(
@@ -36,11 +37,17 @@
       .filter((t) => t.type === "reef" && revealedTileKeys.has(`${t.x},${t.y}`))
   );
 
-  // Smooth camera follow
-  let camX = $state(ship.x);
-  let camZ = $state(ship.y);
+  // Smooth camera follow — initialise from current ship position
+  let camX = $state(0);
+  let camZ = $state(0);
+  let camInitialised = false;
 
   useTask((dt) => {
+    if (!camInitialised) {
+      camX = ship.x;
+      camZ = ship.y;
+      camInitialised = true;
+    }
     const k = 1 - Math.exp(-dt * 5);
     camX += (ship.x - camX) * k;
     camZ += (ship.y - camZ) * k;

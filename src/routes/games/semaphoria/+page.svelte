@@ -356,12 +356,6 @@
   {#if lobbyPhase === "lobby"}
     <div class="lobby-wrap">
       <div class="lobby-card">
-        <h1>SEMAPHORIA</h1>
-        <p>
-          One captain. One keeper. No words — only light.<br />
-          Navigate treacherous reefs guided only by lighthouse signals.
-        </p>
-
         <div class="role-selector">
           <button
             class="role-btn"
@@ -380,7 +374,7 @@
         </div>
 
         <Lobby
-          title=""
+          title="SEMAPHORIA"
           subtitle="Open a channel or enter a room code to join."
           onHost={handleHost}
           onJoin={handleJoin}

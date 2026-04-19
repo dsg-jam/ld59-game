@@ -19,16 +19,16 @@
     isFlashing?: boolean;
   } = $props();
 
-  const LIGHTHOUSE_X = -2.5;
-  const LIGHTHOUSE_Z = map.rows / 2;
+  const LIGHTHOUSE_X = $derived(-2.5);
+  const LIGHTHOUSE_Z = $derived(map.rows / 2);
 
   // Coarsened ship area shown to keeper (not exact position)
   const areaIndicator = $derived(getKeeperAreaTile(ship));
 
   // Camera: orthographic overhead view of the whole map
-  const camHeight = Math.max(map.cols, map.rows) * 0.9;
-  const camX = map.cols / 2 - 0.5;
-  const camZ = map.rows / 2 - 0.5;
+  const camHeight = $derived(Math.max(map.cols, map.rows) * 0.9);
+  const camX = $derived(map.cols / 2 - 0.5);
+  const camZ = $derived(map.rows / 2 - 0.5);
 
   // Colour map for tile types
   const TILE_COLORS: Record<string, string> = {

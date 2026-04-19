@@ -18,7 +18,7 @@
     transparent: true,
     depthWrite: false,
     uniforms: {
-      uCenter: { value: new THREE.Vector2(ship.x, ship.y) },
+      uCenter: { value: new THREE.Vector2(0, 0) },
       uRadius: { value: FOG_RADIUS },
       uFogColor: { value: new THREE.Color(0x040c16) },
     },
