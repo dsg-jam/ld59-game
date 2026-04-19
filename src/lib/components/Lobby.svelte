@@ -36,7 +36,7 @@
     <div class="room">{roomCode}</div>
     {#if players.length}
       <div class="players">
-        {#each players as player}
+        {#each players as player (player)}
           <div>{player}</div>
         {/each}
       </div>

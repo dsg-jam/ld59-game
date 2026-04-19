@@ -3,7 +3,7 @@
   import "./style.css";
 
   onMount(() => {
-    void import("./main");
+    void import("$lib/games/signal-2/main");
   });
 </script>
 
@@ -59,7 +59,7 @@
         <div class="spacer"></div>
         <div class="speed">
           <label for="speed">SPEED</label>
-          <input id="speed" type="range" min="1" max="20" value="6">
+          <input id="speed" type="range" min="1" max="20" value="6" />
         </div>
       </div>
     </section>
@@ -69,9 +69,9 @@
         <h3>PARTS BIN</h3>
         <div id="palette"></div>
         <div class="hint">
-          Click a part, then click the grid.<br>
-          Right-click a pipe to cycle shape. Right-click a gate to delete.<br>
-          Click a placed tile to configure.<br>
+          Click a part, then click the grid.<br />
+          Right-click a pipe to cycle shape. Right-click a gate to delete.<br />
+          Click a placed tile to configure.<br />
           <b>Hotkeys:</b> Space=run, S=step, R=reset, [/]=cycle shape, 1-6=pick part
         </div>
       </div>

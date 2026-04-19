@@ -10,12 +10,9 @@ import {
   WORLD_W,
   WORLD_H,
   TOWER_REQUIRED,
-  REPAIR_RADIUS,
-  DARK_CHECK_RADIUS,
   WARM_X,
   WARM_Y,
   VOTE_DURATION_MS,
-  MAX_PLAYERS,
   PLAYER_COLORS,
   createDefaultTowers,
   createPlayer,
@@ -28,13 +25,18 @@ import {
   clamp,
   dist,
 } from "../src/lib/dead-air-engine";
-import type { Player, Tower, Role, VoteState } from "../src/lib/dead-air-engine";
+import type { Player, Role, VoteState } from "../src/lib/dead-air-engine";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 /** Build a players Map from an array. */
 function playersMap(arr: Player[]): Map<string, Player> {
   return new Map(arr.map((p) => [p.id, p]));
+}
+
+function assertDefined<T>(v: T | undefined, msg?: string): T {
+  if (v === undefined) throw new Error(msg ?? "Expected defined value");
+  return v;
 }
 
 // ── Unit-level engine tests ──────────────────────────────────────────────────
@@ -66,8 +68,8 @@ test.describe("Dead Air engine – createDefaultTowers", () => {
   test("returns independent copies", () => {
     const a = createDefaultTowers();
     const b = createDefaultTowers();
-    a[0]!.progress = 99;
-    expect(b[0]!.progress).toBe(0);
+    assertDefined(a[0]).progress = 99;
+    expect(assertDefined(b[0]).progress).toBe(0);
   });
 });
 
@@ -97,7 +99,7 @@ test.describe("Dead Air engine – assignRoles", () => {
     const mimics = [...roles.entries()].filter(([, r]) => r === "mimic");
     expect(mimics).toHaveLength(1);
     // With rng=0, Fisher-Yates produces a deterministic shuffle
-    const mimicId = mimics[0]![0];
+    const mimicId = assertDefined(mimics[0])[0];
     expect(roles.get(mimicId)).toBe("mimic");
     for (const [id, role] of roles) {
       if (id !== mimicId) expect(role).toBe("researcher");
@@ -205,7 +207,7 @@ test.describe("Dead Air engine – checkWinConditions", () => {
 test.describe("Dead Air engine – updateTowers", () => {
   test("tower progresses when researcher is within repair radius", () => {
     const towers = createDefaultTowers();
-    const t0 = towers[0]!;
+    const t0 = assertDefined(towers[0]);
     const players = playersMap([
       { id: "r1", name: "R", color: "#0f0", x: t0.x, y: t0.y, alive: true, spectator: false },
     ]);
@@ -217,7 +219,7 @@ test.describe("Dead Air engine – updateTowers", () => {
 
   test("tower does NOT progress when only mimic is nearby", () => {
     const towers = createDefaultTowers();
-    const t0 = towers[0]!;
+    const t0 = assertDefined(towers[0]);
     const players = playersMap([
       { id: "m1", name: "M", color: "#f00", x: t0.x, y: t0.y, alive: true, spectator: false },
     ]);
@@ -229,7 +231,7 @@ test.describe("Dead Air engine – updateTowers", () => {
 
   test("tower does NOT progress past TOWER_REQUIRED", () => {
     const towers = createDefaultTowers();
-    const t0 = towers[0]!;
+    const t0 = assertDefined(towers[0]);
     t0.progress = TOWER_REQUIRED - 1;
     const players = playersMap([
       { id: "r1", name: "R", color: "#0f0", x: t0.x, y: t0.y, alive: true, spectator: false },
@@ -242,7 +244,7 @@ test.describe("Dead Air engine – updateTowers", () => {
 
   test("dead researcher does not repair", () => {
     const towers = createDefaultTowers();
-    const t0 = towers[0]!;
+    const t0 = assertDefined(towers[0]);
     const players = playersMap([
       { id: "r1", name: "R", color: "#0f0", x: t0.x, y: t0.y, alive: false, spectator: true },
     ]);
@@ -256,7 +258,7 @@ test.describe("Dead Air engine – updateTowers", () => {
 test.describe("Dead Air engine – isIsolatedInDark", () => {
   test("player near a tower is NOT isolated", () => {
     const towers = createDefaultTowers();
-    const t0 = towers[0]!;
+    const t0 = assertDefined(towers[0]);
     const players = playersMap([
       { id: "r1", name: "R", color: "#0f0", x: t0.x, y: t0.y, alive: true, spectator: false },
       { id: "m1", name: "M", color: "#f00", x: 0, y: 0, alive: true, spectator: false },
@@ -430,17 +432,17 @@ test.describe("Dead Air engine – full game round simulation", () => {
     expect(checkWinConditions(players, roles, towers)).toBeNull();
 
     // Researchers move to towers and repair them
-    const t0 = towers[0]!;
-    const t1 = towers[1]!;
-    const t2 = towers[2]!;
+    const t0 = assertDefined(towers[0]);
+    const t1 = assertDefined(towers[1]);
+    const t2 = assertDefined(towers[2]);
 
     // Move researchers to towers
-    players.get("p2")!.x = t0.x;
-    players.get("p2")!.y = t0.y;
-    players.get("p3")!.x = t1.x;
-    players.get("p3")!.y = t1.y;
-    players.get("p4")!.x = t2.x;
-    players.get("p4")!.y = t2.y;
+    assertDefined(players.get("p2")).x = t0.x;
+    assertDefined(players.get("p2")).y = t0.y;
+    assertDefined(players.get("p3")).x = t1.x;
+    assertDefined(players.get("p3")).y = t1.y;
+    assertDefined(players.get("p4")).x = t2.x;
+    assertDefined(players.get("p4")).y = t2.y;
 
     // Simulate 30+ seconds of repair (dt per tick, many ticks)
     for (let i = 0; i < 300; i++) {
@@ -471,13 +473,13 @@ test.describe("Dead Air engine – full game round simulation", () => {
     expect(checkWinConditions(players, roles, towers)).toBeNull();
 
     // Mimic eliminates p2
-    players.get("p2")!.alive = false;
-    players.get("p2")!.spectator = true;
+    assertDefined(players.get("p2")).alive = false;
+    assertDefined(players.get("p2")).spectator = true;
     expect(checkWinConditions(players, roles, towers)).toBeNull(); // 1 researcher left
 
     // Mimic eliminates p3
-    players.get("p3")!.alive = false;
-    players.get("p3")!.spectator = true;
+    assertDefined(players.get("p3")).alive = false;
+    assertDefined(players.get("p3")).spectator = true;
     expect(checkWinConditions(players, roles, towers)).toBe("mimic"); // 0 researchers
   });
 
@@ -506,8 +508,8 @@ test.describe("Dead Air engine – full game round simulation", () => {
     expect(result.correct).toBe(true);
 
     // Apply the elimination
-    players.get("m1")!.alive = false;
-    players.get("m1")!.spectator = true;
+    assertDefined(players.get("m1")).alive = false;
+    assertDefined(players.get("m1")).spectator = true;
 
     // Researchers win
     expect(checkWinConditions(players, roles, towers)).toBe("researchers");
@@ -536,8 +538,8 @@ test.describe("Dead Air engine – full game round simulation", () => {
     expect(result.correct).toBe(false);
 
     // Apply elimination
-    players.get("r1")!.alive = false;
-    players.get("r1")!.spectator = true;
+    assertDefined(players.get("r1")).alive = false;
+    assertDefined(players.get("r1")).spectator = true;
 
     // Game continues — 2 researchers left
     expect(checkWinConditions(players, roles, towers)).toBeNull();
@@ -558,9 +560,9 @@ test.describe("Dead Air engine – full game round simulation", () => {
     ]);
 
     // r1 starts repairing tower A
-    const tA = towers[0]!;
-    players.get("r1")!.x = tA.x;
-    players.get("r1")!.y = tA.y;
+    const tA = assertDefined(towers[0]);
+    assertDefined(players.get("r1")).x = tA.x;
+    assertDefined(players.get("r1")).y = tA.y;
 
     // Simulate 35 seconds of repair for tower A
     for (let i = 0; i < 350; i++) {
@@ -570,14 +572,14 @@ test.describe("Dead Air engine – full game round simulation", () => {
     expect(checkWinConditions(players, roles, towers)).toBeNull(); // not done yet
 
     // r1 moves to tower B
-    const tB = towers[1]!;
-    players.get("r1")!.x = tB.x;
-    players.get("r1")!.y = tB.y;
+    const tB = assertDefined(towers[1]);
+    assertDefined(players.get("r1")).x = tB.x;
+    assertDefined(players.get("r1")).y = tB.y;
 
     // r2 repairs tower C simultaneously
-    const tC = towers[2]!;
-    players.get("r2")!.x = tC.x;
-    players.get("r2")!.y = tC.y;
+    const tC = assertDefined(towers[2]);
+    assertDefined(players.get("r2")).x = tC.x;
+    assertDefined(players.get("r2")).y = tC.y;
 
     // Simulate another 35 seconds
     for (let i = 0; i < 350; i++) {
@@ -596,7 +598,7 @@ test.describe("Dead Air engine – full game round simulation", () => {
       ["r1", "researcher"],
     ]);
     const towers = createDefaultTowers();
-    const tA = towers[0]!;
+    const tA = assertDefined(towers[0]);
     const players = playersMap([
       {
         id: "m1",
@@ -636,8 +638,8 @@ test.describe("Dead Air engine – full game round simulation", () => {
     expect(isIsolatedInDark("r1", players, roles, towers)).toBe(true);
 
     // Eliminate the researcher
-    players.get("r1")!.alive = false;
-    players.get("r1")!.spectator = true;
+    assertDefined(players.get("r1")).alive = false;
+    assertDefined(players.get("r1")).spectator = true;
 
     // Mimic wins — 0 researchers alive
     expect(checkWinConditions(players, roles, towers)).toBe("mimic");

@@ -3,7 +3,7 @@
   import "./styles.css";
 
   onMount(() => {
-    void import("./game");
+    void import("$lib/games/signal-1/game");
   });
 </script>
 
@@ -38,13 +38,22 @@
       <div class="divider"><span>OR</span></div>
       <label class="field inline">
         <span class="field-label">ROOM CODE</span>
-        <input id="room-input" type="text" maxlength="12" placeholder="SIG-XXXX" autocomplete="off" />
+        <input
+          id="room-input"
+          type="text"
+          maxlength="12"
+          placeholder="SIG-XXXX"
+          autocomplete="off"
+        />
       </label>
       <button id="join-btn" class="big-btn secondary">JOIN</button>
     </div>
 
     <p id="net-status" class="net-status"></p>
-    <p class="tip">click caller, then recipient · click a live plug or cable to disconnect · esc releases a held plug</p>
+    <p class="tip">
+      click caller, then recipient · click a live plug or cable to disconnect · esc releases a held
+      plug
+    </p>
   </div>
 </div>
 
@@ -64,9 +73,13 @@
     <div class="mode-picker">
       <span class="hud-label">SHIFT MODE</span>
       <div class="mode-buttons">
-        <button class="mode-btn host-only active" data-mode="classic" id="mode-classic">CLASSIC</button>
+        <button class="mode-btn host-only active" data-mode="classic" id="mode-classic"
+          >CLASSIC</button
+        >
         <button class="mode-btn host-only" data-mode="verify" id="mode-verify">VERIFY CARDS</button>
-        <button class="mode-btn host-only" data-mode="supervisor" id="mode-supervisor">SUPERVISOR</button>
+        <button class="mode-btn host-only" data-mode="supervisor" id="mode-supervisor"
+          >SUPERVISOR</button
+        >
       </div>
       <div id="mode-desc" class="mode-desc">Classic switchboard. Ring → patch → hang up.</div>
       <div id="supervisor-pick" class="supervisor-pick" style="display:none">
@@ -122,8 +135,10 @@
     <div class="panel-label">EXCHANGE 47</div>
     <div id="board" class="board"></div>
     <div class="panel-screws">
-      <div class="screw"></div><div class="screw"></div>
-      <div class="screw"></div><div class="screw"></div>
+      <div class="screw"></div>
+      <div class="screw"></div>
+      <div class="screw"></div>
+      <div class="screw"></div>
     </div>
   </section>
 

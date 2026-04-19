@@ -1,9 +1,10 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import "./style.css";
+  import { endState } from "$lib/games/dead-air/endState";
 
   onMount(() => {
-    void import("./main.js");
+    void import("$lib/games/dead-air/main");
   });
 </script>
 
@@ -101,11 +102,26 @@
   </div>
 </div>
 
-<div id="end">
-  <div class="inner">
-    <h2 id="end-title" aria-live="polite"></h2>
-    <p id="end-sub"></p>
-    <ul id="reveal"></ul>
-    <button id="play-again">PLAY AGAIN</button>
+{#if $endState}
+  <div id="end">
+    <div class="inner">
+      <h2
+        aria-live="polite"
+        style:color={$endState.winner === "researchers" ? "var(--ok)" : "var(--danger)"}
+      >
+        {$endState.winner === "researchers" ? "SIGNAL RESTORED" : "THE MIMIC WINS"}
+      </h2>
+      <p>
+        {$endState.winner === "researchers"
+          ? "The outpost reconnects to the world."
+          : "The relay falls silent in the storm."}
+      </p>
+      <ul>
+        {#each $endState.roles as r (r.name)}
+          <li>{r.name} — {r.role.toUpperCase()}</li>
+        {/each}
+      </ul>
+      <button onclick={() => location.reload()}>PLAY AGAIN</button>
+    </div>
   </div>
-</div>
+{/if}

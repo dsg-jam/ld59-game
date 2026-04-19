@@ -1,15 +1,22 @@
-name: Lint & Format Check
+name: Lint, Typecheck, and Format
+run-name: Lint, Typecheck, and Format (${{ github.event_name }})
 
 on:
   pull_request:
+  merge_group:
   push:
     branches: [main]
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
+    name: Lint, Typecheck, and Format
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -25,6 +32,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-ci-cache-
       - run: npm ci
+      - run: npm run ban-js
       - run: npm run check
       - run: npm run typecheck
       - run: npm run lint

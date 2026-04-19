@@ -9,7 +9,7 @@
 </script>
 
 <div class="log">
-  {#each entries.slice(0, maxEntries) as entry}
+  {#each entries.slice(0, maxEntries) as entry (entry.text)}
     <div class={entry.kind ?? ""}>{entry.text}</div>
   {/each}
 </div>
