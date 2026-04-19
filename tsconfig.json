@@ -3,6 +3,9 @@
   "compilerOptions": {
     "strict": true,
     "noUncheckedIndexedAccess": true,
-    "allowJs": false
+    "allowJs": false,
+    "target": "ES2025",
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true
   }
 }

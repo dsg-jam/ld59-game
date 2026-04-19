@@ -1,17 +1,601 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
+  import { onMount } from "svelte";
+  import {
+    CHARS,
+    LEVELS,
+    PENALTY_APPROVE_BAD,
+    PENALTY_DENY_WRONG,
+    PENALTY_EARLY,
+    SCORE_CHAOS,
+    SCORE_CORRECT,
+    SCORE_DENY_RIGHT,
+  } from "$lib/games/signal-cross/data";
+  import { sfx } from "$lib/games/signal-cross/audio";
+  import type {
+    GameEvent,
+    GameMode,
+    GameSnapshot,
+    LobbyState,
+    LogEntry,
+    Signal1Controls,
+    Ticket,
+  } from "$lib/games/signal-cross/types";
   import "./styles.css";
 
-  type SignalCrossMod = typeof import("$lib/games/signal-cross/game");
-  let mod: SignalCrossMod | null = null;
+  type Floater = {
+    id: number;
+    text: string;
+    x: number;
+    y: number;
+    kind: "score" | "chaos" | "miss";
+  };
 
-  onMount(async () => {
-    mod = await import("$lib/games/signal-cross/game");
+  const INITIAL_SNAPSHOT: GameSnapshot = {
+    phase: "lobby",
+    levelIdx: 0,
+    timeLeft: 0,
+    duration: 0,
+    goal: 0,
+    teamScore: 0,
+    teamChaos: 0,
+    teamPenalty: 0,
+    correctCount: 0,
+    tickets: [],
+    players: [],
+    log: [],
+    levelTitle: "",
+    levelSubtitle: "",
+    gameMode: "classic",
+    supervisorId: null,
+  };
+
+  const MODE_DESCS: Record<GameMode, string> = {
+    classic: "Classic switchboard. Ring → patch → hang up.",
+    verify:
+      "Every call comes with a call slip. Before patching, review caller, line, and request. Deny forged or flagged slips.",
+    supervisor:
+      "One operator becomes Supervisor: no cables, stamps APPROVE/DENY. Patchers only see calls after they're approved.",
+  };
+
+  let snapshot = $state<GameSnapshot>(INITIAL_SNAPSHOT);
+  let snapshotAt = $state(Date.now());
+  let lobby = $state<LobbyState>({ mode: "classic", supervisorId: null });
+  let roomCode = $state("");
+  let netStatus = $state<{ msg: string; kind: "" | "ok" | "err" }>({ msg: "", kind: "" });
+  let myId = $state("");
+  let isHost = $state(false);
+  let nameInput = $state("");
+  let roomInput = $state("");
+  let toast = $state<string | null>(null);
+  let floaters = $state<Floater[]>([]);
+  let frameTick = $state(Date.now());
+
+  let slipModalTicketId = $state<number | null>(null);
+  let slipModalRole = $state<"verify" | "supervisor">("verify");
+  let agencyModalTicketId = $state<number | null>(null);
+
+  let floaterSeq = 0;
+  let toastHandle: ReturnType<typeof setTimeout> | null = null;
+  let rafId = 0;
+  let controls: Signal1Controls | null = null;
+  // Non-reactive DOM ref map — element lookups for cable/floater anchoring only.
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity
+  const plugEls = new Map<string, HTMLElement>();
+
+  function registerPlug(node: HTMLElement, id: string): { destroy(): void } {
+    plugEls.set(id, node);
+    return {
+      destroy() {
+        plugEls.delete(id);
+      },
+    };
+  }
+
+  function plugCenter(id: string): { x: number; y: number } | null {
+    const el = plugEls.get(id);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }
+
+  const screen = $derived.by<"title" | "lobby" | "game" | "end">(() => {
+    if (!myId) return "title";
+    if (snapshot.phase === "playing") return "game";
+    if (snapshot.phase === "ended") return "end";
+    return "lobby";
   });
 
-  onDestroy(() => {
-    mod?.destroy();
+  const me = $derived(snapshot.players.find((p) => p.id === myId));
+  const lvl = $derived(LEVELS[snapshot.levelIdx]);
+  const ringingTickets = $derived(
+    snapshot.tickets.filter((t) => t.status === "ringing" && t.kind === "call")
+  );
+  const liveTickets = $derived(snapshot.tickets.filter((t) => t.status === "live"));
+  const agencyTickets = $derived(
+    snapshot.tickets.filter((t) => t.status === "ringing" && t.kind === "agency")
+  );
+  const slipTicket = $derived(
+    slipModalTicketId == null
+      ? null
+      : (snapshot.tickets.find((t) => t.id === slipModalTicketId) ?? null)
+  );
+  const agencyTicket = $derived(
+    agencyModalTicketId == null
+      ? null
+      : (snapshot.tickets.find((t) => t.id === agencyModalTicketId) ?? null)
+  );
+
+  const displayTimeLeft = $derived(
+    snapshot.phase === "playing"
+      ? Math.max(0, snapshot.timeLeft - (frameTick - snapshotAt) / 1000)
+      : snapshot.timeLeft
+  );
+  const timerPct = $derived(
+    snapshot.duration > 0 ? (displayTimeLeft / snapshot.duration) * 100 : 0
+  );
+  const teamTotal = $derived(snapshot.teamScore + snapshot.teamChaos);
+  const totalMaxCables = $derived(snapshot.players.reduce((s, p) => s + p.maxCables, 0));
+  const freeCables = $derived(snapshot.players.reduce((s, p) => s + p.cables, 0));
+  const hudModeLabel = $derived.by(() => {
+    const m = snapshot.gameMode;
+    if (m === "classic") return "CLASSIC";
+    if (m === "verify") return "VERIFY";
+    return myId === snapshot.supervisorId ? "SUPERVISOR (YOU)" : "SUPERVISOR";
   });
+
+  const modeDesc = $derived.by(() => {
+    if (lobby.mode === "supervisor" && snapshot.players.length < 2) {
+      return "Supervisor mode requires 2+ operators.";
+    }
+    return MODE_DESCS[lobby.mode];
+  });
+
+  const startDisabled = $derived(
+    !isHost || (lobby.mode === "supervisor" && snapshot.players.length < 2)
+  );
+
+  const endPassed = $derived(snapshot.correctCount >= snapshot.goal);
+  const endIsLast = $derived(snapshot.levelIdx + 1 >= LEVELS.length);
+
+  type CablePath = {
+    id: number;
+    d: string;
+    color: string;
+    ax: number;
+    ay: number;
+    bx: number;
+    by: number;
+  };
+  const cablePaths = $derived.by<CablePath[]>(() => {
+    void frameTick;
+    const paths: CablePath[] = [];
+    for (const t of liveTickets) {
+      const conn = t.connection;
+      if (!conn) continue;
+      const a = plugCenter(t.from);
+      const b = plugCenter(conn.actualTo);
+      if (!a || !b) continue;
+      const owner = snapshot.players.find((p) => p.id === conn.byPlayer);
+      const color = owner?.color ?? "#68c6ff";
+      const d = `M ${a.x} ${a.y + 8} Q ${(a.x + b.x) / 2} ${Math.max(a.y, b.y) + 100}, ${b.x} ${b.y + 8}`;
+      paths.push({ id: t.id, d, color, ax: a.x, ay: a.y, bx: b.x, by: b.y });
+    }
+    return paths;
+  });
+
+  function handleEvent(ev: GameEvent): void {
+    switch (ev.type) {
+      case "ring":
+        sfx.ring();
+        break;
+      case "connect":
+        if (ev.correct) sfx.connect();
+        else sfx.chaos();
+        break;
+      case "disconnected": {
+        const p = plugCenter(ev.toId);
+        if (ev.result === "cut") {
+          sfx.penalty();
+          if (p) pushFloater(`−${PENALTY_EARLY} EARLY CUT`, p.x, p.y - 20, "chaos");
+        } else if (ev.result === "routed") {
+          sfx.hangup();
+          if (p) pushFloater(`+${SCORE_CORRECT} ROUTED`, p.x, p.y - 20, "score");
+        } else if (ev.result === "chaos") {
+          sfx.hangup();
+          if (p) pushFloater(`+${SCORE_CHAOS} CHAOS`, p.x, p.y - 20, "miss");
+        }
+        break;
+      }
+      case "line":
+        sfx.line();
+        break;
+      case "timeout": {
+        sfx.penalty();
+        const p = plugCenter(ev.fromId);
+        if (p) pushFloater(`−${ev.penalty} TIMEOUT`, p.x, p.y - 20, "chaos");
+        break;
+      }
+      case "tick":
+        sfx.tick();
+        break;
+      case "stamp":
+        sfx.stamp();
+        break;
+      case "denied": {
+        sfx.stamp();
+        const p = plugCenter(ev.fromId);
+        if (p) {
+          if (ev.correct) pushFloater(`+${SCORE_DENY_RIGHT} DENIED`, p.x, p.y - 20, "score");
+          else pushFloater(`−${PENALTY_DENY_WRONG} WRONG DENY`, p.x, p.y - 20, "chaos");
+        }
+        break;
+      }
+      case "badApprove": {
+        sfx.penalty();
+        const p = plugCenter(ev.fromId);
+        if (p) pushFloater(`−${PENALTY_APPROVE_BAD} BAD APPROVE`, p.x, p.y - 20, "chaos");
+        break;
+      }
+      case "agencyRing":
+        sfx.agency();
+        showToast("☎ THE AGENCY IS ON THE LINE");
+        break;
+      case "agencyCorrect":
+        sfx.connect();
+        showToast(`+${ev.score} AGENCY • ${ev.operatorName} HELD COVER`);
+        break;
+      case "agencyWrong":
+        sfx.penalty();
+        showToast(`−${ev.penalty} AGENCY • ${ev.operatorName} FUMBLED`);
+        break;
+      case "agencyMiss":
+        sfx.penalty();
+        showToast(`−${ev.penalty} AGENCY • NO ANSWER`);
+        break;
+    }
+  }
+
+  function pushFloater(text: string, x: number, y: number, kind: Floater["kind"]): void {
+    const id = ++floaterSeq;
+    floaters = [...floaters, { id, text, x, y, kind }];
+    setTimeout(() => {
+      floaters = floaters.filter((f) => f.id !== id);
+    }, 1200);
+  }
+
+  function showToast(message: string): void {
+    toast = message;
+    if (toastHandle) clearTimeout(toastHandle);
+    toastHandle = setTimeout(() => {
+      toast = null;
+    }, 1500);
+  }
+
+  onMount(() => {
+    let disposed = false;
+    void import("$lib/games/signal-cross/main").then(({ mount }) => {
+      if (disposed) return;
+      controls = mount({
+        onSnapshot: (s) => {
+          snapshot = s;
+          snapshotAt = Date.now();
+        },
+        onLobby: (l) => {
+          lobby = l;
+        },
+        onNetStatus: (msg, kind) => {
+          netStatus = { msg, kind };
+        },
+        onRoomCode: (c) => {
+          roomCode = c;
+        },
+        onIdentity: (id, host) => {
+          myId = id;
+          isHost = host;
+        },
+        onEvent: handleEvent,
+        onToast: showToast,
+      });
+    });
+
+    const step = (): void => {
+      frameTick = Date.now();
+      rafId = requestAnimationFrame(step);
+    };
+    rafId = requestAnimationFrame(step);
+
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("contextmenu", onContextMenu);
+
+    return () => {
+      disposed = true;
+      cancelAnimationFrame(rafId);
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("contextmenu", onContextMenu);
+      if (toastHandle) clearTimeout(toastHandle);
+      controls?.destroy();
+      controls = null;
+    };
+  });
+
+  $effect(() => {
+    if (
+      snapshot.phase === "playing" &&
+      snapshot.gameMode === "verify" &&
+      slipModalTicketId == null
+    ) {
+      const mine = snapshot.tickets.find(
+        (t) => t.status === "ringing" && t.approval === "pending" && t.reviewer === myId
+      );
+      if (mine) {
+        slipModalTicketId = mine.id;
+        slipModalRole = "verify";
+      }
+    }
+    if (slipModalTicketId != null) {
+      const t = slipTicket;
+      if (!t || t.status !== "ringing") {
+        slipModalTicketId = null;
+      } else if (
+        snapshot.gameMode === "verify" &&
+        (t.approval !== "pending" || t.reviewer !== myId)
+      ) {
+        slipModalTicketId = null;
+      } else if (
+        snapshot.gameMode === "supervisor" &&
+        (t.approval !== "awaiting-stamp" || myId !== snapshot.supervisorId)
+      ) {
+        slipModalTicketId = null;
+      }
+    }
+  });
+
+  $effect(() => {
+    if (agencyModalTicketId == null) return;
+    const t = agencyTicket;
+    if (!t || t.status !== "ringing" || t.agencyPickedBy) {
+      agencyModalTicketId = null;
+    }
+  });
+
+  function readName(): string {
+    let n = nameInput.trim();
+    if (!n) {
+      n = "OP-" + Math.floor(100 + Math.random() * 900);
+      nameInput = n;
+    }
+    return n;
+  }
+
+  function onHost(): void {
+    netStatus = { msg: "opening host channel...", kind: "" };
+    controls?.hostGame(readName());
+  }
+
+  function onJoin(): void {
+    const code = roomInput.trim().toUpperCase();
+    if (!code) {
+      netStatus = { msg: "enter a room code first", kind: "err" };
+      return;
+    }
+    controls?.joinGame(code, readName());
+  }
+
+  function onCopy(): void {
+    if (!roomCode) return;
+    void navigator.clipboard?.writeText(roomCode).catch(() => undefined);
+    showToast("copied " + roomCode);
+  }
+
+  function ringBarPct(t: Ticket): number {
+    const pct = (t.timeoutAt - frameTick) / t.ringDurationMs;
+    return Math.max(0, Math.min(1, pct)) * 100;
+  }
+
+  function ticketClaimColor(t: Ticket): string | null {
+    const conn = t.connection;
+    if (!conn) return null;
+    return snapshot.players.find((p) => p.id === conn.byPlayer)?.color ?? null;
+  }
+
+  function plugStatus(id: string): {
+    ringing: boolean;
+    live: boolean;
+    claimedSelf: boolean;
+    claimedOther: boolean;
+    claimColor: string | null;
+    claimerName: string | null;
+  } {
+    const ringingTicket = snapshot.tickets.find(
+      (t) => t.from === id && t.status === "ringing" && t.kind === "call"
+    );
+    const liveTicket = snapshot.tickets.find(
+      (t) => t.status === "live" && (t.from === id || (t.connection?.actualTo ?? "") === id)
+    );
+    const claimer = snapshot.players.find((p) => p.selected === id) ?? null;
+    let claimColor: string | null = null;
+    if (claimer) claimColor = claimer.color;
+    else if (liveTicket) {
+      claimColor =
+        snapshot.players.find((p) => p.id === liveTicket.connection?.byPlayer)?.color ?? null;
+    }
+    return {
+      ringing: !!ringingTicket && !liveTicket,
+      live: !!liveTicket,
+      claimedSelf: claimer?.id === myId,
+      claimedOther: !!claimer && claimer.id !== myId,
+      claimColor,
+      claimerName: claimer?.name ?? null,
+    };
+  }
+
+  function ticketRequest(t: Ticket): { name: string; emoji: string } {
+    const to = t.to ? CHARS[t.to] : null;
+    const slip = t.slip;
+    const showSlipPreview =
+      snapshot.gameMode === "supervisor" ||
+      (snapshot.gameMode === "verify" && t.approval !== "approved");
+    const name = showSlipPreview && slip ? slip.requestName : (to?.name ?? "?");
+    const emoji =
+      showSlipPreview && slip
+        ? (CHARS[slip.requestId]?.emoji ?? to?.emoji ?? "?")
+        : (to?.emoji ?? "?");
+    return { name, emoji };
+  }
+
+  function logBadge(entry: LogEntry): { cls: string; text: string } {
+    if (entry.status === "streaming") return { cls: "streaming", text: "LIVE" };
+    if (entry.result === "cut") return { cls: "cut", text: "EARLY CUT" };
+    if (entry.result === "routed") return { cls: "ok", text: "ROUTED" };
+    if (entry.result === "chaos") return { cls: "chaos", text: "CROSSED" };
+    return { cls: "streaming", text: "LIVE" };
+  }
+
+  function onPlugClick(plugId: string): void {
+    if (snapshot.phase !== "playing" || !me) return;
+    const liveT = snapshot.tickets.find(
+      (t) => t.status === "live" && (t.from === plugId || (t.connection?.actualTo ?? "") === plugId)
+    );
+    if (liveT) {
+      controls?.sendAction({ type: "disconnect", ticketId: liveT.id });
+      return;
+    }
+    if (me.selected && me.selected !== plugId) {
+      if (me.cables <= 0) {
+        sfx.denied();
+        showToast("no cables free");
+        return;
+      }
+      controls?.sendAction({ type: "connect", toId: plugId });
+      return;
+    }
+    if (me.selected === plugId) {
+      controls?.sendAction({ type: "deselect" });
+      return;
+    }
+    const ticket = snapshot.tickets.find(
+      (t) => t.from === plugId && t.status === "ringing" && t.kind === "call"
+    );
+    if (!ticket) {
+      sfx.denied();
+      return;
+    }
+
+    if (snapshot.gameMode === "supervisor") {
+      if (ticket.approval === "awaiting-stamp") {
+        if (myId === snapshot.supervisorId) {
+          slipModalTicketId = ticket.id;
+          slipModalRole = "supervisor";
+          sfx.select();
+        } else {
+          sfx.denied();
+          showToast("awaiting supervisor stamp");
+        }
+        return;
+      }
+      if (myId === snapshot.supervisorId) {
+        sfx.denied();
+        showToast("supervisors do not patch");
+        return;
+      }
+    }
+
+    if (snapshot.gameMode === "verify" && ticket.approval === "pending") {
+      if (ticket.reviewer && ticket.reviewer !== myId) {
+        sfx.denied();
+        showToast("another op reviewing");
+        return;
+      }
+      if (me.cables <= 0) {
+        sfx.denied();
+        showToast("no cables free");
+        return;
+      }
+      controls?.sendAction({ type: "select", plugId });
+      sfx.select();
+      return;
+    }
+
+    if (me.cables <= 0) {
+      sfx.denied();
+      showToast("no cables free");
+      return;
+    }
+    controls?.sendAction({ type: "select", plugId });
+    sfx.select();
+  }
+
+  function onQueueTicketClick(t: Ticket): void {
+    if (snapshot.phase !== "playing") return;
+    if (
+      snapshot.gameMode === "supervisor" &&
+      myId === snapshot.supervisorId &&
+      t.approval === "awaiting-stamp"
+    ) {
+      slipModalTicketId = t.id;
+      slipModalRole = "supervisor";
+      sfx.select();
+    }
+  }
+
+  function onSlipApprove(): void {
+    const id = slipModalTicketId;
+    if (id == null) return;
+    if (snapshot.gameMode === "verify")
+      controls?.sendAction({ type: "verifyDecision", ticketId: id, decision: "approve" });
+    else if (snapshot.gameMode === "supervisor")
+      controls?.sendAction({ type: "stamp", ticketId: id, decision: "approve" });
+    sfx.stamp();
+    slipModalTicketId = null;
+  }
+
+  function onSlipDeny(): void {
+    const id = slipModalTicketId;
+    if (id == null) return;
+    if (snapshot.gameMode === "verify")
+      controls?.sendAction({ type: "verifyDecision", ticketId: id, decision: "deny" });
+    else if (snapshot.gameMode === "supervisor")
+      controls?.sendAction({ type: "stamp", ticketId: id, decision: "deny" });
+    sfx.stamp();
+    slipModalTicketId = null;
+  }
+
+  function onSlipCancel(): void {
+    const id = slipModalTicketId;
+    if (id != null && snapshot.gameMode === "verify") {
+      controls?.sendAction({ type: "verifyDecision", ticketId: id, decision: "cancel" });
+    }
+    slipModalTicketId = null;
+  }
+
+  function onAgencyAnswer(choiceIdx: number): void {
+    if (agencyModalTicketId == null) return;
+    controls?.sendAction({
+      type: "agencyAnswer",
+      ticketId: agencyModalTicketId,
+      choiceIdx,
+    });
+    agencyModalTicketId = null;
+  }
+
+  function onKeyDown(e: KeyboardEvent): void {
+    if (e.key === "Escape" && snapshot.phase === "playing" && me?.selected) {
+      controls?.sendAction({ type: "deselect" });
+    }
+  }
+
+  function onContextMenu(e: MouseEvent): void {
+    if (screen !== "game" || snapshot.phase !== "playing") return;
+    if (me?.selected) {
+      e.preventDefault();
+      controls?.sendAction({ type: "deselect" });
+    }
+  }
+
+  function agencyTimerPct(t: Ticket): number {
+    const pct = (t.timeoutAt - frameTick) / (t.ringDurationMs || 1);
+    return Math.max(0, Math.min(1, pct)) * 100;
+  }
 </script>
 
 <svelte:head>
@@ -21,207 +605,589 @@
 <div class="signal-cross-page">
   <div class="scanlines"></div>
 
-  <!-- ================= TITLE ================= -->
-  <div id="title-screen" class="screen active">
-    <div class="title-stack">
-      <div class="signal-wave">
-        <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
-      </div>
-      <h1>SIGNAL<span class="cross">CROSS</span></h1>
-      <p class="subtitle">Bell Exchange #47 &mdash; Co-op Night Shift</p>
-      <p class="blurb">
-        1962. A switchboard. Co-op shift.<br />
-        Each operator has 3 cables. Plug ringing callers into the right recipient,<br />
-        <em>read</em> their conversation, and pull your cable only when they&rsquo;ve hung up.<br />
-        Pull too early &mdash; the crew takes a penalty.
-      </p>
-
-      <label class="field">
-        <span class="field-label">OPERATOR NAME</span>
-        <input id="name-input" type="text" maxlength="14" placeholder="MARGE" />
-      </label>
-
-      <div class="button-row">
-        <button id="host-btn" class="big-btn">HOST NEW SHIFT</button>
-        <div class="divider"><span>OR</span></div>
-        <label class="field inline">
-          <span class="field-label">ROOM CODE</span>
-          <input
-            id="room-input"
-            type="text"
-            maxlength="12"
-            placeholder="SIG-XXXX"
-            autocomplete="off"
+  {#if screen === "title"}
+    <div id="title-screen" class="screen active">
+      <div class="title-stack">
+        <div class="signal-wave">
+          <span></span><span></span><span></span><span></span><span></span><span></span><span
+          ></span>
+        </div>
+        <h1>SIGNAL<span class="cross">CROSS</span></h1>
+        <p class="subtitle">Bell Exchange #47 &mdash; Co-op Night Shift</p>
+        <p class="blurb">
+          1962. A switchboard. Co-op shift.<br />
+          Each operator has 3 cables. Plug ringing callers into the right recipient,<br />
+          <em>read</em> their conversation, and pull your cable only when they&rsquo;ve hung up.<br
           />
+          Pull too early &mdash; the crew takes a penalty.
+        </p>
+
+        <label class="field">
+          <span class="field-label">OPERATOR NAME</span>
+          <input type="text" maxlength="14" placeholder="MARGE" bind:value={nameInput} />
         </label>
-        <button id="join-btn" class="big-btn secondary">JOIN</button>
-      </div>
 
-      <p id="net-status" class="net-status"></p>
-      <p class="tip">
-        click caller, then recipient · click a live plug or cable to disconnect · esc releases a
-        held plug
-      </p>
+        <div class="button-row">
+          <button class="big-btn" onclick={onHost}>HOST NEW SHIFT</button>
+          <div class="divider"><span>OR</span></div>
+          <label class="field inline">
+            <span class="field-label">ROOM CODE</span>
+            <input
+              type="text"
+              maxlength="12"
+              placeholder="SIG-XXXX"
+              autocomplete="off"
+              bind:value={roomInput}
+              oninput={(e) => {
+                roomInput = (e.target as HTMLInputElement).value.toUpperCase();
+              }}
+            />
+          </label>
+          <button class="big-btn secondary" onclick={onJoin}>JOIN</button>
+        </div>
+
+        <p class="net-status {netStatus.kind}" role="status" aria-live="polite">
+          {netStatus.msg}
+        </p>
+        <p class="tip">
+          click caller, then recipient · click a live plug or cable to disconnect · esc releases a
+          held plug
+        </p>
+      </div>
     </div>
-  </div>
+  {/if}
 
-  <!-- ================= LOBBY ================= -->
-  <div id="lobby-screen" class="screen">
-    <div class="title-stack lobby-stack">
-      <h2 class="lobby-title">READY ROOM</h2>
-      <div class="room-code-wrap">
-        <span class="hud-label">SHARE THIS CODE</span>
-        <div id="room-code" class="room-code">...</div>
-        <button id="copy-btn" class="mini-btn">COPY</button>
-      </div>
+  {#if screen === "lobby"}
+    <div id="lobby-screen" class="screen active">
+      <div class="title-stack lobby-stack">
+        <h2 class="lobby-title">READY ROOM</h2>
+        <div class="room-code-wrap">
+          <span class="hud-label">SHARE THIS CODE</span>
+          <div class="room-code">{roomCode || "..."}</div>
+          <button class="mini-btn" onclick={onCopy}>COPY</button>
+        </div>
 
-      <div class="panel-head">OPERATORS ON DUTY</div>
-      <div id="lobby-players" class="lobby-players"></div>
+        <div class="panel-head">OPERATORS ON DUTY</div>
+        <div class="lobby-players">
+          {#each snapshot.players as p (p.id)}
+            {@const isSv = lobby.mode === "supervisor" && lobby.supervisorId === p.id}
+            <div class="lobby-player">
+              <div class="dot" style:background={p.color} style:color={p.color}></div>
+              <div class="name">
+                {p.name}{#if isSv}<span class="sv-badge">SV</span>{/if}
+              </div>
+              <div class="tag">
+                {p.id === myId ? (isHost ? "HOST / YOU" : "YOU") : "OPERATOR"}
+              </div>
+            </div>
+          {/each}
+        </div>
 
-      <div class="mode-picker">
-        <span class="hud-label">SHIFT MODE</span>
-        <div class="mode-buttons">
-          <button class="mode-btn host-only active" data-mode="classic" id="mode-classic"
-            >CLASSIC</button
+        <div class="mode-picker">
+          <span class="hud-label">SHIFT MODE</span>
+          <div class="mode-buttons">
+            {#each ["classic", "verify", "supervisor"] as const as mode (mode)}
+              <button
+                class="mode-btn host-only"
+                class:active={lobby.mode === mode}
+                disabled={!isHost || (mode === "supervisor" && snapshot.players.length < 2)}
+                onclick={() => controls?.setLobbyMode(mode)}
+              >
+                {mode === "classic" ? "CLASSIC" : mode === "verify" ? "VERIFY CARDS" : "SUPERVISOR"}
+              </button>
+            {/each}
+          </div>
+          <div class="mode-desc">{modeDesc}</div>
+          {#if lobby.mode === "supervisor"}
+            <div class="supervisor-pick">
+              <span class="hud-label">SUPERVISOR</span>
+              <label class="sr-only" for="supervisor-select">Supervisor</label>
+              <select
+                id="supervisor-select"
+                class="sv-select host-only"
+                disabled={!isHost}
+                value={lobby.supervisorId ?? ""}
+                onchange={(e) =>
+                  controls?.setSupervisor((e.target as HTMLSelectElement).value || null)}
+              >
+                {#each snapshot.players as p (p.id)}
+                  <option value={p.id}>{p.name}</option>
+                {/each}
+              </select>
+            </div>
+          {/if}
+        </div>
+
+        {#if isHost}
+          <button
+            class="big-btn host-only"
+            disabled={startDisabled}
+            onclick={() => controls?.startLevel(0)}
           >
-          <button class="mode-btn host-only" data-mode="verify" id="mode-verify"
-            >VERIFY CARDS</button
-          >
-          <button class="mode-btn host-only" data-mode="supervisor" id="mode-supervisor"
-            >SUPERVISOR</button
-          >
-        </div>
-        <div id="mode-desc" class="mode-desc">Classic switchboard. Ring → patch → hang up.</div>
-        <div id="supervisor-pick" class="supervisor-pick" style="display:none">
-          <span class="hud-label">SUPERVISOR</span>
-          <select id="supervisor-select" class="sv-select host-only"></select>
-        </div>
-      </div>
-
-      <button id="lobby-start-btn" class="big-btn host-only">START SHIFT ▸</button>
-      <div id="lobby-wait" class="lobby-wait">Waiting for host to begin...</div>
-      <button id="lobby-leave-btn" class="mini-btn">LEAVE</button>
-    </div>
-  </div>
-
-  <!-- ================= GAME ================= -->
-  <div id="game-screen" class="screen">
-    <header class="hud">
-      <div class="hud-item">
-        <span class="hud-label">SHIFT</span>
-        <span id="level-num" class="hud-val">1</span>
-      </div>
-      <div class="hud-item wide">
-        <span class="hud-label">TIME</span>
-        <div class="timer-bar"><div id="timer-fill"></div></div>
-      </div>
-      <div class="hud-item">
-        <span class="hud-label">ROUTED</span>
-        <span id="correct-val" class="hud-val">0 / 0</span>
-      </div>
-      <div class="hud-item">
-        <span class="hud-label">TEAM</span>
-        <span id="team-score" class="hud-val">0</span>
-      </div>
-      <div class="hud-item">
-        <span class="hud-label">PENALTY</span>
-        <span id="team-pen" class="hud-val penalty">0</span>
-      </div>
-      <div class="hud-item">
-        <span class="hud-label">CABLES</span>
-        <span id="cables-free" class="hud-val">0 / 0</span>
-      </div>
-      <div class="hud-item">
-        <span class="hud-label">ROOM</span>
-        <span id="hud-room" class="hud-val small">---</span>
-      </div>
-      <div class="hud-item" id="hud-mode-wrap">
-        <span class="hud-label">MODE</span>
-        <span id="hud-mode" class="hud-val small">CLASSIC</span>
-      </div>
-    </header>
-
-    <section class="switchboard">
-      <div class="panel-label">EXCHANGE 47</div>
-      <div id="board" class="board"></div>
-      <div class="panel-screws">
-        <div class="screw"></div>
-        <div class="screw"></div>
-        <div class="screw"></div>
-        <div class="screw"></div>
-      </div>
-    </section>
-
-    <aside class="side-panel">
-      <div class="panel panel-queue">
-        <div class="panel-head">INCOMING</div>
-        <div id="queue" class="queue-vertical"></div>
-      </div>
-
-      <div class="panel panel-ops">
-        <div class="panel-head">OPERATORS</div>
-        <div id="operators" class="operators"></div>
-      </div>
-
-      <div class="panel panel-log">
-        <div class="panel-head">CALL LOG</div>
-        <div id="log" class="log"></div>
-      </div>
-    </aside>
-
-    <div id="cable-layer"></div>
-    <div id="floater-layer"></div>
-    <div id="toast" class="toast hidden"></div>
-
-    <!-- Slip modal: verify mode (player reviews own pickup) + supervisor mode (supervisor stamps) -->
-    <div id="slip-modal" class="slip-modal hidden">
-      <div class="slip">
-        <div class="slip-head">
-          <span>CALL SLIP</span>
-          <span id="slip-num">#000</span>
-        </div>
-        <div class="slip-body">
-          <div class="slip-row"><span class="slip-k">CALLER</span><b id="slip-caller">—</b></div>
-          <div class="slip-row"><span class="slip-k">LINE</span><b id="slip-line">—</b></div>
-          <div class="slip-row"><span class="slip-k">REQUESTS</span><b id="slip-req">—</b></div>
-          <div id="slip-flag" class="slip-flag" style="display:none">⚠ FLAGGED LINE</div>
-          <div id="slip-hint" class="slip-hint"></div>
-        </div>
-        <div class="slip-actions">
-          <button id="slip-approve" class="big-btn">APPROVE ▸</button>
-          <button id="slip-deny" class="big-btn secondary">DENY ✖</button>
-        </div>
-        <button id="slip-cancel" class="mini-btn">CANCEL</button>
+            START SHIFT ▸
+          </button>
+        {:else}
+          <div class="lobby-wait">Waiting for host to begin...</div>
+        {/if}
+        <button class="mini-btn" onclick={() => controls?.leaveRoom()}>LEAVE</button>
       </div>
     </div>
+  {/if}
 
-    <!-- Agency interrogation modal -->
-    <div id="agency-modal" class="agency-modal hidden">
-      <div class="dossier">
-        <div class="dossier-head">
-          <span class="dossier-tag">🕴 THE AGENCY</span>
-          <span class="dossier-sub">ENCRYPTED — ANSWER CAREFULLY</span>
+  {#if screen === "game"}
+    <div id="game-screen" class="screen active">
+      <header class="hud">
+        <div class="hud-item">
+          <span class="hud-label">SHIFT</span>
+          <span class="hud-val">{snapshot.levelIdx + 1}</span>
         </div>
-        <div id="agency-q" class="agency-q">—</div>
-        <div id="agency-choices" class="agency-choices"></div>
-        <div class="agency-timer"><div id="agency-timer-fill"></div></div>
-      </div>
-    </div>
-  </div>
+        <div class="hud-item wide">
+          <span class="hud-label">TIME</span>
+          <div class="timer-bar"><div style:width="{timerPct}%" id="timer-fill"></div></div>
+        </div>
+        <div class="hud-item">
+          <span class="hud-label">ROUTED</span>
+          <span class="hud-val">{snapshot.correctCount} / {snapshot.goal}</span>
+        </div>
+        <div class="hud-item">
+          <span class="hud-label">TEAM</span>
+          <span class="hud-val">{teamTotal}</span>
+        </div>
+        <div class="hud-item">
+          <span class="hud-label">PENALTY</span>
+          <span class="hud-val penalty">-{snapshot.teamPenalty}</span>
+        </div>
+        <div class="hud-item">
+          <span class="hud-label">CABLES</span>
+          <span class="hud-val">{freeCables} / {totalMaxCables}</span>
+        </div>
+        <div class="hud-item">
+          <span class="hud-label">ROOM</span>
+          <span class="hud-val small">{roomCode || "---"}</span>
+        </div>
+        <div class="hud-item">
+          <span class="hud-label">MODE</span>
+          <span class="hud-val small">{hudModeLabel}</span>
+        </div>
+      </header>
 
-  <!-- ================= END ================= -->
-  <div id="end-screen" class="screen">
-    <div class="title-stack">
-      <h1 id="end-title">SHIFT OVER</h1>
-      <p id="end-blurb" class="subtitle"></p>
-      <div class="panel-head">CREW TOTALS</div>
-      <div id="leaderboard" class="leaderboard"></div>
-      <div class="button-row tight">
-        <button id="next-btn" class="big-btn host-only">NEXT SHIFT ▸</button>
-        <button id="replay-btn" class="big-btn secondary host-only">REPLAY</button>
+      <section class="switchboard">
+        <div class="panel-label">EXCHANGE 47</div>
+        {#if lvl}
+          {@const cols = lvl.chars.length <= 6 ? 3 : 4}
+          <div class="board" style:grid-template-columns="repeat({cols}, 92px)">
+            {#each lvl.chars as id (id)}
+              {@const status = plugStatus(id)}
+              {@const c = CHARS[id]}
+              <div
+                use:registerPlug={id}
+                class="plug"
+                class:ringing={status.ringing}
+                class:live={status.live}
+                class:claimed-self={status.claimedSelf}
+                class:claimed-other={status.claimedOther}
+                style:--claimColor={status.claimColor ?? ""}
+                onclick={() => onPlugClick(id)}
+                onkeydown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onPlugClick(id);
+                  }
+                }}
+                role="button"
+                tabindex="0"
+                aria-label={c?.name ?? id}
+              >
+                <div class="bulb"></div>
+                <div class="jack"></div>
+                <div class="emoji">{c?.emoji ?? ""}</div>
+                <div class="name">{c?.name ?? id}</div>
+                {#if status.claimerName}
+                  <div class="claim-tag" style:--claimColor={status.claimColor ?? ""}>
+                    {status.claimerName}
+                  </div>
+                {/if}
+              </div>
+            {/each}
+          </div>
+        {/if}
+        <div class="panel-screws">
+          <div class="screw"></div>
+          <div class="screw"></div>
+          <div class="screw"></div>
+          <div class="screw"></div>
+        </div>
+      </section>
+
+      <aside class="side-panel">
+        <div class="panel panel-queue">
+          <div class="panel-head">INCOMING</div>
+          <div class="queue-vertical">
+            {#each agencyTickets as t (t.id)}
+              <div
+                class="ticket agency"
+                onclick={() => {
+                  agencyModalTicketId = t.id;
+                  sfx.select();
+                }}
+                onkeydown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    agencyModalTicketId = t.id;
+                    sfx.select();
+                  }
+                }}
+                role="button"
+                tabindex="0"
+              >
+                <span class="num">🕴 AGENCY</span>
+                <div class="agency-row">CHECK-IN CALL</div>
+                <div class="row"><span class="emoji">☎</span><b>ENCRYPTED LINE</b></div>
+                <div class="agency-row mono">CLICK TO ANSWER</div>
+                <div class="ring-bar">
+                  <div class="ring-bar-fill" style:width="{ringBarPct(t)}%"></div>
+                </div>
+              </div>
+            {/each}
+
+            {#each ringingTickets as t (t.id)}
+              {@const from = CHARS[t.from]}
+              {@const req = ticketRequest(t)}
+              {@const awaiting =
+                snapshot.gameMode === "supervisor" && t.approval === "awaiting-stamp"}
+              {@const approvedStamp =
+                snapshot.gameMode === "supervisor" && t.approval === "approved"}
+              {@const review =
+                snapshot.gameMode === "verify" && t.approval === "pending" && t.reviewer === myId}
+              <div
+                class="ticket"
+                class:awaiting-stamp={awaiting}
+                class:approved-stamp={approvedStamp}
+                class:pending-review={review}
+                style:cursor={awaiting && myId === snapshot.supervisorId ? "pointer" : ""}
+                onclick={() => onQueueTicketClick(t)}
+                onkeydown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onQueueTicketClick(t);
+                  }
+                }}
+                role="button"
+                tabindex="0"
+              >
+                <span class="num">#{String(t.id).padStart(3, "0")}</span>
+                <div class="row">
+                  <span class="emoji">{from?.emoji ?? ""}</span>
+                  <b>{from?.name ?? t.from}</b>
+                </div>
+                <div class="arrow">│ WANTS ▼</div>
+                <div class="row">
+                  <span class="emoji">{req.emoji}</span><b class="req-name">{req.name}</b>
+                </div>
+                <div class="note">{t.note || ""}</div>
+                {#if t.slip}
+                  <div class="slip-mini">
+                    <span class="slip-k">LINE</span>
+                    <b>{t.slip.line}</b>
+                    {#if t.slip.flagged}<span class="slip-flag-mini">⚠ FLAGGED</span>{/if}
+                  </div>
+                {/if}
+                <div class="ring-bar">
+                  <div class="ring-bar-fill" style:width="{ringBarPct(t)}%"></div>
+                </div>
+              </div>
+            {/each}
+
+            {#if liveTickets.length > 0}
+              <div class="live-head">{liveTickets.length} LIVE</div>
+            {/if}
+
+            {#each liveTickets as t (t.id)}
+              {@const conn = t.connection}
+              {#if conn}
+                {@const from = CHARS[t.from]}
+                {@const to = CHARS[conn.actualTo]}
+                {@const owner = snapshot.players.find((p) => p.id === conn.byPlayer)}
+                <div
+                  class="ticket live"
+                  style:--claimColor={ticketClaimColor(t) ?? ""}
+                  onclick={() => controls?.sendAction({ type: "disconnect", ticketId: t.id })}
+                  onkeydown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      controls?.sendAction({ type: "disconnect", ticketId: t.id });
+                    }
+                  }}
+                  role="button"
+                  tabindex="0"
+                >
+                  <span class="num">LIVE</span>
+                  <div class="row">
+                    <span class="emoji">{from?.emoji ?? ""}</span>
+                    {from?.name ?? t.from} ↔
+                    <span class="emoji">{to?.emoji ?? ""}</span>
+                    {to?.name ?? conn.actualTo}
+                  </div>
+                  <div class="note">cable by {owner?.name || "—"}</div>
+                </div>
+              {/if}
+            {/each}
+          </div>
+        </div>
+
+        <div class="panel panel-ops">
+          <div class="panel-head">OPERATORS</div>
+          <div class="operators">
+            {#each snapshot.players as p (p.id)}
+              <div class="op-row" class:self={p.id === myId}>
+                <div class="dot" style:background={p.color} style:color={p.color}></div>
+                <div class="name">{p.name}</div>
+                <div class="cables" style:color={p.color}>
+                  {#each Array.from({ length: p.maxCables }, (_, i) => i) as i (i)}
+                    <span class="cable-dot" class:used={i >= p.cables}></span>
+                  {/each}
+                </div>
+              </div>
+            {/each}
+          </div>
+        </div>
+
+        <div class="panel panel-log">
+          <div class="panel-head">CALL LOG</div>
+          <div class="log" role="log" aria-live="polite">
+            {#each snapshot.log as entry (entry.ticketId)}
+              {@const badge = logBadge(entry)}
+              {@const fromName = CHARS[entry.from]?.name ?? ""}
+              {@const actualName = CHARS[entry.actual]?.name ?? ""}
+              {@const routedBy = snapshot.players.find((p) => p.id === entry.byPlayer)}
+              <div class="entry" class:streaming={badge.cls === "streaming"}>
+                <div class="header {badge.cls}">
+                  <span class="badge">{badge.text}</span>
+                  <span class="who">{fromName} → {actualName}</span>
+                  <span class="by" style:color={routedBy?.color ?? ""}>
+                    by {routedBy?.name ?? "—"}
+                  </span>
+                </div>
+                <div class="lines">
+                  {#each entry.lines as line, i (i)}
+                    <span class="line" class:system={line.s === "sys"}>
+                      <span class="speaker">
+                        {CHARS[line.s]?.name ?? ""}{line.s === "sys" ? "" : ":"}
+                      </span>
+                      {line.t}
+                    </span>
+                  {/each}
+                </div>
+              </div>
+            {/each}
+          </div>
+        </div>
+      </aside>
+
+      <div id="cable-layer" aria-hidden="true">
+        <svg width="100%" height="100%">
+          {#each cablePaths as cp (cp.id)}
+            <g
+              class="cable"
+              style:cursor="pointer"
+              onclick={() => controls?.sendAction({ type: "disconnect", ticketId: cp.id })}
+              onkeydown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  controls?.sendAction({ type: "disconnect", ticketId: cp.id });
+                }
+              }}
+              role="button"
+              tabindex="0"
+              aria-label="Disconnect cable"
+            >
+              <path
+                d={cp.d}
+                stroke={cp.color}
+                stroke-opacity="0.3"
+                stroke-width="12"
+                fill="none"
+                stroke-linecap="round"
+                pointer-events="stroke"
+              />
+              <path
+                d={cp.d}
+                stroke={cp.color}
+                stroke-width="5"
+                fill="none"
+                stroke-linecap="round"
+                pointer-events="stroke"
+              />
+              <path
+                d={cp.d}
+                stroke="#fff8"
+                stroke-width="1"
+                fill="none"
+                stroke-linecap="round"
+                pointer-events="none"
+              />
+              <circle cx={cp.ax} cy={cp.ay} r="7" fill={cp.color} />
+              <circle cx={cp.bx} cy={cp.by} r="7" fill={cp.color} />
+            </g>
+          {/each}
+        </svg>
       </div>
-      <div id="end-wait" class="lobby-wait">Waiting for host...</div>
-      <button id="end-leave-btn" class="mini-btn">LEAVE ROOM</button>
+
+      <div id="floater-layer" aria-hidden="true">
+        {#each floaters as f (f.id)}
+          <div class="floater {f.kind}" style:left="{f.x}px" style:top="{f.y}px">{f.text}</div>
+        {/each}
+      </div>
+
+      {#if toast}
+        <div class="toast" role="status" aria-live="polite">{toast}</div>
+      {/if}
+
+      {#if slipTicket && slipTicket.slip}
+        {@const slip = slipTicket.slip}
+        <div class="slip-modal" role="dialog" aria-modal="true" aria-labelledby="slip-heading">
+          <div class="slip">
+            <div class="slip-head">
+              <span id="slip-heading">CALL SLIP</span>
+              <span>#{slip.slipNum}</span>
+            </div>
+            <div class="slip-body">
+              <div class="slip-row">
+                <span class="slip-k">CALLER</span><b>{slip.callerName}</b>
+              </div>
+              <div class="slip-row">
+                <span class="slip-k">LINE</span><b>{slip.line}</b>
+              </div>
+              <div class="slip-row">
+                <span class="slip-k">REQUESTS</span><b>{slip.requestName}</b>
+              </div>
+              {#if slip.flagged}
+                <div class="slip-flag">⚠ FLAGGED LINE</div>
+              {/if}
+              <div class="slip-hint">
+                {slipModalRole === "supervisor"
+                  ? "Cross-check against INCOMING. Stamp carefully."
+                  : "Double-check caller's request. Approve or deny."}
+              </div>
+            </div>
+            <div class="slip-actions">
+              <button class="big-btn" onclick={onSlipApprove}>APPROVE ▸</button>
+              <button class="big-btn secondary" onclick={onSlipDeny}>DENY ✖</button>
+            </div>
+            <button class="mini-btn" onclick={onSlipCancel}>CANCEL</button>
+          </div>
+        </div>
+      {/if}
+
+      {#if agencyTicket && agencyTicket.agencyQ}
+        <div class="agency-modal" role="dialog" aria-modal="true" aria-labelledby="agency-heading">
+          <div class="dossier">
+            <div class="dossier-head">
+              <span class="dossier-tag" id="agency-heading">🕴 THE AGENCY</span>
+              <span class="dossier-sub">ENCRYPTED — ANSWER CAREFULLY</span>
+            </div>
+            <div class="agency-q">{agencyTicket.agencyQ.text}</div>
+            <div class="agency-choices">
+              {#each agencyTicket.agencyQ.choices as choice, i (i)}
+                <button class="agency-choice" onclick={() => onAgencyAnswer(i)}>
+                  {choice.label}
+                </button>
+              {/each}
+            </div>
+            <div class="agency-timer">
+              <div style:width="{agencyTimerPct(agencyTicket)}%"></div>
+            </div>
+          </div>
+        </div>
+      {/if}
     </div>
-  </div>
+  {/if}
+
+  {#if screen === "end"}
+    {@const total = teamTotal - snapshot.teamPenalty}
+    {@const endLvl = LEVELS[snapshot.levelIdx]}
+    {@const endTitle = endPassed
+      ? endIsLast
+        ? "FINAL SHIFT CLEARED • PUNCH OUT"
+        : `${endLvl?.title ?? ""} • CLEARED`
+      : `${endLvl?.title ?? ""} • SUPERVISOR DISAPPOINTED`}
+    {@const endBlurb = endPassed
+      ? endIsLast
+        ? "The board goes dark. The crew did it."
+        : (endLvl?.subtitle ?? "")
+      : `Crew needed ${snapshot.goal} correct routes. Got ${snapshot.correctCount}.`}
+    <div id="end-screen" class="screen active">
+      <div class="title-stack">
+        <h1>{endTitle}</h1>
+        <p class="subtitle">{endBlurb}</p>
+        <div class="panel-head">CREW TOTALS</div>
+        <div class="leaderboard">
+          <div class="team-summary">
+            <div class="ts-row">
+              <span class="hud-label">CORRECT ROUTES</span>
+              <span class="score">{snapshot.correctCount} / {snapshot.goal}</span>
+            </div>
+            <div class="ts-row">
+              <span class="hud-label">ROUTED POINTS</span>
+              <span class="score">+{snapshot.teamScore}</span>
+            </div>
+            <div class="ts-row">
+              <span class="hud-label">CHAOS BONUS</span>
+              <span class="chaos">+{snapshot.teamChaos}</span>
+            </div>
+            <div class="ts-row">
+              <span class="hud-label">PENALTIES</span>
+              <span class="pen">-{snapshot.teamPenalty}</span>
+            </div>
+            <div class="ts-row final">
+              <span class="hud-label">TEAM TOTAL</span>
+              <span class="total">{total}</span>
+            </div>
+          </div>
+          <div class="ops-footer">
+            <div class="hud-label">CREW</div>
+            {#each snapshot.players as p (p.id)}
+              <div class="lb-row">
+                <div class="dot" style:background={p.color} style:color={p.color}></div>
+                <div class="name">
+                  {p.name}{#if p.id === myId}
+                    ★{/if}
+                </div>
+                <div class="cables" style:color={p.color}>
+                  {"●".repeat(p.cables)}{"○".repeat(p.maxCables - p.cables)}
+                </div>
+              </div>
+            {/each}
+          </div>
+        </div>
+        <div class="button-row tight">
+          {#if isHost}
+            <button class="big-btn host-only" onclick={() => controls?.nextLevel()}>
+              {endPassed ? (endIsLast ? "PLAY AGAIN ▸" : "NEXT SHIFT ▸") : "RETRY SHIFT ▸"}
+            </button>
+            <button class="big-btn secondary host-only" onclick={() => controls?.replayLevel()}>
+              REPLAY
+            </button>
+          {:else}
+            <div class="lobby-wait">Waiting for host...</div>
+          {/if}
+        </div>
+        <button class="mini-btn" onclick={() => controls?.leaveRoom()}>LEAVE ROOM</button>
+      </div>
+    </div>
+  {/if}
 </div>
+
+<style>
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+</style>
