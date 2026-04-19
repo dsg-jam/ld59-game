@@ -88,23 +88,14 @@ function validates(sel: [number, number][], card: Card): boolean {
     const mx = Math.min(...a.map((p) => p[0] ?? 0));
     const my = Math.min(...a.map((p) => p[1] ?? 0));
     return a
-      .map(
-        (p) => [(p[0] ?? 0) - mx, (p[1] ?? 0) - my] as [number, number],
-      )
-      .sort(
-        (a, b) => (a[0] ?? 0) - (b[0] ?? 0) || (a[1] ?? 0) - (b[1] ?? 0),
-      );
+      .map((p) => [(p[0] ?? 0) - mx, (p[1] ?? 0) - my] as [number, number])
+      .sort((a, b) => (a[0] ?? 0) - (b[0] ?? 0) || (a[1] ?? 0) - (b[1] ?? 0));
   };
   const s = JSON.stringify(norm(sel));
-  let cells: [number, number][] = card.shape.cells.slice() as [
-    number,
-    number,
-  ][];
+  let cells: [number, number][] = card.shape.cells.slice() as [number, number][];
   for (let r = 0; r < 4; r++) {
     if (JSON.stringify(norm(cells)) === s) return true;
-    cells = cells.map(
-      (c) => [-(c[1] ?? 0), c[0] ?? 0] as [number, number],
-    );
+    cells = cells.map((c) => [-(c[1] ?? 0), c[0] ?? 0] as [number, number]);
   }
   return false;
 }
@@ -151,10 +142,7 @@ function cpuFind(card: Card): [number, number][] | null {
     for (let y = 0; y < H; y++) {
       if (topColor(x, y) === card.color) tops.push([x, y]);
     }
-  let cells: [number, number][] = card.shape.cells.slice() as [
-    number,
-    number,
-  ][];
+  let cells: [number, number][] = card.shape.cells.slice() as [number, number][];
   for (let r = 0; r < 4; r++) {
     for (const anchor of tops) {
       const mx = Math.min(...cells.map((p) => p[0] ?? 0));
@@ -170,7 +158,7 @@ function cpuFind(card: Card): [number, number][] | null {
             (p[0] ?? 0) < W &&
             (p[1] ?? 0) >= 0 &&
             (p[1] ?? 0) < H &&
-            topColor(p[0] ?? 0, p[1] ?? 0) === card.color,
+            topColor(p[0] ?? 0, p[1] ?? 0) === card.color
         )
       )
         return placed;
@@ -232,11 +220,7 @@ function animateBlockRemoval(sel: [number, number][], heights: number[][]) {
   }
 }
 
-function spawnSignalRipples(
-  sel: [number, number][],
-  colorKey: ColKey,
-  heights: number[][],
-) {
+function spawnSignalRipples(sel: [number, number][], colorKey: ColKey, heights: number[][]) {
   const triggers: SignalRingTrigger[] = [];
   sel.forEach(function (pos) {
     const bx = pos[0] ?? 0,
@@ -261,7 +245,7 @@ function spawnSignalRipples(
 // ---- Turn resolution ----
 function resolveTurn(moves: MoveResult[], gridAfter: ColKey[][][] | null) {
   const visualHeights: number[][] = Array.from({ length: W }, (_, x) =>
-    Array.from({ length: H }, (_, y) => gs.grid[x]?.[y]?.length ?? 0),
+    Array.from({ length: H }, (_, y) => gs.grid[x]?.[y]?.length ?? 0)
   );
 
   let delay = 0;
@@ -287,16 +271,10 @@ function resolveTurn(moves: MoveResult[], gridAfter: ColKey[][][] | null) {
             COLOR_NAMES[m.card.color] +
             " — +" +
             m.sel.length,
-          "ok",
+          "ok"
         );
       } else if (m.card) {
-        log(
-          "✗ " +
-            slotName(m.slot) +
-            " Δ" +
-            m.card.init +
-            " — channel silent. Signal lost.",
-        );
+        log("✗ " + slotName(m.slot) + " Δ" + m.card.init + " — channel silent. Signal lost.");
       } else {
         log("· " + slotName(m.slot) + " held carrier.");
       }
@@ -342,19 +320,14 @@ function hostStartRound() {
   }
 }
 
-function hostOnPick(
-  slot: number,
-  cardIdx: number,
-  sel: [number, number][] | null,
-) {
+function hostOnPick(slot: number, cardIdx: number, sel: [number, number][] | null) {
   HS.picks[slot] = { cardIdx, sel };
 
   const n = HS.N;
   for (let i = 0; i < n; i++) {
     if (i !== slot && i !== 0) sendTo(i, { type: "player-locked", slot });
   }
-  if (slot !== 0)
-    log("· " + (HS.playerNames[slot] || "P" + (slot + 1)) + " transmitted.");
+  if (slot !== 0) log("· " + (HS.playerNames[slot] || "P" + (slot + 1)) + " transmitted.");
 
   if (Object.keys(HS.picks).length === n) hostResolveTurn();
 }
@@ -424,8 +397,7 @@ function hostResolveTurn() {
     if (tiedCount > 1) winnerSlot = WINNER_TIED;
   }
   const scores: ScoreEntry[] = [];
-  for (let i = 0; i < n; i++)
-    scores.push({ slot: i, score: HS.scores[i] || 0 });
+  for (let i = 0; i < n; i++) scores.push({ slot: i, score: HS.scores[i] || 0 });
 
   for (let j = 0; j < n; j++) {
     const msg = {
@@ -487,7 +459,7 @@ function onRoundStart(data: RoundStartMsg) {
   if (data.turn === 1)
     log(
       "▶ Transmission detected. Select a filter card, then click matching tiles on the grid.",
-      "ok",
+      "ok"
     );
 }
 
@@ -506,12 +478,9 @@ function onTurnResult(data: TurnResultMsg) {
     setTimeout(function () {
       let msg: string;
       if (data.winnerSlot === WINNER_TIED) msg = "Signal split — tied transmission!";
-      else if (data.winnerSlot === mySlot)
-        msg = "You intercepted the transmission!";
+      else if (data.winnerSlot === mySlot) msg = "You intercepted the transmission!";
       else msg = slotName(data.winnerSlot) + " intercepted the transmission.";
-      const scoreText = data.scores
-        .map((s) => slotName(s.slot) + ": " + s.score)
-        .join("  |  ");
+      const scoreText = data.scores.map((s) => slotName(s.slot) + ": " + s.score).join("  |  ");
       log("━━ CARRIER LOST — " + msg + " ━━", "ok");
       log(scoreText);
       showMsg(msg, "ok");
@@ -533,16 +502,11 @@ function sendToHost(data: unknown) {
 function onMessage(data: unknown, fromSlot: number) {
   const msg = data as GameMsg;
   if (msg.type === "round-start") onRoundStart(msg as unknown as RoundStartMsg);
-  else if (msg.type === "turn-result")
-    onTurnResult(msg as unknown as TurnResultMsg);
+  else if (msg.type === "turn-result") onTurnResult(msg as unknown as TurnResultMsg);
   else if (msg.type === "player-locked") {
     log("· " + slotName(msg.slot as number) + " transmitted.");
   } else if (msg.type === "pick" && isHost) {
-    hostOnPick(
-      fromSlot,
-      msg.cardIdx as number,
-      msg.sel as [number, number][] | null,
-    );
+    hostOnPick(fromSlot, msg.cardIdx as number, msg.sel as [number, number][] | null);
   }
 }
 
@@ -550,12 +514,10 @@ function onMessage(data: unknown, fromSlot: number) {
 function updatePlayerList() {
   gs.playerList = HS.playerIds.map((_, i) => ({
     slot: i,
-    name:
-      HS.playerNames[i] ?? (i === 0 ? "You (Host)" : "Player " + (i + 1)),
+    name: HS.playerNames[i] ?? (i === 0 ? "You (Host)" : "Player " + (i + 1)),
     color: PLAYER_CSS[i] ?? "#ffffff",
   }));
-  gs.lobbyStatus =
-    HS.playerIds.length + "/" + MAX_PLAYERS + " operators tuned in.";
+  gs.lobbyStatus = HS.playerIds.length + "/" + MAX_PLAYERS + " operators tuned in.";
 }
 
 function startGame() {
@@ -623,11 +585,7 @@ export function hostGame() {
   peer = new Peer(PEER_PREFIX + roomCode);
   peer.on("open", function () {
     gs.lobbyStatus =
-      "Broadcasting — awaiting operators (" +
-      HS.playerIds.length +
-      "/" +
-      MAX_PLAYERS +
-      ")";
+      "Broadcasting — awaiting operators (" + HS.playerIds.length + "/" + MAX_PLAYERS + ")";
   });
   peer.on("connection", function (c) {
     if (HS.started || HS.playerIds.length >= MAX_PLAYERS) {
@@ -647,8 +605,7 @@ export function hostGame() {
       const msg = data as GameMsg;
       if (msg.type === "name") {
         HS.playerNames[slot] =
-          ((msg.name as string | undefined) ?? "").slice(0, 16) ||
-          "P" + (slot + 1);
+          ((msg.name as string | undefined) ?? "").slice(0, 16) || "P" + (slot + 1);
         updatePlayerList();
       } else {
         onMessage(data, slot);
@@ -659,10 +616,10 @@ export function hostGame() {
         HS.playerIds.splice(slot, 1);
         conns.splice(slot, 1);
         HS.scores = Object.fromEntries(
-          Object.entries(HS.scores).filter(([k]) => k !== String(slot)),
+          Object.entries(HS.scores).filter(([k]) => k !== String(slot))
         );
         HS.playerNames = Object.fromEntries(
-          Object.entries(HS.playerNames).filter(([k]) => k !== String(slot)),
+          Object.entries(HS.playerNames).filter(([k]) => k !== String(slot))
         );
         updatePlayerList();
       }

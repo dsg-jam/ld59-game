@@ -48,33 +48,72 @@ export const COLKEYS: ColKey[] = ["R", "G", "B", "Y", "P"];
 
 export const SHAPES: ShapeDef[] = [
   { name: "PULSE", cells: [[0, 0]] },
-  { name: "PAIR", cells: [[0, 0], [1, 0]] },
-  { name: "CARRIER", cells: [[0, 0], [1, 0], [2, 0]] },
-  { name: "SKIP", cells: [[0, 0], [0, 1], [1, 1]] },
-  { name: "BURST", cells: [[0, 0], [1, 0], [0, 1], [1, 1]] },
-  { name: "BEACON", cells: [[0, 0], [1, 0], [2, 0], [1, 1]] },
-  { name: "RELAY", cells: [[0, 0], [1, 0], [1, 1], [2, 1]] },
-  { name: "STREAK", cells: [[0, 0], [1, 0], [2, 0], [3, 0]] },
+  {
+    name: "PAIR",
+    cells: [
+      [0, 0],
+      [1, 0],
+    ],
+  },
+  {
+    name: "CARRIER",
+    cells: [
+      [0, 0],
+      [1, 0],
+      [2, 0],
+    ],
+  },
+  {
+    name: "SKIP",
+    cells: [
+      [0, 0],
+      [0, 1],
+      [1, 1],
+    ],
+  },
+  {
+    name: "BURST",
+    cells: [
+      [0, 0],
+      [1, 0],
+      [0, 1],
+      [1, 1],
+    ],
+  },
+  {
+    name: "BEACON",
+    cells: [
+      [0, 0],
+      [1, 0],
+      [2, 0],
+      [1, 1],
+    ],
+  },
+  {
+    name: "RELAY",
+    cells: [
+      [0, 0],
+      [1, 0],
+      [1, 1],
+      [2, 1],
+    ],
+  },
+  {
+    name: "STREAK",
+    cells: [
+      [0, 0],
+      [1, 0],
+      [2, 0],
+      [3, 0],
+    ],
+  },
 ];
 
-export const PLAYER_COLORS_HEX = [
-  0x03dac6, 0xcf6679, 0xfdd835, 0x3700b3, 0xff7043, 0x66bb6a,
-];
-export const PLAYER_CSS = [
-  "#03dac6",
-  "#cf6679",
-  "#fdd835",
-  "#3700b3",
-  "#ff7043",
-  "#66bb6a",
-];
+export const PLAYER_COLORS_HEX = [0x03dac6, 0xcf6679, 0xfdd835, 0x3700b3, 0xff7043, 0x66bb6a];
+export const PLAYER_CSS = ["#03dac6", "#cf6679", "#fdd835", "#3700b3", "#ff7043", "#66bb6a"];
 
 /** Convert grid coords (gx, gy, gz) to world-space [X, Y, Z]. */
-export function gridToWorld(
-  gx: number,
-  gy: number,
-  gz: number,
-): [number, number, number] {
+export function gridToWorld(gx: number, gy: number, gz: number): [number, number, number] {
   return [
     gx * (BLOCK_SIZE + GAP),
     gz * (BLOCK_SIZE + GAP) + BLOCK_SIZE * 0.44,

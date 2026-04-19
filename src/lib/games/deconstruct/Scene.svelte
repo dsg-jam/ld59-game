@@ -111,9 +111,7 @@
       }))
       .filter((b) => b.opacity > 0);
 
-    signalRings = signalRings
-      .map((r) => ({ ...r, t: r.t + dt }))
-      .filter((r) => r.t < r.duration);
+    signalRings = signalRings.map((r) => ({ ...r, t: r.t + dt })).filter((r) => r.t < r.duration);
   });
 
   function isTopBlock(gx: number, gy: number, gz: number): boolean {
@@ -223,23 +221,11 @@
   <!-- Radar crosshairs -->
   <T.Mesh rotation.x={-Math.PI / 2} position.y={0.121}>
     <T.PlaneGeometry args={[0.015, 7.0]} />
-    <T.MeshBasicMaterial
-      color={0x4fd0ff}
-      transparent
-      opacity={0.1}
-      side={2}
-      depthWrite={false}
-    />
+    <T.MeshBasicMaterial color={0x4fd0ff} transparent opacity={0.1} side={2} depthWrite={false} />
   </T.Mesh>
   <T.Mesh rotation.x={-Math.PI / 2} position.y={0.121}>
     <T.PlaneGeometry args={[7.0, 0.015]} />
-    <T.MeshBasicMaterial
-      color={0x4fd0ff}
-      transparent
-      opacity={0.1}
-      side={2}
-      depthWrite={false}
-    />
+    <T.MeshBasicMaterial color={0x4fd0ff} transparent opacity={0.1} side={2} depthWrite={false} />
   </T.Mesh>
 
   <!-- Radar sweep -->
@@ -287,24 +273,16 @@
           </T.LineSegments>
           <!-- Antenna on top block -->
           {#if top}
-            <T.Mesh
-              position={[wx, wy + BLOCK_SIZE * 0.44 + 0.16, wz]}
-              castShadow
-            >
+            <T.Mesh position={[wx, wy + BLOCK_SIZE * 0.44 + 0.16, wz]} castShadow>
               <T.CylinderGeometry args={[0.015, 0.015, 0.32, 6]} />
-              <T.MeshStandardMaterial
-                color={0x999999}
-                roughness={0.5}
-                metalness={0.7}
-              />
+              <T.MeshStandardMaterial color={0x999999} roughness={0.5} metalness={0.7} />
             </T.Mesh>
             <T.Mesh position={[wx, wy + BLOCK_SIZE * 0.44 + 0.35, wz]}>
               <T.SphereGeometry args={[0.055, 10, 10]} />
               <T.MeshStandardMaterial
                 color={COLORS_HEX[colorKey]}
                 emissive={COLORS_HEX[colorKey]}
-                emissiveIntensity={0.55 +
-                  Math.sin(pulseT * 4 + gx * 1.37 + gy * 0.91) * 0.45}
+                emissiveIntensity={0.55 + Math.sin(pulseT * 4 + gx * 1.37 + gy * 0.91) * 0.45}
                 roughness={0.3}
               />
             </T.Mesh>
@@ -334,11 +312,7 @@
     {#each signalRings as ring (ring.id)}
       {@const p = Math.min(ring.t / ring.duration, 1)}
       {@const scale = 1 + p * 4}
-      <T.Mesh
-        position={[ring.worldX, ring.worldY, ring.worldZ]}
-        rotation.x={-Math.PI / 2}
-        scale={scale}
-      >
+      <T.Mesh position={[ring.worldX, ring.worldY, ring.worldZ]} rotation.x={-Math.PI / 2} {scale}>
         <T.RingGeometry args={[0.16, 0.22, 32]} />
         <T.MeshBasicMaterial
           color={COLORS_HEX[ring.colorKey as keyof typeof COLORS_HEX]}

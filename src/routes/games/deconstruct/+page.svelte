@@ -69,7 +69,9 @@
               <div class="or-divider">&mdash; multiplayer &mdash;</div>
               <button onclick={hostGame}>OPEN CHANNEL</button>
               <div class="or-divider" style="opacity:0.3;font-size:12px;">&mdash; or &mdash;</div>
-              <label for="decon-join-code" style="opacity:0.6;font-size:12px;">Frequency ID (room code)</label>
+              <label for="decon-join-code" style="opacity:0.6;font-size:12px;"
+                >Frequency ID (room code)</label
+              >
               <input
                 id="decon-join-code"
                 maxlength="6"
@@ -88,17 +90,15 @@
             <div class="player-list">
               {#each gs.playerList as entry (entry.slot)}
                 <div style="color: {entry.color};">
-                  {entry.slot === 0 ? "★ " : ""}{entry.name}{entry.slot === 0
-                    ? ""
-                    : " — connected"}
+                  {entry.slot === 0 ? "★ " : ""}{entry.name}{entry.slot === 0 ? "" : " — connected"}
                 </div>
               {/each}
             </div>
             <button
               style="margin-top:14px;"
               onclick={hostStartNow}
-              disabled={gs.playerList.length < 2}
-            >BEGIN TRANSMISSION</button>
+              disabled={gs.playerList.length < 2}>BEGIN TRANSMISSION</button
+            >
             <div class="lobby-status">{gs.lobbyStatus}</div>
           </div>
         {:else if gs.lobbyPanel === "joining"}
@@ -135,11 +135,20 @@
               : entry.kind === "bad"
                 ? "color:#ff6b6b"
                 : ""}
-          >{entry.text}</div>
+          >
+            {entry.text}
+          </div>
         {/each}
       </div>
 
-      <div id="msg-bar" class="msg-bar{gs.msgKind ? ' ' + gs.msgKind : ''}" role="status" aria-live="polite">{gs.msgText}</div>
+      <div
+        id="msg-bar"
+        class="msg-bar{gs.msgKind ? ' ' + gs.msgKind : ''}"
+        role="status"
+        aria-live="polite"
+      >
+        {gs.msgText}
+      </div>
 
       <div id="wait-banner" class={gs.showWait ? "" : "hidden"} role="status" aria-live="polite">
         // Awaiting other operators&hellip;
@@ -181,8 +190,8 @@
           <button
             id="resolve-btn"
             disabled={gs.locked || gs.selectedCardIdx == null || gs.selected.length === 0}
-            onclick={onPickCard}
-          >TRANSMIT</button>
+            onclick={onPickCard}>TRANSMIT</button
+          >
           <button class="btn-secondary" onclick={onClear}>CLEAR</button>
           <button class="btn-secondary" onclick={onPass}>HOLD</button>
         </div>
