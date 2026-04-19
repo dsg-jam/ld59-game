@@ -4,7 +4,7 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "allowJs": false,
-    "target": "ES2020",
+    "target": "ES2025",
     "verbatimModuleSyntax": true
   }
 }
