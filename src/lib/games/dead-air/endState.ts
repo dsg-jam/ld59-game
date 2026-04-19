@@ -1,4 +1,4 @@
-import { writable } from 'svelte/store';
+import { writable } from "svelte/store";
 
 export interface PlayerReveal {
   name: string;
@@ -6,7 +6,7 @@ export interface PlayerReveal {
 }
 
 export interface EndState {
-  winner: 'researchers' | 'mimic';
+  winner: "researchers" | "mimic";
   roles: PlayerReveal[];
 }
 

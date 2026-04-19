@@ -103,18 +103,25 @@
 </div>
 
 {#if $endState}
-<div id="end">
-  <div class="inner">
-    <h2 aria-live="polite" style:color={$endState.winner === 'researchers' ? 'var(--ok)' : 'var(--danger)'}>
-      {$endState.winner === 'researchers' ? 'SIGNAL RESTORED' : 'THE MIMIC WINS'}
-    </h2>
-    <p>{$endState.winner === 'researchers' ? 'The outpost reconnects to the world.' : 'The relay falls silent in the storm.'}</p>
-    <ul>
-      {#each $endState.roles as r (r.name)}
-        <li>{r.name} — {r.role.toUpperCase()}</li>
-      {/each}
-    </ul>
-    <button onclick={() => location.reload()}>PLAY AGAIN</button>
+  <div id="end">
+    <div class="inner">
+      <h2
+        aria-live="polite"
+        style:color={$endState.winner === "researchers" ? "var(--ok)" : "var(--danger)"}
+      >
+        {$endState.winner === "researchers" ? "SIGNAL RESTORED" : "THE MIMIC WINS"}
+      </h2>
+      <p>
+        {$endState.winner === "researchers"
+          ? "The outpost reconnects to the world."
+          : "The relay falls silent in the storm."}
+      </p>
+      <ul>
+        {#each $endState.roles as r (r.name)}
+          <li>{r.name} — {r.role.toUpperCase()}</li>
+        {/each}
+      </ul>
+      <button onclick={() => location.reload()}>PLAY AGAIN</button>
+    </div>
   </div>
-</div>
 {/if}

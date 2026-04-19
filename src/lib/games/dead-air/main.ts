@@ -1,19 +1,36 @@
 import Peer from "peerjs";
 import type { DataConnection, MediaConnection } from "peerjs";
-import { describePeerError as sharedDescribePeerError, makeCode as sharedMakeCode } from "$lib/peer";
+import {
+  describePeerError as sharedDescribePeerError,
+  makeCode as sharedMakeCode,
+} from "$lib/peer";
 import { endState as endStateStore } from "$lib/games/dead-air/endState";
 import {
-  type Player, type Tower, type Role, type VoteState,
-  WORLD_W, WORLD_H, PLAYER_SPEED, PLAYER_COLORS, MAX_PLAYERS,
-  TOWER_REQUIRED, WARM_X, WARM_Y, WARM_R,
-  VOTE_DURATION_MS, ELIM_COOLDOWN_MS, PLAYBACK_COOLDOWN_MS, SNIPPET_DURATION_MS,
+  type Player,
+  type Tower,
+  type Role,
+  type VoteState,
+  WORLD_W,
+  WORLD_H,
+  PLAYER_SPEED,
+  PLAYER_COLORS,
+  MAX_PLAYERS,
+  TOWER_REQUIRED,
+  WARM_X,
+  WARM_Y,
+  WARM_R,
+  VOTE_DURATION_MS,
+  ELIM_COOLDOWN_MS,
+  PLAYBACK_COOLDOWN_MS,
+  SNIPPET_DURATION_MS,
   createDefaultTowers,
   assignRoles as engineAssignRoles,
   checkWinConditions as engineCheckWin,
   updateTowers as engineUpdateTowers,
   isIsolatedInDark as engineIsIsolated,
   resolveVote as engineResolveVote,
-  clamp, dist,
+  clamp,
+  dist,
 } from "$lib/dead-air-engine";
 
 (() => {
@@ -57,13 +74,13 @@ import {
   type Snippet = { fromId: string; name: string; buffer: ArrayBuffer };
 
   // ── CONSTANTS ────────────────────────────────────────────────────────────────
-  const PEER_PREFIX = 'dead-air-';
+  const PEER_PREFIX = "dead-air-";
   const ROOM_CODE_LENGTH = 5;
   const VOICE_FREQ_NEAR = 3500;
   const VOICE_FREQ_MID = 800;
   const VOICE_FREQ_FAR = 200;
-  const MIME_OPUS_WEBM = 'audio/webm;codecs=opus';
-  const MIME_WEBM = 'audio/webm';
+  const MIME_OPUS_WEBM = "audio/webm;codecs=opus";
+  const MIME_WEBM = "audio/webm";
   const DEFAULT_OPERATIVE_RANGE = MAX_PLAYERS;
 
   const $ = (id: string): HTMLElement => {
@@ -71,23 +88,23 @@ import {
     if (!el) throw new Error(`#${id} not found`);
     return el;
   };
-  const $input = (id: string): HTMLInputElement => $( id) as HTMLInputElement;
+  const $input = (id: string): HTMLInputElement => $(id) as HTMLInputElement;
   const $btn = (id: string): HTMLButtonElement => $(id) as HTMLButtonElement;
-  const canvas = $('map') as HTMLCanvasElement;
-  const ctxRaw = canvas.getContext('2d');
-  if (!ctxRaw) throw new Error('no ctx');
+  const canvas = $("map") as HTMLCanvasElement;
+  const ctxRaw = canvas.getContext("2d");
+  if (!ctxRaw) throw new Error("no ctx");
   const ctx = ctxRaw;
 
   // ── NETWORK + GAME STATE ─────────────────────────────────────────────────────
   let peer: InstanceType<typeof Peer> | null = null;
   let isHost = false;
   let hostId: string | null = null;
-  let roomCode = '';
+  let roomCode = "";
   let myId: string | null = null;
   let gameStarted = false;
   let localRole: Role | null = null;
   let pendingRole: Role | null = null;
-  let myColor: string = PLAYER_COLORS[0] ?? '#ffb800';
+  let myColor: string = PLAYER_COLORS[0] ?? "#ffb800";
 
   const players = new Map<string, Player>();
   const conns = new Map<string, DataConnection>();
@@ -121,8 +138,12 @@ import {
   const capturedSnippets: Snippet[] = [];
   let activeCapture: MediaRecorder | null = null;
 
-  function setWarn(msg = '') { $('warn').textContent = msg; }
-  function setLobbyStatus(msg = '') { $('lobby-status').textContent = msg; }
+  function setWarn(msg = "") {
+    $("warn").textContent = msg;
+  }
+  function setLobbyStatus(msg = "") {
+    $("lobby-status").textContent = msg;
+  }
 
   function makeCode() {
     return sharedMakeCode(ROOM_CODE_LENGTH);
@@ -132,14 +153,14 @@ import {
     return `OPERATIVE-${1 + Math.floor(Math.random() * DEFAULT_OPERATIVE_RANGE)}`;
   }
 
-  $input('name').value = defaultName();
+  $input("name").value = defaultName();
 
   function describePeerError(err: unknown): string {
     return sharedDescribePeerError(err as Parameters<typeof sharedDescribePeerError>[0]);
   }
 
   function updateNetDot(ok: boolean): void {
-    $('net-dot').classList.toggle('ok', !!ok);
+    $("net-dot").classList.toggle("ok", !!ok);
   }
 
   function myPlayer(): Player | undefined {
@@ -149,17 +170,29 @@ import {
   // ── PEER DATA CONNECTIONS ─────────────────────────────────────────────────────
   function resetNet() {
     for (const c of conns.values()) {
-      try { c.close(); } catch { /* ignore */ }
+      try {
+        c.close();
+      } catch {
+        /* ignore */
+      }
     }
     conns.clear();
     for (const call of mediaCalls.values()) {
-      try { call.close(); } catch { /* ignore */ }
+      try {
+        call.close();
+      } catch {
+        /* ignore */
+      }
     }
     mediaCalls.clear();
     incomingRawStreams.clear();
     voicePipelines.clear();
     if (peer) {
-      try { peer.destroy(); } catch { /* ignore */ }
+      try {
+        peer.destroy();
+      } catch {
+        /* ignore */
+      }
       peer = null;
     }
     updateNetDot(false);
@@ -171,18 +204,23 @@ import {
     if (conns.has(pid)) return;
     conns.set(pid, conn);
 
-    conn.on('open', () => {
+    conn.on("open", () => {
       updateNetDot(true);
       if (gameStarted && players.has(pid)) {
-        if (myId) send(conn, { t: 'helloMesh', id: myId, name: $input('name').value.slice(0, 16) || 'OPERATIVE' });
+        if (myId)
+          send(conn, {
+            t: "helloMesh",
+            id: myId,
+            name: $input("name").value.slice(0, 16) || "OPERATIVE",
+          });
       }
     });
 
-    conn.on('data', (data: unknown) => {
+    conn.on("data", (data: unknown) => {
       handleData(data, pid);
     });
 
-    conn.on('close', () => {
+    conn.on("close", () => {
       conns.delete(pid);
       const p = players.get(pid);
       if (p) {
@@ -230,24 +268,24 @@ import {
   }
 
   function setupPeerEvents(p: InstanceType<typeof Peer>): void {
-    p.on('connection', (conn: DataConnection) => {
+    p.on("connection", (conn: DataConnection) => {
       addConn(conn);
     });
 
-    p.on('call', (call: MediaConnection) => {
+    p.on("call", (call: MediaConnection) => {
       call.answer(outgoingStream ?? undefined);
       attachCall(call, call.peer);
     });
 
-    p.on('error', (err: Error) => {
-      setLobbyStatus('Peer error: ' + describePeerError(err));
-      setWarn('Network issue: ' + describePeerError(err));
+    p.on("error", (err: Error) => {
+      setLobbyStatus("Peer error: " + describePeerError(err));
+      setWarn("Network issue: " + describePeerError(err));
     });
   }
 
   // ── LOBBY FLOW ────────────────────────────────────────────────────────────────
   function lobbySnapshot() {
-    return [...players.values()].map(p => ({
+    return [...players.values()].map((p) => ({
       id: p.id,
       name: p.name,
       alive: p.alive !== false,
@@ -255,27 +293,27 @@ import {
   }
 
   function renderLobbyPlayers(): void {
-    const wrap = $('lobby-players');
-    wrap.innerHTML = '';
+    const wrap = $("lobby-players");
+    wrap.innerHTML = "";
     const list = lobbySnapshot();
     if (!list.length) {
       wrap.innerHTML = '<div class="lp">No operators connected.</div>';
       return;
     }
     for (const p of list) {
-      const d = document.createElement('div');
-      d.className = 'lp';
-      d.textContent = `${p.name}${p.id === myId ? ' (you)' : ''}`;
+      const d = document.createElement("div");
+      d.className = "lp";
+      d.textContent = `${p.name}${p.id === myId ? " (you)" : ""}`;
       wrap.appendChild(d);
     }
     if (isHost) {
-      $btn('start-btn').disabled = list.length < 2 || list.length > MAX_PLAYERS;
+      $btn("start-btn").disabled = list.length < 2 || list.length > MAX_PLAYERS;
     }
   }
 
   function syncLobby() {
     if (!isHost) return;
-    const payload = { t: 'lobby', roomCode, hostId, players: lobbySnapshot() };
+    const payload = { t: "lobby", roomCode, hostId, players: lobbySnapshot() };
     broadcast(payload);
     renderLobbyPlayers();
   }
@@ -288,29 +326,29 @@ import {
     pendingRole = null;
     roomCode = makeCode();
     hostId = PEER_PREFIX + roomCode;
-    setLobbyStatus('Opening room...');
-    $('room-wrap').style.display = 'flex';
-    $('room-code').textContent = roomCode;
+    setLobbyStatus("Opening room...");
+    $("room-wrap").style.display = "flex";
+    $("room-code").textContent = roomCode;
 
     peer = new Peer(hostId);
     setupPeerEvents(peer);
 
-    peer.on('open', id => {
+    peer.on("open", (id) => {
       myId = id;
-      const name = ($input('name').value || 'OPERATIVE').slice(0, 16);
+      const name = ($input("name").value || "OPERATIVE").slice(0, 16);
       players.clear();
       rolesById.clear();
       towers = createDefaultTowers();
       players.set(myId, {
         id: myId,
         name,
-        color: PLAYER_COLORS[0] ?? '#ffb800',
+        color: PLAYER_COLORS[0] ?? "#ffb800",
         x: WARM_X,
         y: WARM_Y,
         alive: true,
         spectator: false,
       });
-      setLobbyStatus('Room live. Share code and wait for operators.');
+      setLobbyStatus("Room live. Share code and wait for operators.");
       renderLobbyPlayers();
       syncLobby();
     });
@@ -322,25 +360,25 @@ import {
     gameStarted = false;
     localRole = null;
     pendingRole = null;
-    const code = $input('join-code').value.trim().toUpperCase();
-    if (!code) return setLobbyStatus('Enter room code.');
+    const code = $input("join-code").value.trim().toUpperCase();
+    if (!code) return setLobbyStatus("Enter room code.");
     roomCode = code;
     hostId = PEER_PREFIX + code;
-    setLobbyStatus('Connecting to room...');
+    setLobbyStatus("Connecting to room...");
 
     peer = new Peer();
     setupPeerEvents(peer);
 
-    peer.on('open', id => {
+    peer.on("open", (id) => {
       myId = id;
       const currentPeer = peer;
       const currentHostId = hostId;
       if (!currentPeer || !currentHostId) return;
       const c = currentPeer.connect(currentHostId, { reliable: true });
       addConn(c);
-      c.on('open', () => {
-        send(c, { t: 'helloJoin', name: ($input('name').value || 'OPERATIVE').slice(0, 16) });
-        setLobbyStatus('Connected. Waiting for host.');
+      c.on("open", () => {
+        send(c, { t: "helloJoin", name: ($input("name").value || "OPERATIVE").slice(0, 16) });
+        setLobbyStatus("Connected. Waiting for host.");
       });
     });
   }
@@ -366,9 +404,9 @@ import {
 
     let idx = 0;
     for (const p of players.values()) {
-      p.color = PLAYER_COLORS[idx % PLAYER_COLORS.length] ?? '#ffb800';
-      p.x = WARM_X + (Math.cos(idx * 1.7) * 30);
-      p.y = WARM_Y + (Math.sin(idx * 1.7) * 30);
+      p.color = PLAYER_COLORS[idx % PLAYER_COLORS.length] ?? "#ffb800";
+      p.x = WARM_X + Math.cos(idx * 1.7) * 30;
+      p.y = WARM_Y + Math.sin(idx * 1.7) * 30;
       p.alive = true;
       p.spectator = false;
       idx++;
@@ -379,10 +417,10 @@ import {
 
     for (const [id] of players) {
       if (id === myId) continue;
-      sendTo(id, { t: 'rolePrivate', role: rolesById.get(id) });
+      sendTo(id, { t: "rolePrivate", role: rolesById.get(id) });
     }
 
-    const payloadPlayers = [...players.values()].map(p => ({
+    const payloadPlayers = [...players.values()].map((p) => ({
       id: p.id,
       name: p.name,
       color: p.color,
@@ -392,20 +430,29 @@ import {
       spectator: p.spectator,
     }));
 
-    broadcast({ t: 'start', hostId, players: payloadPlayers, towers });
+    broadcast({ t: "start", hostId, players: payloadPlayers, towers });
     startLocalGame(payloadPlayers, towers);
   }
 
   function startLocalGame(seedPlayers: PlayerSnap[], seedTowers: Tower[]): void {
-    $('lobby').style.display = 'none';
-    $('game').style.display = 'block';
+    $("lobby").style.display = "none";
+    $("game").style.display = "block";
     towers = seedTowers.map((t: Tower) => ({ ...t }));
     players.clear();
-    for (const p of seedPlayers) players.set(p.id, { id: p.id, name: p.name ?? 'OPERATIVE', color: p.color ?? '#888', x: p.x, y: p.y, alive: p.alive, spectator: p.spectator });
+    for (const p of seedPlayers)
+      players.set(p.id, {
+        id: p.id,
+        name: p.name ?? "OPERATIVE",
+        color: p.color ?? "#888",
+        x: p.x,
+        y: p.y,
+        alive: p.alive,
+        spectator: p.spectator,
+      });
     if (myId && !players.has(myId)) {
       players.set(myId, {
         id: myId,
-        name: ($input('name').value || 'OPERATIVE').slice(0, 16),
+        name: ($input("name").value || "OPERATIVE").slice(0, 16),
         color: myColor,
         x: WARM_X,
         y: WARM_Y,
@@ -417,22 +464,22 @@ import {
       localRole = pendingRole;
       pendingRole = null;
     }
-    $('role-pill').textContent = `ROLE: ${localRole ? localRole.toUpperCase() : 'UNKNOWN'}`;
-    $('role-pill').classList.toggle('bad', localRole === 'mimic');
-    $('mimic-panel').style.display = localRole === 'mimic' ? 'block' : 'none';
-    $btn('call-vote').disabled = false;
-    $('status-pill').textContent = 'TRANSMISSION LIVE';
+    $("role-pill").textContent = `ROLE: ${localRole ? localRole.toUpperCase() : "UNKNOWN"}`;
+    $("role-pill").classList.toggle("bad", localRole === "mimic");
+    $("mimic-panel").style.display = localRole === "mimic" ? "block" : "none";
+    $btn("call-vote").disabled = false;
+    $("status-pill").textContent = "TRANSMISSION LIVE";
 
     ensureMesh();
     initMicrophone().then(() => beginVoiceCalls());
 
     renderSidebar();
-    setWarn(micDenied ? 'Microphone denied. You can still play without outgoing voice.' : '');
+    setWarn(micDenied ? "Microphone denied. You can still play without outgoing voice." : "");
   }
 
   // ── DATA MESSAGES ─────────────────────────────────────────────────────────────
   function handleData(data: unknown, fromId: string): void {
-    if (!data || typeof data !== 'object') return;
+    if (!data || typeof data !== "object") return;
     const msg = data as GameMsg;
 
     if (isHost) {
@@ -441,165 +488,232 @@ import {
     }
 
     switch (msg.t) {
-      case 'lobby': {
-        hostId = msg.hostId ?? null;
-        roomCode = msg.roomCode ?? '';
-        players.clear();
-        for (const p of msg.players ?? []) {
-          players.set(p.id, { id: p.id, name: p.name ?? 'OPERATIVE', color: '#888', x: WARM_X, y: WARM_Y, alive: p.alive, spectator: false });
-        }
-        renderLobbyPlayers();
-        setLobbyStatus(`Joined ${roomCode}. Awaiting host start.`);
-      } break;
-      case 'rolePrivate': {
-        pendingRole = msg.role ?? null;
-        if (gameStarted) {
-          localRole = pendingRole;
-          pendingRole = null;
-          $('role-pill').textContent = `ROLE: ${localRole ? localRole.toUpperCase() : 'UNKNOWN'}`;
-          $('role-pill').classList.toggle('bad', localRole === 'mimic');
-          $('mimic-panel').style.display = localRole === 'mimic' ? 'block' : 'none';
-          renderSidebar();
-        }
-      } break;
-      case 'start': {
-        gameStarted = true;
-        startLocalGame(msg.players ?? [], msg.towers ?? towers);
-      } break;
-      case 'helloMesh': {
-        if (!players.has(fromId)) {
-          players.set(fromId, { id: fromId, name: msg.name ?? 'OPERATIVE', color: '#888', x: WARM_X, y: WARM_Y, alive: true, spectator: false });
-        }
-      } break;
-      case 'state': {
-        applyAuthoritativeState(msg);
-      } break;
-      case 'towerSync': {
-        towers = (msg.towers ?? []).map((t: Tower) => ({ ...t }));
-        renderSidebar();
-      } break;
-      case 'voteStarted': {
-        if (msg.vote) voteState = { ...msg.vote, votes: msg.vote.votes ?? {} };
-        renderVotePanel();
-      } break;
-      case 'voteUpdate': {
-        if (!voteState) voteState = { active: true, endsAt: Date.now() + 15000, votes: {}, caller: '' };
-        voteState.votes = msg.votes ?? {};
-        renderVotePanel();
-      } break;
-      case 'playerEliminated': {
-        const p = players.get(msg.id ?? '');
-        if (p) {
-          p.alive = false;
-          p.spectator = true;
-          if (msg.id === myId && outgoingStream) {
-            for (const tr of outgoingStream.getAudioTracks()) tr.enabled = false;
+      case "lobby":
+        {
+          hostId = msg.hostId ?? null;
+          roomCode = msg.roomCode ?? "";
+          players.clear();
+          for (const p of msg.players ?? []) {
+            players.set(p.id, {
+              id: p.id,
+              name: p.name ?? "OPERATIVE",
+              color: "#888",
+              x: WARM_X,
+              y: WARM_Y,
+              alive: p.alive,
+              spectator: false,
+            });
           }
+          renderLobbyPlayers();
+          setLobbyStatus(`Joined ${roomCode}. Awaiting host start.`);
+        }
+        break;
+      case "rolePrivate":
+        {
+          pendingRole = msg.role ?? null;
+          if (gameStarted) {
+            localRole = pendingRole;
+            pendingRole = null;
+            $("role-pill").textContent = `ROLE: ${localRole ? localRole.toUpperCase() : "UNKNOWN"}`;
+            $("role-pill").classList.toggle("bad", localRole === "mimic");
+            $("mimic-panel").style.display = localRole === "mimic" ? "block" : "none";
+            renderSidebar();
+          }
+        }
+        break;
+      case "start":
+        {
+          gameStarted = true;
+          startLocalGame(msg.players ?? [], msg.towers ?? towers);
+        }
+        break;
+      case "helloMesh":
+        {
+          if (!players.has(fromId)) {
+            players.set(fromId, {
+              id: fromId,
+              name: msg.name ?? "OPERATIVE",
+              color: "#888",
+              x: WARM_X,
+              y: WARM_Y,
+              alive: true,
+              spectator: false,
+            });
+          }
+        }
+        break;
+      case "state":
+        {
+          applyAuthoritativeState(msg);
+        }
+        break;
+      case "towerSync":
+        {
+          towers = (msg.towers ?? []).map((t: Tower) => ({ ...t }));
           renderSidebar();
         }
-      } break;
-      case 'mimicPlayback': {
-        handleMimicPlayback(msg);
-      } break;
-      case 'warn': {
-        setWarn(msg.text ?? '');
-      } break;
-      case 'gameOver': {
-        showEnd(msg.winner ?? '', msg.roles ?? []);
-      } break;
+        break;
+      case "voteStarted":
+        {
+          if (msg.vote) voteState = { ...msg.vote, votes: msg.vote.votes ?? {} };
+          renderVotePanel();
+        }
+        break;
+      case "voteUpdate":
+        {
+          if (!voteState)
+            voteState = { active: true, endsAt: Date.now() + 15000, votes: {}, caller: "" };
+          voteState.votes = msg.votes ?? {};
+          renderVotePanel();
+        }
+        break;
+      case "playerEliminated":
+        {
+          const p = players.get(msg.id ?? "");
+          if (p) {
+            p.alive = false;
+            p.spectator = true;
+            if (msg.id === myId && outgoingStream) {
+              for (const tr of outgoingStream.getAudioTracks()) tr.enabled = false;
+            }
+            renderSidebar();
+          }
+        }
+        break;
+      case "mimicPlayback":
+        {
+          handleMimicPlayback(msg);
+        }
+        break;
+      case "warn":
+        {
+          setWarn(msg.text ?? "");
+        }
+        break;
+      case "gameOver":
+        {
+          showEnd(msg.winner ?? "", msg.roles ?? []);
+        }
+        break;
     }
   }
 
   function handleHostMessage(msg: GameMsg, fromId: string): void {
     switch (msg.t) {
-      case 'helloJoin': {
-        if (gameStarted) {
-          sendTo(fromId, { t: 'warn', text: 'Match already started.' });
-          return;
+      case "helloJoin":
+        {
+          if (gameStarted) {
+            sendTo(fromId, { t: "warn", text: "Match already started." });
+            return;
+          }
+          if (players.size >= MAX_PLAYERS) {
+            sendTo(fromId, { t: "warn", text: "Room is full (max 6)." });
+            return;
+          }
+          const name = (msg.name || "OPERATIVE").slice(0, 16);
+          const idx = players.size;
+          players.set(fromId, {
+            id: fromId,
+            name,
+            color: PLAYER_COLORS[idx % PLAYER_COLORS.length] ?? "#ffb800",
+            x: WARM_X,
+            y: WARM_Y,
+            alive: true,
+            spectator: false,
+          });
+          syncLobby();
         }
-        if (players.size >= MAX_PLAYERS) {
-          sendTo(fromId, { t: 'warn', text: 'Room is full (max 6).' });
-          return;
+        break;
+
+      case "updateName":
+        {
+          const p = players.get(fromId);
+          if (p) p.name = (msg.name || p.name).slice(0, 16);
+          syncLobby();
         }
-        const name = (msg.name || 'OPERATIVE').slice(0, 16);
-        const idx = players.size;
-        players.set(fromId, {
-          id: fromId,
-          name,
-          color: PLAYER_COLORS[idx % PLAYER_COLORS.length] ?? '#ffb800',
-          x: WARM_X,
-          y: WARM_Y,
-          alive: true,
-          spectator: false,
-        });
-        syncLobby();
-      } break;
+        break;
 
-      case 'updateName': {
-        const p = players.get(fromId);
-        if (p) p.name = (msg.name || p.name).slice(0, 16);
-        syncLobby();
-      } break;
+      case "pos":
+        {
+          if (!gameStarted) return;
+          const p = players.get(fromId);
+          if (!p || !p.alive) return;
+          p.x = clamp(msg.x ?? 0, 0, WORLD_W);
+          p.y = clamp(msg.y ?? 0, 0, WORLD_H);
+        }
+        break;
 
-      case 'pos': {
-        if (!gameStarted) return;
-        const p = players.get(fromId);
-        if (!p || !p.alive) return;
-        p.x = clamp(msg.x ?? 0, 0, WORLD_W);
-        p.y = clamp(msg.y ?? 0, 0, WORLD_H);
-      } break;
+      case "requestVote":
+        {
+          if (!gameStarted || (voteState && voteState.active)) return;
+          const caller = players.get(fromId);
+          if (!caller || !caller.alive) return;
+          if (rolesById.get(fromId) === "mimic") return;
+          voteState = {
+            active: true,
+            endsAt: Date.now() + VOTE_DURATION_MS,
+            votes: {},
+            caller: fromId,
+          };
+          broadcast({ t: "voteStarted", vote: voteState });
+          renderVotePanel();
+        }
+        break;
 
-      case 'requestVote': {
-        if (!gameStarted || voteState && voteState.active) return;
-        const caller = players.get(fromId);
-        if (!caller || !caller.alive) return;
-        if (rolesById.get(fromId) === 'mimic') return;
-        voteState = { active: true, endsAt: Date.now() + VOTE_DURATION_MS, votes: {}, caller: fromId };
-        broadcast({ t: 'voteStarted', vote: voteState });
-        renderVotePanel();
-      } break;
+      case "castVote":
+        {
+          if (!voteState || !voteState.active) return;
+          const voter = players.get(fromId);
+          if (!voter || !voter.alive) return;
+          if (rolesById.get(fromId) === "mimic") return;
+          if (!msg.target || !players.has(msg.target)) return;
+          voteState.votes[fromId] = msg.target;
+          broadcast({ t: "voteUpdate", votes: voteState.votes });
+        }
+        break;
 
-      case 'castVote': {
-        if (!voteState || !voteState.active) return;
-        const voter = players.get(fromId);
-        if (!voter || !voter.alive) return;
-        if (rolesById.get(fromId) === 'mimic') return;
-        if (!msg.target || !players.has(msg.target)) return;
-        voteState.votes[fromId] = msg.target;
-        broadcast({ t: 'voteUpdate', votes: voteState.votes });
-      } break;
+      case "mimicElim":
+        {
+          if (!gameStarted) return;
+          if (rolesById.get(fromId) !== "mimic") return;
+          const now = Date.now();
+          if (now - lastElimAt < ELIM_COOLDOWN_MS) return;
+          const targetId = msg.target;
+          if (!targetId || !players.has(targetId)) return;
+          const target = players.get(targetId);
+          if (!target || !target.alive || rolesById.get(targetId) === "mimic") return;
+          if (!isIsolatedInDark(targetId)) return;
 
-      case 'mimicElim': {
-        if (!gameStarted) return;
-        if (rolesById.get(fromId) !== 'mimic') return;
-        const now = Date.now();
-        if (now - lastElimAt < ELIM_COOLDOWN_MS) return;
-        const targetId = msg.target;
-        if (!targetId || !players.has(targetId)) return;
-        const target = players.get(targetId);
-        if (!target || !target.alive || rolesById.get(targetId) === 'mimic') return;
-        if (!isIsolatedInDark(targetId)) return;
+          target.alive = false;
+          target.spectator = true;
+          lastElimAt = now;
+          broadcast({ t: "playerEliminated", id: targetId, reason: "mimic" });
+          checkWinConditions();
+        }
+        break;
 
-        target.alive = false;
-        target.spectator = true;
-        lastElimAt = now;
-        broadcast({ t: 'playerEliminated', id: targetId, reason: 'mimic' });
-        checkWinConditions();
-      } break;
-
-      case 'mimicPlaybackRequest': {
-        if (!gameStarted) return;
-        if (rolesById.get(fromId) !== 'mimic') return;
-        if (!msg.buffer || typeof msg.buffer.byteLength !== 'number') return;
-        const now = Date.now();
-        if (now - lastPlaybackAt < PLAYBACK_COOLDOWN_MS) return;
-        const mimic = players.get(fromId);
-        if (!mimic || !mimic.alive) return;
-        lastPlaybackAt = now;
-        const payload = { t: 'mimicPlayback', by: fromId, from: msg.from, x: mimic.x, y: mimic.y, buffer: msg.buffer };
-        broadcast(payload);
-        handleMimicPlayback(payload);
-      } break;
+      case "mimicPlaybackRequest":
+        {
+          if (!gameStarted) return;
+          if (rolesById.get(fromId) !== "mimic") return;
+          if (!msg.buffer || typeof msg.buffer.byteLength !== "number") return;
+          const now = Date.now();
+          if (now - lastPlaybackAt < PLAYBACK_COOLDOWN_MS) return;
+          const mimic = players.get(fromId);
+          if (!mimic || !mimic.alive) return;
+          lastPlaybackAt = now;
+          const payload = {
+            t: "mimicPlayback",
+            by: fromId,
+            from: msg.from,
+            x: mimic.x,
+            y: mimic.y,
+            buffer: msg.buffer,
+          };
+          broadcast(payload);
+          handleMimicPlayback(payload);
+        }
+        break;
     }
   }
 
@@ -607,7 +721,15 @@ import {
     const snapshot = msg.players ?? [];
     for (const p of snapshot) {
       if (!players.has(p.id)) {
-        players.set(p.id, { id: p.id, name: p.name ?? 'OPERATIVE', color: p.color ?? '#999', x: p.x, y: p.y, alive: p.alive, spectator: p.spectator });
+        players.set(p.id, {
+          id: p.id,
+          name: p.name ?? "OPERATIVE",
+          color: p.color ?? "#999",
+          x: p.x,
+          y: p.y,
+          alive: p.alive,
+          spectator: p.spectator,
+        });
       }
       const local = players.get(p.id);
       if (!local) continue;
@@ -628,11 +750,13 @@ import {
   // ── AUDIO HELPERS ────────────────────────────────────────────────────────────
   function ensureAudioContext(): void {
     if (!audioCtx) {
-      const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const AC =
+        window.AudioContext ??
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       audioCtx = new AC();
       pinkNoiseBuffer = createPinkNoiseBuffer(audioCtx, 2.0);
     }
-    if (audioCtx.state === 'suspended') void audioCtx.resume();
+    if (audioCtx.state === "suspended") void audioCtx.resume();
   }
 
   async function initMicrophone() {
@@ -646,7 +770,7 @@ import {
       outgoingStream = null;
       return;
     }
-    if (localRole === 'mimic' && outgoingStream) {
+    if (localRole === "mimic" && outgoingStream) {
       for (const tr of outgoingStream.getAudioTracks()) tr.enabled = false;
     }
   }
@@ -655,15 +779,21 @@ import {
     const len = Math.floor(ac.sampleRate * seconds);
     const buffer = ac.createBuffer(1, len, ac.sampleRate);
     const out = buffer.getChannelData(0);
-    let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+    let b0 = 0,
+      b1 = 0,
+      b2 = 0,
+      b3 = 0,
+      b4 = 0,
+      b5 = 0,
+      b6 = 0;
     for (let i = 0; i < len; i++) {
       const white = Math.random() * 2 - 1;
       b0 = 0.99886 * b0 + white * 0.0555179;
       b1 = 0.99332 * b1 + white * 0.0750759;
-      b2 = 0.96900 * b2 + white * 0.1538520;
-      b3 = 0.86650 * b3 + white * 0.3104856;
-      b4 = 0.55000 * b4 + white * 0.5329522;
-      b5 = -0.7616 * b5 - white * 0.0168980;
+      b2 = 0.969 * b2 + white * 0.153852;
+      b3 = 0.8665 * b3 + white * 0.3104856;
+      b4 = 0.55 * b4 + white * 0.5329522;
+      b5 = -0.7616 * b5 - white * 0.016898;
       const pink = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
       b6 = white * 0.115926;
       out[i] = pink * 0.11;
@@ -673,12 +803,12 @@ import {
 
   function attachCall(call: MediaConnection, sourceId: string): void {
     mediaCalls.set(sourceId, call);
-    call.on('stream', (stream: MediaStream) => {
+    call.on("stream", (stream: MediaStream) => {
       incomingRawStreams.set(sourceId, stream);
       attachVoicePipeline(sourceId, stream);
       renderMimicPanel();
     });
-    call.on('close', () => {
+    call.on("close", () => {
       mediaCalls.delete(sourceId);
       incomingRawStreams.delete(sourceId);
       voicePipelines.delete(sourceId);
@@ -703,7 +833,7 @@ import {
     if (!ac) return;
     const source = ac.createMediaStreamSource(stream);
     const filter = ac.createBiquadFilter();
-    filter.type = 'lowpass';
+    filter.type = "lowpass";
     filter.frequency.value = VOICE_FREQ_NEAR;
     const gain = ac.createGain();
     gain.gain.value = 1.0;
@@ -721,10 +851,21 @@ import {
     noiseGain.connect(ac.destination);
     noiseSrc.start();
 
-    voicePipelines.set(sourceId, { filter, gain, noiseGain, wobblePhase: Math.random() * Math.PI * 2 });
+    voicePipelines.set(sourceId, {
+      filter,
+      gain,
+      noiseGain,
+      wobblePhase: Math.random() * Math.PI * 2,
+    });
   }
 
-  function applyDistanceNodes(filter: BiquadFilterNode, gain: GainNode, noiseGain: GainNode, d: number, wobbleT: number): void {
+  function applyDistanceNodes(
+    filter: BiquadFilterNode,
+    gain: GainNode,
+    noiseGain: GainNode,
+    d: number,
+    wobbleT: number
+  ): void {
     let f = VOICE_FREQ_NEAR;
     let g = 1;
     let n = 0.01;
@@ -748,7 +889,10 @@ import {
     noiseGain.gain.setTargetAtTime(n, audioCtx.currentTime, 0.1);
   }
 
-  async function playDecodedBuffer(arrayBuffer: ArrayBuffer, sourcePos: { x: number; y: number }): Promise<void> {
+  async function playDecodedBuffer(
+    arrayBuffer: ArrayBuffer,
+    sourcePos: { x: number; y: number }
+  ): Promise<void> {
     if (!audioCtx) ensureAudioContext();
     const ac = audioCtx;
     if (!ac) return;
@@ -757,7 +901,7 @@ import {
       const src = ac.createBufferSource();
       src.buffer = decoded;
       const filter = ac.createBiquadFilter();
-      filter.type = 'lowpass';
+      filter.type = "lowpass";
       filter.frequency.value = VOICE_FREQ_NEAR;
       const gain = ac.createGain();
       gain.gain.value = 1;
@@ -778,8 +922,16 @@ import {
       }
       src.start();
       noiseSrc.start();
-      src.onended = () => { try { noiseSrc.stop(); } catch { /* ignore */ } };
-    } catch { /* ignore */ }
+      src.onended = () => {
+        try {
+          noiseSrc.stop();
+        } catch {
+          /* ignore */
+        }
+      };
+    } catch {
+      /* ignore */
+    }
   }
 
   function handleMimicPlayback(msg: GameMsg): void {
@@ -789,26 +941,28 @@ import {
 
   // ── MIMIC CAPTURE + PLAYBACK UI ──────────────────────────────────────────────
   function renderMimicPanel(): void {
-    if (localRole !== 'mimic') return;
-    const captureList = $('capture-list');
-    captureList.innerHTML = '';
-    const candidates = [...players.values()].filter(p => p.id !== myId && p.alive && rolesById.get(p.id) !== 'mimic');
+    if (localRole !== "mimic") return;
+    const captureList = $("capture-list");
+    captureList.innerHTML = "";
+    const candidates = [...players.values()].filter(
+      (p) => p.id !== myId && p.alive && rolesById.get(p.id) !== "mimic"
+    );
     for (const p of candidates) {
       const streamReady = incomingRawStreams.has(p.id);
-      const btn = document.createElement('button');
-      btn.className = 'mini';
-      btn.textContent = `⏺ CAPTURE ${p.name}${streamReady ? '' : ' (no signal yet)'}`;
+      const btn = document.createElement("button");
+      btn.className = "mini";
+      btn.textContent = `⏺ CAPTURE ${p.name}${streamReady ? "" : " (no signal yet)"}`;
       btn.disabled = !streamReady || !!activeCapture;
       btn.onclick = () => captureSnippet(p.id);
       captureList.appendChild(btn);
     }
-    const snippetList = $('snippet-list');
-    snippetList.innerHTML = '';
+    const snippetList = $("snippet-list");
+    snippetList.innerHTML = "";
     for (let i = 0; i < capturedSnippets.length; i++) {
       const s = capturedSnippets[i];
       if (!s) continue;
-      const b = document.createElement('button');
-      b.className = 'snippet';
+      const b = document.createElement("button");
+      b.className = "snippet";
       b.textContent = `[${s.name}] 3s snippet`;
       b.disabled = Date.now() - lastPlaybackAt < PLAYBACK_COOLDOWN_MS;
       b.onclick = () => playSnippet(i);
@@ -825,16 +979,24 @@ import {
     const chunks: Blob[] = [];
     activeCapture = rec;
     renderMimicPanel();
-    rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+    rec.ondataavailable = (e) => {
+      if (e.data && e.data.size) chunks.push(e.data);
+    };
     rec.onstop = async () => {
       activeCapture = null;
       const blob = new Blob(chunks, { type: mime });
       const buffer = await blob.arrayBuffer();
-      capturedSnippets.push({ fromId, name: person && person.name ? person.name : 'OPERATIVE', buffer });
+      capturedSnippets.push({
+        fromId,
+        name: person && person.name ? person.name : "OPERATIVE",
+        buffer,
+      });
       renderMimicPanel();
     };
     rec.start();
-    setTimeout(() => { if (rec.state !== 'inactive') rec.stop(); }, SNIPPET_DURATION_MS);
+    setTimeout(() => {
+      if (rec.state !== "inactive") rec.stop();
+    }, SNIPPET_DURATION_MS);
   }
 
   function playSnippet(index: number): void {
@@ -844,7 +1006,13 @@ import {
     const snippet = capturedSnippets[index];
     if (!snippet) return;
     lastPlaybackAt = Date.now();
-    sendToHost({ t: 'mimicPlaybackRequest', from: snippet.fromId, x: me.x, y: me.y, buffer: snippet.buffer });
+    sendToHost({
+      t: "mimicPlaybackRequest",
+      from: snippet.fromId,
+      x: me.x,
+      y: me.y,
+      buffer: snippet.buffer,
+    });
     renderMimicPanel();
   }
 
@@ -860,11 +1028,11 @@ import {
     if (voteState && voteState.active && Date.now() >= voteState.endsAt) resolveVote();
     if (now - lastTowerBroadcast > 1000) {
       lastTowerBroadcast = now;
-      broadcast({ t: 'towerSync', towers });
+      broadcast({ t: "towerSync", towers });
     }
     if (now - lastStateBroadcast > 100) {
       lastStateBroadcast = now;
-      const snapshot = [...players.values()].map(p => ({
+      const snapshot = [...players.values()].map((p) => ({
         id: p.id,
         name: p.name,
         color: p.color,
@@ -873,8 +1041,11 @@ import {
         alive: p.alive,
         spectator: p.spectator,
       }));
-      const vote = voteState && voteState.active ? { active: true, endsAt: voteState.endsAt, votes: voteState.votes || {} } : null;
-      broadcast({ t: 'state', players: snapshot, towers, vote });
+      const vote =
+        voteState && voteState.active
+          ? { active: true, endsAt: voteState.endsAt, votes: voteState.votes || {} }
+          : null;
+      broadcast({ t: "state", players: snapshot, towers, vote });
     }
     checkWinConditions();
   }
@@ -887,9 +1058,13 @@ import {
       if (p) {
         p.alive = false;
         p.spectator = true;
-        broadcast({ t: 'playerEliminated', id: result.eliminated, reason: result.correct ? 'vote-correct' : 'vote-wrong' });
+        broadcast({
+          t: "playerEliminated",
+          id: result.eliminated,
+          reason: result.correct ? "vote-correct" : "vote-wrong",
+        });
         if (result.correct) {
-          endMatch('researchers');
+          endMatch("researchers");
         }
       }
     }
@@ -906,16 +1081,23 @@ import {
   function endMatch(winner: string): void {
     if (endState) return;
     endState = { winner };
-    const roles = [...players.values()].map(p => ({ id: p.id, name: p.name, role: rolesById.get(p.id) ?? (p.id === myId ? localRole : 'unknown') }));
-    broadcast({ t: 'gameOver', winner, roles });
+    const roles = [...players.values()].map((p) => ({
+      id: p.id,
+      name: p.name,
+      role: rolesById.get(p.id) ?? (p.id === myId ? localRole : "unknown"),
+    }));
+    broadcast({ t: "gameOver", winner, roles });
     showEnd(winner, roles);
   }
 
-  function showEnd(winner: string, roles: Array<{ id: string; name: string; role?: string | null }>): void {
-    $('status-pill').textContent = 'TRANSMISSION LOST';
+  function showEnd(
+    winner: string,
+    roles: Array<{ id: string; name: string; role?: string | null }>
+  ): void {
+    $("status-pill").textContent = "TRANSMISSION LOST";
     endStateStore.set({
-      winner: winner as 'researchers' | 'mimic',
-      roles: roles.map(r => ({ name: r.name, role: String(r.role ?? '').toUpperCase() })),
+      winner: winner as "researchers" | "mimic",
+      roles: roles.map((r) => ({ name: r.name, role: String(r.role ?? "").toUpperCase() })),
     });
   }
 
@@ -940,14 +1122,14 @@ import {
   function drawMap(now: number): void {
     resizeCanvas();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#050810';
+    ctx.fillStyle = "#050810";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     const warm = worldToCanvas(WARM_X, WARM_Y);
     const s = warm.s;
     const warmGrad = ctx.createRadialGradient(warm.x, warm.y, 20 * s, warm.x, warm.y, WARM_R * s);
-    warmGrad.addColorStop(0, 'rgba(255,184,0,0.42)');
-    warmGrad.addColorStop(1, 'rgba(255,184,0,0)');
+    warmGrad.addColorStop(0, "rgba(255,184,0,0.42)");
+    warmGrad.addColorStop(1, "rgba(255,184,0,0)");
     ctx.fillStyle = warmGrad;
     ctx.beginPath();
     ctx.arc(warm.x, warm.y, WARM_R * s, 0, Math.PI * 2);
@@ -959,13 +1141,13 @@ import {
       const litR = (70 + ratio * 170) * s;
       const g = ctx.createRadialGradient(p.x, p.y, 8 * s, p.x, p.y, litR);
       g.addColorStop(0, `rgba(120,255,220,${0.24 + ratio * 0.2})`);
-      g.addColorStop(1, 'rgba(120,255,220,0)');
+      g.addColorStop(1, "rgba(120,255,220,0)");
       ctx.fillStyle = g;
       ctx.beginPath();
       ctx.arc(p.x, p.y, litR, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.strokeStyle = '#8fb3c0';
+      ctx.strokeStyle = "#8fb3c0";
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(p.x, p.y - 12 * s);
@@ -978,21 +1160,21 @@ import {
       const barH = 8 * s;
       const bx = p.x - barW / 2;
       const by = p.y - 28 * s;
-      ctx.fillStyle = 'rgba(12,12,12,.8)';
+      ctx.fillStyle = "rgba(12,12,12,.8)";
       ctx.fillRect(bx, by, barW, barH);
-      ctx.strokeStyle = '#4f4a38';
+      ctx.strokeStyle = "#4f4a38";
       ctx.strokeRect(bx, by, barW, barH);
-      ctx.fillStyle = ratio >= 1 ? '#44ff88' : '#ffb800';
+      ctx.fillStyle = ratio >= 1 ? "#44ff88" : "#ffb800";
       ctx.fillRect(bx + 1, by + 1, (barW - 2) * ratio, barH - 2);
     }
 
-    ctx.fillStyle = 'rgba(0,0,0,0.70)';
+    ctx.fillStyle = "rgba(0,0,0,0.70)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.globalCompositeOperation = 'destination-out';
+    ctx.globalCompositeOperation = "destination-out";
 
     const warmCut = ctx.createRadialGradient(warm.x, warm.y, 30 * s, warm.x, warm.y, 220 * s);
-    warmCut.addColorStop(0, 'rgba(255,255,255,0.95)');
-    warmCut.addColorStop(1, 'rgba(255,255,255,0)');
+    warmCut.addColorStop(0, "rgba(255,255,255,0.95)");
+    warmCut.addColorStop(1, "rgba(255,255,255,0)");
     ctx.fillStyle = warmCut;
     ctx.beginPath();
     ctx.arc(warm.x, warm.y, 220 * s, 0, Math.PI * 2);
@@ -1003,49 +1185,49 @@ import {
       const ratio = Math.max(0, Math.min(1, t.progress / TOWER_REQUIRED));
       if (ratio <= 0) continue;
       const cut = ctx.createRadialGradient(p.x, p.y, 20 * s, p.x, p.y, (70 + ratio * 170) * s);
-      cut.addColorStop(0, 'rgba(255,255,255,0.9)');
-      cut.addColorStop(1, 'rgba(255,255,255,0)');
+      cut.addColorStop(0, "rgba(255,255,255,0.9)");
+      cut.addColorStop(1, "rgba(255,255,255,0)");
       ctx.fillStyle = cut;
       ctx.beginPath();
       ctx.arc(p.x, p.y, (70 + ratio * 170) * s, 0, Math.PI * 2);
       ctx.fill();
     }
-    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalCompositeOperation = "source-over";
 
     for (const p of players.values()) {
       const cp = worldToCanvas(p.x, p.y);
       const isMe = p.id === myId;
       const alive = p.alive;
       ctx.beginPath();
-      ctx.fillStyle = alive ? (p.color || '#ddd') : '#6d6659';
+      ctx.fillStyle = alive ? p.color || "#ddd" : "#6d6659";
       ctx.arc(cp.x, cp.y, 10 * s, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = isMe ? '#ffffffcc' : '#00000088';
+      ctx.strokeStyle = isMe ? "#ffffffcc" : "#00000088";
       ctx.lineWidth = 2;
       ctx.stroke();
       ctx.font = `${Math.max(10, Math.floor(12 * s))}px JetBrains Mono`;
-      ctx.textAlign = 'center';
-      ctx.fillStyle = isMe ? '#ffdf89' : '#d8ccb0';
-      ctx.fillText(`${p.name}${isMe ? ' (you)' : ''}`, cp.x, cp.y - 14 * s);
+      ctx.textAlign = "center";
+      ctx.fillStyle = isMe ? "#ffdf89" : "#d8ccb0";
+      ctx.fillText(`${p.name}${isMe ? " (you)" : ""}`, cp.x, cp.y - 14 * s);
     }
 
     if (voteState && voteState.active) {
       const remain = Math.max(0, Math.ceil((voteState.endsAt - Date.now()) / 1000));
-      ctx.fillStyle = 'rgba(0,0,0,.65)';
+      ctx.fillStyle = "rgba(0,0,0,.65)";
       ctx.fillRect(canvas.width / 2 - 110, 10, 220, 28);
-      ctx.strokeStyle = '#52472c';
+      ctx.strokeStyle = "#52472c";
       ctx.strokeRect(canvas.width / 2 - 110, 10, 220, 28);
-      ctx.fillStyle = '#ffb800';
-      ctx.font = '12px JetBrains Mono';
-      ctx.textAlign = 'center';
+      ctx.fillStyle = "#ffb800";
+      ctx.font = "12px JetBrains Mono";
+      ctx.textAlign = "center";
       ctx.fillText(`VOTE ACTIVE: ${remain}s`, canvas.width / 2, 28);
     }
 
-    if (localRole === 'mimic') {
+    if (localRole === "mimic") {
       const e = Math.max(0, Math.ceil((lastElimAt + ELIM_COOLDOWN_MS - Date.now()) / 1000));
-      $('cooldown-pill').textContent = e > 0 ? `ELIM: ${e}s` : 'ELIM: READY';
+      $("cooldown-pill").textContent = e > 0 ? `ELIM: ${e}s` : "ELIM: READY";
     } else {
-      $('cooldown-pill').textContent = 'ELIM: N/A';
+      $("cooldown-pill").textContent = "ELIM: N/A";
     }
 
     if (audioCtx) {
@@ -1063,24 +1245,24 @@ import {
   }
 
   function renderSidebar() {
-    const ul = $('players');
-    ul.innerHTML = '';
+    const ul = $("players");
+    ul.innerHTML = "";
     for (const p of players.values()) {
-      const li = document.createElement('li');
-      li.className = `${p.id === myId ? 'you' : ''} ${p.alive ? '' : 'dead'}`;
-      li.textContent = `${p.name}${p.id === myId ? ' (you)' : ''}`;
+      const li = document.createElement("li");
+      li.className = `${p.id === myId ? "you" : ""} ${p.alive ? "" : "dead"}`;
+      li.textContent = `${p.name}${p.id === myId ? " (you)" : ""}`;
       ul.appendChild(li);
     }
 
-    const tWrap = $('towers');
-    tWrap.innerHTML = '';
+    const tWrap = $("towers");
+    tWrap.innerHTML = "";
     for (const t of towers) {
       const ratio = Math.max(0, Math.min(1, t.progress / TOWER_REQUIRED));
-      const row = document.createElement('div');
-      row.className = 'tower-row';
+      const row = document.createElement("div");
+      row.className = "tower-row";
       row.innerHTML = `
         <div>Tower ${t.id} ${Math.round(ratio * 100)}%</div>
-        <div class="bar"><div class="fill ${ratio >= 1 ? 'done' : ''}" style="width:${(ratio * 100).toFixed(1)}%"></div></div>
+        <div class="bar"><div class="fill ${ratio >= 1 ? "done" : ""}" style="width:${(ratio * 100).toFixed(1)}%"></div></div>
       `;
       tWrap.appendChild(row);
     }
@@ -1091,22 +1273,22 @@ import {
 
   function renderVotePanel(): void {
     const show = !!(voteState && voteState.active);
-    $('vote-box').style.display = show ? 'block' : 'none';
+    $("vote-box").style.display = show ? "block" : "none";
     if (!show || !voteState) return;
     const vs = voteState;
     const remain = Math.max(0, Math.ceil((vs.endsAt - Date.now()) / 1000));
-    $('vote-timer').textContent = `Time left: ${remain}s`;
-    const list = $('vote-list');
-    list.innerHTML = '';
+    $("vote-timer").textContent = `Time left: ${remain}s`;
+    const list = $("vote-list");
+    list.innerHTML = "";
     const me = myPlayer();
-    const canVote = me && me.alive && localRole === 'researcher';
+    const canVote = me && me.alive && localRole === "researcher";
     const voted = vs.votes && myId ? vs.votes[myId] : undefined;
     for (const p of players.values()) {
       if (!p.alive) continue;
-      const b = document.createElement('button');
+      const b = document.createElement("button");
       b.textContent = voted === p.id ? `✓ ${p.name}` : p.name;
       b.disabled = !canVote;
-      b.onclick = () => sendToHost({ t: 'castVote', target: p.id });
+      b.onclick = () => sendToHost({ t: "castVote", target: p.id });
       list.appendChild(b);
     }
   }
@@ -1120,15 +1302,15 @@ import {
     const dt = Math.min(0.06, (now - lastFrame) / 1000);
     lastFrame = now;
 
-    if ((gameStarted && !endState)) {
+    if (gameStarted && !endState) {
       const me = myPlayer();
       if (me && me.alive && !me.spectator) {
         let dx = 0;
         let dy = 0;
-        if (keys.has('KeyW') || keys.has('ArrowUp')) dy -= 1;
-        if (keys.has('KeyS') || keys.has('ArrowDown')) dy += 1;
-        if (keys.has('KeyA') || keys.has('ArrowLeft')) dx -= 1;
-        if (keys.has('KeyD') || keys.has('ArrowRight')) dx += 1;
+        if (keys.has("KeyW") || keys.has("ArrowUp")) dy -= 1;
+        if (keys.has("KeyS") || keys.has("ArrowDown")) dy += 1;
+        if (keys.has("KeyA") || keys.has("ArrowLeft")) dx -= 1;
+        if (keys.has("KeyD") || keys.has("ArrowRight")) dx += 1;
         if (dx || dy) {
           const l = Math.hypot(dx, dy) || 1;
           me.x = clamp(me.x + (dx / l) * PLAYER_SPEED * dt, 0, WORLD_W);
@@ -1139,7 +1321,7 @@ import {
       if (now - lastPositionSend > 100) {
         lastPositionSend = now;
         const p = myPlayer();
-        if (p) sendToHost({ t: 'pos', x: p.x, y: p.y });
+        if (p) sendToHost({ t: "pos", x: p.x, y: p.y });
       }
     }
 
@@ -1148,46 +1330,50 @@ import {
   }
 
   // ── EVENTS ───────────────────────────────────────────────────────────────────
-  $('host-btn').addEventListener('click', hostRoom);
-  $('join-btn').addEventListener('click', joinRoom);
-  $('start-btn').addEventListener('click', beginGame);
+  $("host-btn").addEventListener("click", hostRoom);
+  $("join-btn").addEventListener("click", joinRoom);
+  $("start-btn").addEventListener("click", beginGame);
 
-  $('name').addEventListener('change', () => {
-    const name = ($input('name').value || 'OPERATIVE').slice(0, 16);
-    $input('name').value = name;
+  $("name").addEventListener("change", () => {
+    const name = ($input("name").value || "OPERATIVE").slice(0, 16);
+    $input("name").value = name;
     const me = myId ? players.get(myId) : undefined;
     if (me) me.name = name;
     if (isHost) syncLobby();
-    else sendToHost({ t: 'updateName', name });
+    else sendToHost({ t: "updateName", name });
     renderLobbyPlayers();
     renderSidebar();
   });
 
-  $('call-vote').addEventListener('click', () => {
+  $("call-vote").addEventListener("click", () => {
     const me = myPlayer();
-    if (!me || !me.alive || localRole !== 'researcher') return;
-    sendToHost({ t: 'requestVote' });
+    if (!me || !me.alive || localRole !== "researcher") return;
+    sendToHost({ t: "requestVote" });
   });
 
-  $('elim-btn').addEventListener('click', () => {
-    if (localRole !== 'mimic') return;
-    const targets = [...players.values()].filter(p => p.id !== myId && p.alive);
+  $("elim-btn").addEventListener("click", () => {
+    if (localRole !== "mimic") return;
+    const targets = [...players.values()].filter((p) => p.id !== myId && p.alive);
     if (!targets.length) return;
-    const selected = targets.find(p => isHost ? isIsolatedInDark(p.id) : true) ?? targets[0];
-    if (selected) sendToHost({ t: 'mimicElim', target: selected.id });
+    const selected = targets.find((p) => (isHost ? isIsolatedInDark(p.id) : true)) ?? targets[0];
+    if (selected) sendToHost({ t: "mimicElim", target: selected.id });
   });
 
-  window.addEventListener('keydown', e => {
-    if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight'].includes(e.code)) {
+  window.addEventListener("keydown", (e) => {
+    if (
+      ["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowLeft", "ArrowDown", "ArrowRight"].includes(
+        e.code
+      )
+    ) {
       keys.add(e.code);
       e.preventDefault();
     }
   });
-  window.addEventListener('keyup', e => {
+  window.addEventListener("keyup", (e) => {
     keys.delete(e.code);
   });
 
-  window.addEventListener('resize', resizeCanvas);
+  window.addEventListener("resize", resizeCanvas);
   renderLobbyPlayers();
   requestAnimationFrame(loop);
 })();

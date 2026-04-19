@@ -107,7 +107,7 @@ export function assignRoles(
     shuffled[j] = tmp;
   }
   const mimicId = shuffled[0] ?? playerIds[0];
-  if (mimicId === undefined) return new Map();;
+  if (mimicId === undefined) return new Map();
   const roles = new Map<string, Role>();
   for (const id of playerIds) {
     roles.set(id, id === mimicId ? "mimic" : "researcher");
