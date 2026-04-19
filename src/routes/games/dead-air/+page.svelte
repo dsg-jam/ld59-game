@@ -28,7 +28,7 @@
       </div>
       <div class="stack">
         <label for="name">Callsign</label>
-        <input id="name" maxlength="16" />
+        <input id="name" maxlength="16" value="OPERATIVE-1" />
       </div>
 
       <div class="stack">

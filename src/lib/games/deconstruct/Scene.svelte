@@ -13,7 +13,6 @@
     PLAYER_COLORS_HEX,
     gridToWorld,
   } from "./types.js";
-  import { toggleSel } from "./main.js";
 
   const { renderer, scene } = useThrelte();
   $effect(() => {
@@ -28,6 +27,7 @@
   const blockSize = BLOCK_SIZE * 0.88;
   const sharedBlockGeo = new THREE.BoxGeometry(blockSize, blockSize, blockSize);
   const sharedEdgeGeo = new THREE.EdgesGeometry(sharedBlockGeo);
+  const Primitive = T["primitive"];
 
   type BlockRiseRuntime = {
     id: string;
@@ -123,7 +123,27 @@
   }
 
   function handleBlockClick(gx: number, gy: number) {
-    if (!gs.locked) toggleSel(gx, gy);
+    if (gs.locked) return;
+    if (gs.selectedCardIdx == null) {
+      gs.msgText = "Select a decode filter first.";
+      gs.msgKind = "";
+      return;
+    }
+    const i = gs.selected.findIndex((s) => s[0] === gx && s[1] === gy);
+    if (i >= 0) {
+      gs.selected = gs.selected.filter((_, idx) => idx !== i);
+    } else {
+      const card = gs.myHand[gs.selectedCardIdx];
+      if (!card) return;
+      if (gs.selected.length >= card.shape.cells.length) {
+        gs.msgText = "Filter saturated — clear to retarget.";
+        gs.msgKind = "";
+        return;
+      }
+      gs.selected = [...gs.selected, [gx, gy] as [number, number]];
+    }
+    gs.msgText = "";
+    gs.msgKind = "";
   }
 
   function seatPos(i: number, n: number): [number, number, number] {
@@ -268,7 +288,7 @@
           </T.Mesh>
           <!-- Edge wireframe -->
           <T.LineSegments position={[wx, wy, wz]}>
-            <T.primitive object={sharedEdgeGeo} />
+            <Primitive object={sharedEdgeGeo} />
             <T.LineBasicMaterial color={0x4fd0ff} transparent opacity={0.25} />
           </T.LineSegments>
           <!-- Antenna on top block -->
@@ -329,11 +349,12 @@
   {#if gs.playerCount > 0}
     {#each Array.from({ length: gs.playerCount }, (_, i) => i) as i (i)}
       {@const pos = seatPos(i, gs.playerCount)}
+      {@const playerColor = PLAYER_COLORS_HEX[i] ?? 0xffffff}
       <T.Mesh position={pos} receiveShadow>
         <T.CylinderGeometry args={[0.5, 0.5, 0.06, 16]} />
         <T.MeshStandardMaterial
-          color={PLAYER_COLORS_HEX[i]}
-          emissive={PLAYER_COLORS_HEX[i]}
+          color={playerColor}
+          emissive={playerColor}
           emissiveIntensity={0.2 + Math.sin(pulseT * 3 + i) * 0.1}
           roughness={0.4}
         />

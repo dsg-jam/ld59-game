@@ -181,7 +181,8 @@ function slotName(slot: number): string {
 }
 
 function log(msg: string, cls?: string) {
-  gs.logEntries = [{ text: msg, kind: cls }, ...gs.logEntries].slice(0, 50);
+  const entry = cls ? { text: msg, kind: cls } : { text: msg };
+  gs.logEntries = [entry, ...gs.logEntries].slice(0, 50);
 }
 
 function showMsg(m: string, cls?: string) {
@@ -504,9 +505,9 @@ function onMessage(data: unknown, fromSlot: number) {
   if (msg.type === "round-start") onRoundStart(msg as unknown as RoundStartMsg);
   else if (msg.type === "turn-result") onTurnResult(msg as unknown as TurnResultMsg);
   else if (msg.type === "player-locked") {
-    log("· " + slotName(msg.slot as number) + " transmitted.");
+    log("· " + slotName(msg["slot"] as number) + " transmitted.");
   } else if (msg.type === "pick" && isHost) {
-    hostOnPick(fromSlot, msg.cardIdx as number, msg.sel as [number, number][] | null);
+    hostOnPick(fromSlot, msg["cardIdx"] as number, msg["sel"] as [number, number][] | null);
   }
 }
 
@@ -605,7 +606,7 @@ export function hostGame() {
       const msg = data as GameMsg;
       if (msg.type === "name") {
         HS.playerNames[slot] =
-          ((msg.name as string | undefined) ?? "").slice(0, 16) || "P" + (slot + 1);
+          ((msg["name"] as string | undefined) ?? "").slice(0, 16) || "P" + (slot + 1);
         updatePlayerList();
       } else {
         onMessage(data, slot);
@@ -666,11 +667,11 @@ export function joinGame() {
     c.on("data", function (data: unknown) {
       const msg = data as GameMsg;
       if (msg.type === "slot-assign") {
-        mySlot = msg.slot as number;
+        mySlot = msg["slot"] as number;
         gs.mySlot = mySlot;
       } else if (msg.type === "game-start") {
-        gs.playerCount = msg.playerCount as number;
-        gs.playerNames = (msg.names as Record<number, string>) || {};
+        gs.playerCount = msg["playerCount"] as number;
+        gs.playerNames = (msg["names"] as Record<number, string>) || {};
         startGame();
       } else {
         onMessage(data, 0);

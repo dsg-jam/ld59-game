@@ -50,7 +50,6 @@ function generatePath(
   harborX: number,
   harborY: number,
   cols: number,
-  rows: number,
   turns: number,
   rng: () => number
 ): { x: number; y: number }[] {
@@ -135,7 +134,7 @@ export function generateMap(seed: number, difficulty: Difficulty): GameMap {
   );
 
   // Generate the safe path and mark its tiles
-  const path = generatePath(startX, startY, harborX, harborY, cols, rows, config.pathTurns, rng);
+  const path = generatePath(startX, startY, harborX, harborY, cols, config.pathTurns, rng);
   const pathSet = new Set(path.map((p) => `${p.x},${p.y}`));
   for (const pt of path) {
     const tile = tiles[pt.y]?.[pt.x];

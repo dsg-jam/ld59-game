@@ -1,7 +1,11 @@
 {
-  "extends": ["@tsconfig/bases/recommended", "@tsconfig/bases/strictest","./.svelte-kit/tsconfig.json"],
+  "extends": [
+    "@tsconfig/bases/recommended",
+    "@tsconfig/bases/strictest",
+    "./.svelte-kit/tsconfig.json"
+  ],
   "compilerOptions": {
     "allowJs": false,
-    "target": "ES2025",
+    "target": "ES2025"
   }
 }

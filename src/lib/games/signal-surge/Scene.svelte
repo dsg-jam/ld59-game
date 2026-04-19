@@ -34,7 +34,7 @@
   let lookX = 0;
   let lookY = 0.8;
   let lookZ = 6;
-  let cameraRef = $state<THREE.PerspectiveCamera | undefined>(undefined);
+  let cameraRef = $state<THREE.PerspectiveCamera>(new THREE.PerspectiveCamera());
 
   interface Smoothed {
     z: number;

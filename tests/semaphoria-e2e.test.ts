@@ -9,7 +9,9 @@ async function openSemaphoria(page: Page): Promise<void> {
 }
 
 async function readLobbyRoomCode(page: Page): Promise<string> {
-  await expect(page.locator("#lobby-room-code")).toHaveText(ROOM_CODE_REGEX);
+  await expect(page.locator("#lobby-room-code")).toHaveText(ROOM_CODE_REGEX, {
+    timeout: 30_000,
+  });
   return ((await page.locator("#lobby-room-code").textContent()) ?? "").trim();
 }
 

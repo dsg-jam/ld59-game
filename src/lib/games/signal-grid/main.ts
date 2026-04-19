@@ -166,14 +166,14 @@ function makeTile(type: string, props: Partial<Tile> = {}): Tile {
     dir: props.dir ?? 0,
     x: props.x ?? 0,
     y: props.y ?? 0,
-    fixed: props.fixed,
-    seq: props.seq,
-    period: props.period,
-    offset: props.offset,
-    loop: props.loop,
-    expected: props.expected,
-    _emittedIdx: props._emittedIdx,
   };
+  if (props.fixed !== undefined) t.fixed = props.fixed;
+  if (props.seq !== undefined) t.seq = props.seq;
+  if (props.period !== undefined) t.period = props.period;
+  if (props.offset !== undefined) t.offset = props.offset;
+  if (props.loop !== undefined) t.loop = props.loop;
+  if (props.expected !== undefined) t.expected = props.expected;
+  if (props._emittedIdx !== undefined) t._emittedIdx = props._emittedIdx;
   if (type === "pipe" && props.shape == null) t.shape = 0;
   if (type === "amp" && props.n == null) t.n = 1;
   if (type === "mul" && props.n == null) t.n = 2;
@@ -567,8 +567,8 @@ function placeToolAt(x: number, y: number, fromDir: number | null): boolean {
     }
     // Only debit bin when adding a new pipe (not when upgrading an existing one).
     if (!existing || existing.type !== "pipe") {
-      if ((state.bin.pipe ?? 0) <= 0) return false;
-      state.bin.pipe = (state.bin.pipe ?? 1) - 1;
+      if ((state.bin["pipe"] ?? 0) <= 0) return false;
+      state.bin["pipe"] = (state.bin["pipe"] ?? 1) - 1;
     }
     row[x] = makeTile("pipe", { shape: shapeIdx });
     return true;

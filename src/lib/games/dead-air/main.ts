@@ -716,14 +716,14 @@ export function destroy(): void {
           const mimic = players.get(fromId);
           if (!mimic || !mimic.alive) return;
           lastPlaybackAt = now;
-          const payload = {
+          const payload: GameMsg = {
             t: "mimicPlayback",
             by: fromId,
-            from: msg.from,
             x: mimic.x,
             y: mimic.y,
             buffer: msg.buffer,
           };
+          if (typeof msg.from === "string") payload.from = msg.from;
           broadcast(payload);
           handleMimicPlayback(payload);
         }
