@@ -683,8 +683,7 @@ function validates(sel: [number, number][], card: Card): boolean {
   return false;
 }
 
-function generateGrid(seed?: number | null): ColKey[][][] {
-  if (seed != null) setSeed(seed);
+function generateGrid(): ColKey[][][] {
   const g: ColKey[][][] = [];
   for (let x = 0; x < W; x++) {
     const row: ColKey[][] = [];
