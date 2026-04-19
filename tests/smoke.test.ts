@@ -6,6 +6,7 @@ const GAMES = [
   { id: "signal-2", title: "Signal 2", path: "/games/signal-2" },
   { id: "signal-weave", title: "Signal Weave", path: "/games/signal-weave" },
   { id: "dead-air", title: "Dead Air", path: "/games/dead-air" },
+  { id: "semaphoria", title: "Semaphoria", path: "/games/semaphoria" },
 ] as const;
 
 test.describe("Index page", () => {
