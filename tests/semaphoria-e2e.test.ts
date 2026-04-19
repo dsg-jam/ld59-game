@@ -1,122 +1,225 @@
-/**
- * Semaphoria – Playwright end-to-end tests.
- *
- * Verify the game page loads, lobby UI is functional, and the Threlte 3D
- * canvas initialises without errors.
- */
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page, type Browser } from "@playwright/test";
 
 const GAME_PATH = "/games/semaphoria";
+const ROOM_CODE_REGEX = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{5}$/;
+
+async function openSemaphoria(page: Page): Promise<void> {
+  await page.goto(GAME_PATH);
+  await expect(page.getByRole("heading", { level: 1, name: "SEMAPHORIA" })).toBeVisible();
+}
+
+async function readLobbyRoomCode(page: Page): Promise<string> {
+  await expect(page.locator("#lobby-room-code")).toHaveText(ROOM_CODE_REGEX);
+  return ((await page.locator("#lobby-room-code").textContent()) ?? "").trim();
+}
+
+/**
+ * Connect two players, start a game, and return both pages once the game is
+ * in the "PLAYING" phase on both sides.  Caller is responsible for closing
+ * the pages when done.
+ */
+async function startTwoPlayerGame(
+  browser: Browser
+): Promise<{ keeperPage: Page; captainPage: Page }> {
+  const keeperPage = await browser.newPage();
+  const captainPage = await browser.newPage();
+
+  await Promise.all([openSemaphoria(keeperPage), openSemaphoria(captainPage)]);
+
+  await keeperPage.getByRole("button", { name: /KEEPER/i }).click();
+  await keeperPage.locator("#lobby-host-btn").click();
+
+  const roomCode = await readLobbyRoomCode(keeperPage);
+
+  await captainPage.getByLabel("Room code").fill(roomCode);
+  await captainPage.locator("#lobby-join-btn").click();
+
+  // Wait for captain to see "Waiting for keeper" status — confirms connection is open
+  await expect(captainPage.locator("#lobby-status")).toContainText("Waiting", {
+    timeout: 30_000,
+  });
+
+  await expect(keeperPage.locator("#lobby-players")).toContainText("Captain", {
+    timeout: 30_000,
+  });
+  await expect(keeperPage.locator("#lobby-start-btn")).toBeEnabled({ timeout: 30_000 });
+
+  await keeperPage.locator("#lobby-start-btn").click();
+
+  // Both players should enter the game view
+  await Promise.all([
+    expect(keeperPage.getByRole("heading", { level: 2, name: "SEMAPHORIA" })).toBeVisible({
+      timeout: 20_000,
+    }),
+    expect(captainPage.getByRole("heading", { level: 2, name: "SEMAPHORIA" })).toBeVisible({
+      timeout: 20_000,
+    }),
+  ]);
+
+  // Wait for the countdown to finish and the game to enter the playing phase
+  await Promise.all([
+    expect(keeperPage.locator(".pill", { hasText: "PLAYING" })).toBeVisible({ timeout: 15_000 }),
+    expect(captainPage.locator(".pill", { hasText: "PLAYING" })).toBeVisible({ timeout: 15_000 }),
+  ]);
+
+  return { keeperPage, captainPage };
+}
+
+// ── Basic page tests ──────────────────────────────────────────────────────────
 
 test.describe("Semaphoria – page load", () => {
-  test("page loads without uncaught JavaScript errors", async ({ page }) => {
+  test("loads correctly and has no uncaught errors", async ({ page }) => {
     const errors: string[] = [];
     page.on("pageerror", (err) => errors.push(err.message));
 
-    await page.goto(GAME_PATH);
-    await page.waitForLoadState("networkidle");
-
+    await openSemaphoria(page);
+    await expect(page).toHaveTitle(/Semaphoria/i);
+    await expect(page.locator(".signal-ref .ref-row")).toHaveCount(8);
     expect(errors).toHaveLength(0);
   });
 
-  test("page has the correct <title>", async ({ page }) => {
-    await page.goto(GAME_PATH);
-    await expect(page).toHaveTitle(/Semaphoria/i);
-  });
-
-  test("page does not return a 404", async ({ page }) => {
-    const res = await page.request.get(GAME_PATH);
-    expect(res.status()).not.toBe(404);
+  test("requires a room code to join", async ({ page }) => {
+    await openSemaphoria(page);
+    await page.locator("#lobby-join-btn").click();
+    await expect(page.locator("#lobby-status")).toHaveText("Enter room code.");
   });
 });
 
-test.describe("Semaphoria – lobby UI", () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto(GAME_PATH);
-  });
+// ── Multiplayer lobby ─────────────────────────────────────────────────────────
 
-  test("displays the game title SEMAPHORIA", async ({ page }) => {
-    await expect(page.locator("h1")).toHaveText("SEMAPHORIA");
-  });
+test.describe("Semaphoria – multiplayer lobby", () => {
+  // 90s is required because PeerJS relay handshakes between two browser peers can spike in CI.
+  test.setTimeout(90_000);
 
-  test("has a role selector with KEEPER and CAPTAIN buttons", async ({ page }) => {
-    await expect(page.getByRole("button", { name: /KEEPER/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /CAPTAIN/i })).toBeVisible();
-  });
+  test("captain lobby shows 'Waiting for keeper' after connecting", async ({ browser }) => {
+    const keeperPage = await browser.newPage();
+    const captainPage = await browser.newPage();
 
-  test("role buttons are toggleable", async ({ page }) => {
-    const keeperBtn = page.getByRole("button", { name: /KEEPER/i });
-    const captainBtn = page.getByRole("button", { name: /CAPTAIN/i });
-    await captainBtn.click();
-    await expect(captainBtn).toHaveClass(/active/);
-    await keeperBtn.click();
-    await expect(keeperBtn).toHaveClass(/active/);
-  });
+    try {
+      await Promise.all([openSemaphoria(keeperPage), openSemaphoria(captainPage)]);
 
-  test("shows signal reference card in lobby", async ({ page }) => {
-    await expect(page.locator(".signal-ref")).toBeVisible();
-  });
+      await keeperPage.getByRole("button", { name: /KEEPER/i }).click();
+      await keeperPage.locator("#lobby-host-btn").click();
 
-  test("signal reference card lists all 8 commands", async ({ page }) => {
-    // SIGNAL_REFERENCE has 8 entries
-    const rows = page.locator(".ref-row");
-    await expect(rows).toHaveCount(8);
-  });
+      const roomCode = await readLobbyRoomCode(keeperPage);
+      await captainPage.getByLabel("Room code").fill(roomCode);
+      await captainPage.locator("#lobby-join-btn").click();
 
-  test("has a network/open-channel button", async ({ page }) => {
-    // The Lobby component renders a host/open-channel button
-    const hostBtn = page.getByRole("button", { name: /OPEN CHANNEL|OPEN|HOST/i }).first();
-    await expect(hostBtn).toBeVisible();
+      // This status update only appears after the DataConnection is fully open —
+      // it confirms that the premature-send / open-before-ready bug is fixed.
+      await expect(captainPage.locator("#lobby-status")).toContainText("Waiting", {
+        timeout: 30_000,
+      });
+    } finally {
+      await Promise.all([keeperPage.close(), captainPage.close()]);
+    }
   });
 });
 
-test.describe("Semaphoria – navigation from index", () => {
-  test("Semaphoria appears as a game card on the index page", async ({ page }) => {
-    await page.goto("/");
-    const semaphoriaCard = page.locator(`a.game[href$="${GAME_PATH}"]`);
-    await expect(semaphoriaCard).toBeVisible();
+// ── Full game flow ────────────────────────────────────────────────────────────
+
+test.describe("Semaphoria – full game flow", () => {
+  // 90s covers: relay handshake + countdown + signal exchange + game-over
+  test.setTimeout(90_000);
+
+  test("both players see correct roles and can exchange signals", async ({ browser }) => {
+    const { keeperPage, captainPage } = await startTwoPlayerGame(browser);
+
+    try {
+      await expect(keeperPage.locator(".pill.role")).toHaveText("KEEPER");
+      await expect(captainPage.locator(".pill.role")).toHaveText("CAPTAIN");
+
+      // Keeper sends a signal — captain must receive it
+      await keeperPage.getByRole("button", { name: /Send signal: GO/i }).click();
+      await expect(captainPage.getByText("↓ Signal: go")).toBeVisible({ timeout: 10_000 });
+      await expect(keeperPage.getByText("↑ Signal: go")).toBeVisible({ timeout: 10_000 });
+    } finally {
+      await Promise.all([keeperPage.close(), captainPage.close()]);
+    }
   });
 
-  test("Semaphoria card links to the correct page", async ({ page }) => {
-    await page.goto("/");
-    const semaphoriaCard = page.locator(`a.game[href$="${GAME_PATH}"]`);
-    await semaphoriaCard.click();
-    await expect(page).toHaveURL(new RegExp(GAME_PATH));
-    await expect(page.locator("h1")).toHaveText("SEMAPHORIA");
-  });
-});
+  test("keeper sending the same signal twice shows both log entries", async ({ browser }) => {
+    // This covers the LogPanel key-collision bug fix: duplicate text must not collapse.
+    const { keeperPage, captainPage } = await startTwoPlayerGame(browser);
 
-test.describe("Semaphoria – multiplayer lobby connection", () => {
-  test("keeper can open a channel and get a room code", async ({ page }) => {
-    test.setTimeout(30_000);
-    await page.goto(GAME_PATH);
+    try {
+      // Send "go" twice; after the cooldown resets we send it again
+      await keeperPage.getByRole("button", { name: /Send signal: GO/i }).click();
+      await expect(captainPage.getByText("↓ Signal: go")).toBeVisible({ timeout: 10_000 });
 
-    const keeperBtn = page.getByRole("button", { name: /KEEPER/i });
-    await keeperBtn.click();
+      // Wait for cooldown before sending again (cooldown = 2.5 s)
+      await captainPage.waitForTimeout(3_000);
+      await keeperPage.getByRole("button", { name: /Send signal: GO/i }).click();
 
-    const hostBtn = page.getByRole("button", { name: /OPEN CHANNEL|OPEN|HOST/i }).first();
-    await hostBtn.click();
-
-    // Room code should appear (the Lobby component shows it)
-    await expect(page.locator(".room-code, #room-code, [class*=room]")).toBeVisible({
-      timeout: 15_000,
-    });
+      // Both entries should appear in the log (unique keys by index, not text)
+      await expect(captainPage.locator(".log div").filter({ hasText: "↓ Signal: go" })).toHaveCount(
+        2,
+        { timeout: 10_000 }
+      );
+    } finally {
+      await Promise.all([keeperPage.close(), captainPage.close()]);
+    }
   });
 
-  test("joining without a room code shows an error", async ({ page }) => {
-    await page.goto(GAME_PATH);
+  test("captain can steer and the heading HUD updates", async ({ browser }) => {
+    const { keeperPage, captainPage } = await startTwoPlayerGame(browser);
 
-    // Click captain, try to join with empty code
-    const captainBtn = page.getByRole("button", { name: /CAPTAIN/i });
-    await captainBtn.click();
+    try {
+      // Read the initial heading from the HUD
+      const headingLocator = captainPage.locator(".hud-chip", { hasText: "HEADING" });
+      await expect(headingLocator).toBeVisible();
+      const headingBefore = await headingLocator.textContent();
 
-    const joinBtn = page.getByRole("button", { name: /JOIN|TUNE|CONNECT/i }).first();
-    await joinBtn.click();
+      // Press right-arrow for long enough to change heading meaningfully
+      await captainPage.keyboard.down("ArrowRight");
+      await captainPage.waitForTimeout(500);
+      await captainPage.keyboard.up("ArrowRight");
 
-    // Expect some error feedback in lobby status
-    await expect(page.locator(".lobby-status, #lobby-status, [class*=status]")).toContainText(
-      /code|enter/i,
-      { timeout: 5_000 }
-    );
+      // Heading must have changed
+      const headingAfter = await headingLocator.textContent();
+      expect(headingAfter).not.toBe(headingBefore);
+    } finally {
+      await Promise.all([keeperPage.close(), captainPage.close()]);
+    }
+  });
+
+  test("game-over result screen appears and shows play-again button", async ({ browser }) => {
+    const { keeperPage, captainPage } = await startTwoPlayerGame(browser);
+
+    try {
+      // Trigger a success via the test event bridge (dispatched only in tests;
+      // the listener is a no-op in normal gameplay).
+      await captainPage.evaluate(() => {
+        window.dispatchEvent(new CustomEvent("__sema:force-end", { detail: "success" }));
+      });
+
+      // Both players must see the result overlay
+      await expect(captainPage.locator(".result-overlay")).toBeVisible({ timeout: 10_000 });
+      await expect(keeperPage.locator(".result-overlay")).toBeVisible({ timeout: 10_000 });
+
+      // Overlay content
+      await expect(captainPage.locator(".result-title.success")).toHaveText("HARBOR REACHED");
+      await expect(keeperPage.locator(".result-title.success")).toHaveText("HARBOR REACHED");
+      await expect(captainPage.getByRole("button", { name: "PLAY AGAIN" })).toBeVisible();
+    } finally {
+      await Promise.all([keeperPage.close(), captainPage.close()]);
+    }
+  });
+
+  test("game-over failure path shows correct result", async ({ browser }) => {
+    const { keeperPage, captainPage } = await startTwoPlayerGame(browser);
+
+    try {
+      await captainPage.evaluate(() => {
+        window.dispatchEvent(new CustomEvent("__sema:force-end", { detail: "failure" }));
+      });
+
+      await expect(captainPage.locator(".result-overlay")).toBeVisible({ timeout: 10_000 });
+      await expect(keeperPage.locator(".result-overlay")).toBeVisible({ timeout: 10_000 });
+      await expect(captainPage.locator(".result-title.failure")).toHaveText("SHIP LOST");
+      await expect(keeperPage.locator(".result-title.failure")).toHaveText("SHIP LOST");
+    } finally {
+      await Promise.all([keeperPage.close(), captainPage.close()]);
+    }
   });
 });

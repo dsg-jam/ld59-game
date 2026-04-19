@@ -227,15 +227,29 @@ function tickPlaying(state: GameState, dt: number, input: CaptainInput): GameSta
 // ── PUBLIC TICK ───────────────────────────────────────────────────────────────
 
 /**
+ * Advance the keeper's display during the playing phase.
+ * Only the signal cooldown and timer display are updated; no ship physics
+ * or phase transitions are applied — those are driven by captain-side messages.
+ */
+function tickKeeperPlaying(state: GameState, dt: number): GameState {
+  const timeRemaining = Math.max(0, state.timeRemaining - dt);
+  const signalCooldown = Math.max(0, state.signalCooldown - dt);
+  return { ...state, timeRemaining, signalCooldown };
+}
+
+/**
  * Advance the game state by `dt` seconds.
  * `input` is only applied in the "playing" phase.
+ * When `isKeeper` is true the ship physics, collision checks, and phase
+ * transitions are skipped — the keeper receives those via network messages.
  * Returns the updated state.
  */
 export function tick(
   state: GameState,
   dt: number,
   input: CaptainInput,
-  activePattern: FlashPattern | null
+  activePattern: FlashPattern | null,
+  isKeeper = false
 ): GameState {
   let s = state;
 
@@ -254,7 +268,7 @@ export function tick(
   }
 
   if (s.phase === "countdown") return tickCountdown(s, dt);
-  if (s.phase === "playing") return tickPlaying(s, dt, input);
+  if (s.phase === "playing") return isKeeper ? tickKeeperPlaying(s, dt) : tickPlaying(s, dt, input);
   return s;
 }
 
