@@ -22,11 +22,21 @@ apt-get install -y --no-install-recommends \
     git \
     jq \
     libatomic1 \
+    libegl-mesa0 \
+    libegl1 \
+    libgbm1 \
+    libgl1 \
+    libgl1-mesa-dri \
+    libgles2 \
+    libglx-mesa0 \
+    mesa-utils \
     openssh-client \
     python3 \
     python3-pip \
     ripgrep \
     unzip \
+    xauth \
+    xvfb \
     xz-utils
 
 rm -rf /var/lib/apt/lists/*

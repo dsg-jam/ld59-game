@@ -7,6 +7,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "playwright test",
+    "test:container": "xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 MESA_GL_VERSION_OVERRIDE=3.3 playwright test --headed",
     "lint": "eslint .",
     "format": "prettier --write .",
     "typecheck": "svelte-kit sync && tsc --noEmit",
