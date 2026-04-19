@@ -422,12 +422,7 @@
                 {isFlashing}
               />
             {:else}
-              <KeeperView
-                ship={gameState.ship}
-                map={gameState.map}
-                {flashColor}
-                {isFlashing}
-              />
+              <KeeperView ship={gameState.ship} map={gameState.map} {flashColor} {isFlashing} />
             {/if}
           </Canvas>
 

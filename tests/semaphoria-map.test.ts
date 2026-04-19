@@ -204,14 +204,22 @@ test.describe("Semaphoria map generator – determinism", () => {
     const a = generateMap(12345, 1);
     const b = generateMap(12345, 1);
     // Compare tile types as a flat string
-    const serialise = (m: GameMap) => m.tiles.flat().map((t) => t.type[0]).join("");
+    const serialise = (m: GameMap) =>
+      m.tiles
+        .flat()
+        .map((t) => t.type[0])
+        .join("");
     expect(serialise(a)).toBe(serialise(b));
   });
 
   test("different seeds produce different maps", () => {
     const a = generateMap(1, 0);
     const b = generateMap(2, 0);
-    const serialise = (m: GameMap) => m.tiles.flat().map((t) => t.type[0]).join("");
+    const serialise = (m: GameMap) =>
+      m.tiles
+        .flat()
+        .map((t) => t.type[0])
+        .join("");
     expect(serialise(a)).not.toBe(serialise(b));
   });
 

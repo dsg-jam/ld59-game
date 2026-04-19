@@ -14,7 +14,7 @@
   // Use a deterministic pseudo-random from tile position + seed for variety
   const rng = (offset: number): number => {
     const s = (x * 31 + y * 97 + seed * 53 + offset * 13) & 0xffff;
-    return (s * 9301 + 49297) % 233280 / 233280;
+    return ((s * 9301 + 49297) % 233280) / 233280;
   };
 
   const height = 0.4 + rng(1) * 0.5;

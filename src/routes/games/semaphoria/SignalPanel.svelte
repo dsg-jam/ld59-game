@@ -63,9 +63,7 @@
       >
         <span class="btn-pattern">
           {#each entry.pattern as flash, j (j)}
-            <span
-              class="pip {flash.type}"
-              style:background={COLOR_CSS[flash.color] ?? "#fff"}
+            <span class="pip {flash.type}" style:background={COLOR_CSS[flash.color] ?? "#fff"}
             ></span>
           {/each}
         </span>
@@ -87,9 +85,7 @@
       >
         <span class="btn-pattern">
           {#each entry.pattern as flash, j (j)}
-            <span
-              class="pip {flash.type}"
-              style:background={COLOR_CSS[flash.color] ?? "#fff"}
+            <span class="pip {flash.type}" style:background={COLOR_CSS[flash.color] ?? "#fff"}
             ></span>
           {/each}
         </span>

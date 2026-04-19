@@ -20,7 +20,9 @@
   let time = $state(0);
 
   const beamColor = $derived(
-    isFlashing && flashColor ? `#${SIG_COLOR_HEX[flashColor].toString(16).padStart(6, "0")}` : "#ffffff"
+    isFlashing && flashColor
+      ? `#${SIG_COLOR_HEX[flashColor].toString(16).padStart(6, "0")}`
+      : "#ffffff"
   );
 
   const spotIntensity = $derived(isFlashing ? 80 : 8);

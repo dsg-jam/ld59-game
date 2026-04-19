@@ -1,4 +1,12 @@
-import { COUNTDOWN_S, DIFFICULTY_CONFIG, SIG_DOT, SIG_DASH, SIG_INTER_GAP, SIG_WORD_GAP, SIG_COOLDOWN } from "./constants";
+import {
+  COUNTDOWN_S,
+  DIFFICULTY_CONFIG,
+  SIG_DOT,
+  SIG_DASH,
+  SIG_INTER_GAP,
+  SIG_WORD_GAP,
+  SIG_COOLDOWN,
+} from "./constants";
 import type { Difficulty } from "./constants";
 import { generateMap } from "./map-generator";
 import type { GameMap } from "./map-generator";
@@ -235,7 +243,12 @@ export function tick(
   if (s.activeFlash) {
     s = tickFlash(s, dt);
     // If flash state is now in an inter-gap and we have the pattern, advance
-    if (s.activeFlash && s.activeFlash.flash === null && s.activeFlash.nextIndex >= 0 && activePattern) {
+    if (
+      s.activeFlash &&
+      s.activeFlash.flash === null &&
+      s.activeFlash.nextIndex >= 0 &&
+      activePattern
+    ) {
       s = advanceFlash(s, activePattern);
     }
   }

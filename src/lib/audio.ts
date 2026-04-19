@@ -42,7 +42,10 @@ export function beep(freq = 440, dur = 0.08): void {
  * "dot" → short high-pitched blip; "dash" → longer lower tone.
  * Colour-coded pitches reinforce the visual signal.
  */
-export function signalFlash(type: "dot" | "dash", color: "white" | "red" | "green" | "yellow"): void {
+export function signalFlash(
+  type: "dot" | "dash",
+  color: "white" | "red" | "green" | "yellow"
+): void {
   const dur = type === "dot" ? 0.18 : 0.55;
   const pitchMap: Record<string, number> = {
     white: 880,
@@ -196,4 +199,3 @@ export function startOceanAmbient(): () => void {
     };
   }
 }
-

@@ -32,9 +32,7 @@
 
   // Collect visible reef tiles
   const visibleReefs = $derived(
-    map.tiles
-      .flat()
-      .filter((t) => t.type === "reef" && revealedTileKeys.has(`${t.x},${t.y}`))
+    map.tiles.flat().filter((t) => t.type === "reef" && revealedTileKeys.has(`${t.x},${t.y}`))
   );
 
   // Smooth camera follow — initialise from current ship position
