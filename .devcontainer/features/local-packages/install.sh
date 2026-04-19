@@ -18,6 +18,7 @@ apt-get install -y --no-install-recommends \
     build-essential \
     curl \
     fd-find \
+    gh \
     git \
     jq \
     libatomic1 \
