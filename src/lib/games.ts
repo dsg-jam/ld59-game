@@ -45,6 +45,13 @@ export const games: GameEntry[] = [
     description: "Voice-and-signal social deduction in a haunted facility.",
   },
   {
+    id: "signal-surge",
+    title: "Signal Surge",
+    tag: "Multiplayer",
+    path: "/games/signal-surge",
+    description: "3-6 player signal packet race through a 3D broadcast channel.",
+  },
+  {
     id: "semaphoria",
     title: "Semaphoria",
     tag: "Co-op",
