@@ -181,3 +181,58 @@ test.describe("Semaphoria engine – deriveStats", () => {
     expect(stats.timeTaken).toBeCloseTo(configTimer - s.timeRemaining, 0);
   });
 });
+
+// ── Keeper tick (isKeeper flag) ───────────────────────────────────────────────
+
+test.describe("Semaphoria engine – keeper tick", () => {
+  test("isKeeper=true does not move the ship", () => {
+    const s = makePlayingState();
+    const before = { x: s.ship.x, y: s.ship.y };
+    const after = tick(s, 1, NO_INPUT, null, true);
+    expect(after.ship.x).toBe(before.x);
+    expect(after.ship.y).toBe(before.y);
+  });
+
+  test("isKeeper=true does not transition to failure even when timer expires", () => {
+    const s = makePlayingState();
+    const after = tick(s, 99999, NO_INPUT, null, true);
+    // Keeper tick must NOT independently end the game; it waits for captain's message
+    expect(after.phase).toBe("playing");
+  });
+
+  test("isKeeper=true does not trigger failure on collision-prone position", () => {
+    // Place ship exactly on a reef tile and confirm keeper tick ignores it
+    const baseState = makePlayingState();
+    const reef = baseState.map.tiles.flat().find((t) => t.type === "reef");
+    if (!reef) return; // no reef on this seed — skip
+    const s = { ...baseState, ship: { ...baseState.ship, x: reef.x, y: reef.y } };
+    const after = tick(s, 1, NO_INPUT, null, true);
+    expect(after.phase).toBe("playing");
+  });
+
+  test("isKeeper=true still decrements signalCooldown", () => {
+    let s = makePlayingState();
+    s = sendSignal(s, "go");
+    const cooldownBefore = s.signalCooldown;
+    const after = tick(s, 0.5, NO_INPUT, null, true);
+    expect(after.signalCooldown).toBeLessThan(cooldownBefore);
+  });
+
+  test("isKeeper=true still decrements timeRemaining for display", () => {
+    const s = makePlayingState();
+    const before = s.timeRemaining;
+    const after = tick(s, 1, NO_INPUT, null, true);
+    expect(after.timeRemaining).toBeLessThan(before);
+  });
+
+  test("isKeeper=false (captain) still moves ship and can time out", () => {
+    const s = makePlayingState();
+    const shipBefore = { x: s.ship.x, y: s.ship.y };
+    const afterMove = tick(s, 0.1, { turning: "none", moving: true }, null, false);
+    const moved = afterMove.ship.x !== shipBefore.x || afterMove.ship.y !== shipBefore.y;
+    expect(moved).toBe(true);
+
+    const afterTimeout = tick(s, 99999, NO_INPUT, null, false);
+    expect(afterTimeout.phase).toBe("failure");
+  });
+});

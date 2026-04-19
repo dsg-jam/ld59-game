@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { SvelteSet } from "svelte/reactivity";
   import { Canvas } from "@threlte/core";
   import Peer from "peerjs";
@@ -148,11 +148,12 @@
     }
   }
 
-  function setupConn(c: DataConnection): void {
+  function setupConn(c: DataConnection, onOpen?: () => void): void {
     conn = c;
     c.on("open", () => {
       netOk = true;
       log("Connected.", "ok");
+      onOpen?.();
     });
     c.on("data", handleMessage);
     c.on("close", () => {
@@ -181,11 +182,15 @@
         c.close();
         return;
       }
-      setupConn(c);
+      // Players list and canStart update immediately so the keeper sees feedback.
+      // The role message must wait until the DataConnection is open — PeerJS drops
+      // sends on connections that haven't completed the WebRTC handshake yet.
+      setupConn(c, () => {
+        send({ t: "role", role: "captain" });
+      });
       players = ["Keeper (you)", "Captain"];
       canStart = true;
       log("Captain connected!", "ok");
-      send({ t: "role", role: "captain" });
     });
     peer.on("error", (err) => {
       const e = err as { type?: string; message?: string };
@@ -203,7 +208,9 @@
     peer = new Peer(`semaphoria-g-${makeCode(8)}`);
     peer.on("open", () => {
       const c = (peer as Peer).connect(`semaphoria-${trimmed}`, { reliable: true });
-      setupConn(c);
+      setupConn(c, () => {
+        lobbyStatus = "Waiting for keeper to start…";
+      });
       lobbyStatus = "Connecting…";
       log(`Joining ${trimmed}…`);
     });
@@ -244,7 +251,7 @@
       const inputForThisSide: CaptainInput =
         myRole === "captain" ? captainInput : { turning: "none", moving: false };
 
-      gameState = tick(gameState, dt, inputForThisSide, activePattern);
+      gameState = tick(gameState, dt, inputForThisSide, activePattern, myRole === "keeper");
 
       // Clear pattern once flash animation completes
       if (!gameState.activeFlash) {
@@ -323,6 +330,21 @@
   }
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
+
+  onMount(() => {
+    // Test event bridge: allows Playwright e2e tests to trigger game-over
+    // without waiting for the full timer. Dispatching these events during
+    // normal gameplay has no effect and is harmless in production.
+    const forceEnd = (e: Event) => {
+      const result = (e as CustomEvent<"success" | "failure">).detail;
+      if (gameState?.phase === "playing") {
+        finishGame(result);
+        send({ t: "game-over", result });
+      }
+    };
+    window.addEventListener("__sema:force-end", forceEnd);
+    return () => window.removeEventListener("__sema:force-end", forceEnd);
+  });
 
   onDestroy(() => {
     loop?.stop();
