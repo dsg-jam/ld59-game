@@ -163,7 +163,7 @@
       <div class="panel">
         <h3>LOG</h3>
         <div id="log">
-          {#each logs as entry (entry)}
+          {#each logs as entry, i (i)}
             <div class={entry.kind}>{entry.text}</div>
           {/each}
         </div>
