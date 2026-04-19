@@ -1,25 +1,15 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import "./style.css";
+  import { deconstructApi } from "$lib/games/deconstruct/api";
 
-  type GameWindow = Window &
-    typeof globalThis & {
-      hostGame?: () => void;
-      joinGame?: () => void;
-      hostStartNow?: () => void;
-      soloGame?: () => void;
-      onPickCard?: () => void;
-      onClear?: () => void;
-      onPass?: () => void;
-    };
-
-  const soloGame = (): void => (window as GameWindow).soloGame?.();
-  const hostGame = (): void => (window as GameWindow).hostGame?.();
-  const joinGame = (): void => (window as GameWindow).joinGame?.();
-  const hostStartNow = (): void => (window as GameWindow).hostStartNow?.();
-  const onPickCard = (): void => (window as GameWindow).onPickCard?.();
-  const onClear = (): void => (window as GameWindow).onClear?.();
-  const onPass = (): void => (window as GameWindow).onPass?.();
+  const soloGame = (): void => deconstructApi.soloGame?.();
+  const hostGame = (): void => deconstructApi.hostGame?.();
+  const joinGame = (): void => deconstructApi.joinGame?.();
+  const hostStartNow = (): void => deconstructApi.hostStartNow?.();
+  const onPickCard = (): void => deconstructApi.onPickCard?.();
+  const onClear = (): void => deconstructApi.onClear?.();
+  const onPass = (): void => deconstructApi.onPass?.();
 
   onMount(() => {
     void import("$lib/games/deconstruct/main");
@@ -30,7 +20,7 @@
   <title>Deconstruct — LDJAM 59</title>
 </svelte:head>
 
-<canvas id="three-canvas"></canvas>
+<canvas id="three-canvas" aria-label="Deconstruct 3D block-stacking game view"></canvas>
 
 <div id="lobby">
   <div class="lobby-box">
@@ -42,6 +32,7 @@
         <div class="or-divider">&mdash; multiplayer &mdash;</div>
         <button onclick={hostGame}>OPEN CHANNEL</button>
         <div class="or-divider" style="opacity:0.3;font-size:12px;">&mdash; or &mdash;</div>
+        <label for="join-code">Frequency ID (room code)</label>
         <input
           id="join-code"
           maxlength="6"
@@ -77,8 +68,8 @@
       id="round-num">1</span
     >/10
   </div>
-  <div id="log-panel"></div>
-  <div id="msg-bar" class="msg-bar"></div>
+  <div id="log-panel" aria-live="polite"></div>
+  <div id="msg-bar" class="msg-bar" aria-live="assertive"></div>
   <div id="wait-banner" class="hidden">// Awaiting other operators&hellip;</div>
   <div id="side-panel">
     <div id="player-hand" class="hand"></div>

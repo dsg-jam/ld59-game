@@ -20,6 +20,7 @@
       <button id="host-btn">OPEN CHANNEL</button>
     </div>
     <div style="margin:10px 0;color:var(--dim)">— or —</div>
+    <label for="join-code">Room code</label>
     <input id="join-code" maxlength="6" placeholder="ROOM CODE" />
     <div class="row" style="margin-top:8px">
       <button id="join-btn">TUNE IN</button>
@@ -29,13 +30,13 @@
       <div class="room" id="room-code">-----</div>
       <button id="start-btn" disabled>BEGIN WEAVE</button>
     </div>
-    <p id="lobby-status"></p>
+    <p id="lobby-status" role="status" aria-live="polite"></p>
   </div>
 </div>
 
 <div id="app">
   <div id="stage">
-    <canvas id="canvas" width="1200" height="800"></canvas>
+    <canvas id="canvas" width="1200" height="800" aria-label="Signal Weave waveform game canvas"></canvas>
     <div class="hud">
       <div class="chip">TIME <b id="time">90.0</b></div>
       <div class="chip">HARMONY <b id="harmony">0.0</b></div>
@@ -63,11 +64,11 @@
     </div>
     <div class="panel">
       <h3>NETWORK</h3>
-      <div id="status">Idle.</div>
+      <div id="status" role="status" aria-live="polite">Idle.</div>
     </div>
     <div class="panel">
       <h3>LOG</h3>
-      <div id="log"></div>
+      <div id="log" aria-live="polite"></div>
     </div>
   </div>
 </div>

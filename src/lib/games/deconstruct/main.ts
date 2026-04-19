@@ -3,6 +3,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import Peer from "peerjs";
 import type { DataConnection } from "peerjs";
 import { makeCode } from "$lib/peer";
+import { deconstructApi } from "$lib/games/deconstruct/api";
 
 // ---- Type definitions ----
 type ColKey = "R" | "G" | "B" | "Y" | "P";
@@ -1212,7 +1213,7 @@ type DeconWin = Window &
 const dw = window as DeconWin;
 
 // Solo mode
-dw.soloGame = function () {
+dw.soloGame = deconstructApi.soloGame = function () {
   isSolo = true;
   isHost = true;
   mySlot = 0;
@@ -1229,7 +1230,7 @@ dw.soloGame = function () {
   hostStartRound();
 };
 
-dw.hostGame = function () {
+dw.hostGame = deconstructApi.hostGame = function () {
   roomCode = makeCode();
   isHost = true;
   isSolo = false;
@@ -1301,7 +1302,7 @@ dw.hostGame = function () {
   });
 };
 
-dw.hostStartNow = function () {
+dw.hostStartNow = deconstructApi.hostStartNow = function () {
   if (HS.playerIds.length < 2) return;
   HS.started = true;
   HS.N = HS.playerIds.length;
@@ -1312,7 +1313,7 @@ dw.hostStartNow = function () {
   hostStartRound();
 };
 
-dw.joinGame = function () {
+dw.joinGame = deconstructApi.joinGame = function () {
   const joinCodeEl = document.getElementById("join-code") as HTMLInputElement | null;
   const code = (joinCodeEl?.value ?? "").toUpperCase().trim();
   if (!code || code.length < 3) return;
@@ -1358,7 +1359,7 @@ dw.joinGame = function () {
   });
 };
 
-dw.onPickCard = function () {
+dw.onPickCard = deconstructApi.onPickCard = function () {
   if (S.locked || S.selectedCardIdx == null) return;
   const card = S.myHand[S.selectedCardIdx];
   if (!card || !validates(S.selected, card)) {
@@ -1392,13 +1393,13 @@ dw.onPickCard = function () {
   }
 };
 
-dw.onClear = function () {
+dw.onClear = deconstructApi.onClear = function () {
   S.selected = [];
   updateHighlights();
   renderUI();
 };
 
-dw.onPass = function () {
+dw.onPass = deconstructApi.onPass = function () {
   if (S.locked) return;
   S.locked = true;
   renderUI();

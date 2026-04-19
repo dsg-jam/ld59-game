@@ -9,13 +9,7 @@
 </script>
 
 <svelte:head>
-  <title>Dead Air</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Major+Mono+Display&family=JetBrains+Mono:wght@300;400;600&display=swap"
-    rel="stylesheet"
-  />
+  <title>Dead Air — LDJAM59</title>
 </svelte:head>
 
 <div id="lobby">
@@ -35,12 +29,13 @@
         <button id="join-btn">JOIN</button>
       </div>
       <div class="row">
+        <label for="join-code">Room code</label>
         <input id="join-code" maxlength="5" placeholder="ROOM CODE" />
       </div>
       <div class="row" id="room-wrap" style="display:none">
         <span>ROOM:</span><span id="room-code">-----</span>
       </div>
-      <div id="lobby-status"></div>
+      <div id="lobby-status" role="status" aria-live="polite"></div>
     </div>
 
     <div class="stack">
@@ -70,7 +65,7 @@
   </div>
   <div id="main">
     <div id="map-wrap">
-      <canvas id="map"></canvas>
+      <canvas id="map" aria-label="Dead Air game map"></canvas>
       <div id="hud">WASD / Arrow keys to move. Stay in the light.</div>
     </div>
     <div id="sidebar">
@@ -97,7 +92,7 @@
         <button class="danger" id="elim-btn" style="width:100%;margin-top:6px">[ELIMINATE]</button>
       </div>
 
-      <div id="warn"></div>
+      <div id="warn" aria-live="assertive"></div>
     </div>
   </div>
 </div>

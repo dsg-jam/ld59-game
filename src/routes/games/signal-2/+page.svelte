@@ -22,7 +22,7 @@
     <div class="hud">
       <div class="hud-item"><span class="k">LEVEL</span><span id="hud-level">01</span></div>
       <div class="hud-item"><span class="k">TICK</span><span id="hud-tick">000</span></div>
-      <div class="hud-item"><span class="k">STATUS</span><span id="hud-status">IDLE</span></div>
+      <div class="hud-item"><span class="k">STATUS</span><span id="hud-status" role="status" aria-live="polite">IDLE</span></div>
     </div>
   </header>
 
@@ -47,7 +47,7 @@
 
     <section id="center">
       <div id="board-wrap">
-        <canvas id="board" width="640" height="640"></canvas>
+        <canvas id="board" width="640" height="640" aria-label="Signal game board"></canvas>
         <div id="overlay"></div>
       </div>
       <div id="controls">
@@ -85,12 +85,12 @@
 
       <div class="panel">
         <h3>SIGNAL LOG</h3>
-        <div id="log"></div>
+        <div id="log" aria-live="polite"></div>
       </div>
     </aside>
   </main>
 
-  <div id="dialog" class="hidden">
+  <div id="dialog" class="hidden" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
     <div class="dialog-inner">
       <div id="dialog-title">—</div>
       <div id="dialog-body">—</div>

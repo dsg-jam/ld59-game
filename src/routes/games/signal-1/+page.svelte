@@ -49,7 +49,7 @@
       <button id="join-btn" class="big-btn secondary">JOIN</button>
     </div>
 
-    <p id="net-status" class="net-status"></p>
+    <p id="net-status" class="net-status" role="status" aria-live="polite"></p>
     <p class="tip">
       click caller, then recipient · click a live plug or cable to disconnect · esc releases a held
       plug
@@ -155,7 +155,7 @@
 
     <div class="panel panel-log">
       <div class="panel-head">CALL LOG</div>
-      <div id="log" class="log"></div>
+      <div id="log" class="log" aria-live="polite"></div>
     </div>
   </aside>
 
@@ -164,10 +164,16 @@
   <div id="toast" class="toast hidden"></div>
 
   <!-- Slip modal: verify mode (player reviews own pickup) + supervisor mode (supervisor stamps) -->
-  <div id="slip-modal" class="slip-modal hidden">
+  <div
+    id="slip-modal"
+    class="slip-modal hidden"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="slip-modal-heading"
+  >
     <div class="slip">
       <div class="slip-head">
-        <span>CALL SLIP</span>
+        <span id="slip-modal-heading">CALL SLIP</span>
         <span id="slip-num">#000</span>
       </div>
       <div class="slip-body">
@@ -186,10 +192,16 @@
   </div>
 
   <!-- Agency interrogation modal -->
-  <div id="agency-modal" class="agency-modal hidden">
+  <div
+    id="agency-modal"
+    class="agency-modal hidden"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="agency-modal-heading"
+  >
     <div class="dossier">
       <div class="dossier-head">
-        <span class="dossier-tag">🕴 THE AGENCY</span>
+        <span id="agency-modal-heading" class="dossier-tag">🕴 THE AGENCY</span>
         <span class="dossier-sub">ENCRYPTED — ANSWER CAREFULLY</span>
       </div>
       <div id="agency-q" class="agency-q">—</div>
