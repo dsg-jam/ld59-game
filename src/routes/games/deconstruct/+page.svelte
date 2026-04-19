@@ -118,7 +118,7 @@
         >/10
       </div>
 
-      <div id="log-panel">
+      <div id="log-panel" role="log" aria-live="polite" aria-label="Game log">
         {#each gs.logEntries as entry, i (i)}
           <div
             style={entry.kind === "ok"
@@ -130,9 +130,9 @@
         {/each}
       </div>
 
-      <div id="msg-bar" class="msg-bar{gs.msgKind ? ' ' + gs.msgKind : ''}">{gs.msgText}</div>
+      <div id="msg-bar" class="msg-bar{gs.msgKind ? ' ' + gs.msgKind : ''}" role="status" aria-live="polite">{gs.msgText}</div>
 
-      <div id="wait-banner" class={gs.showWait ? "" : "hidden"}>
+      <div id="wait-banner" class={gs.showWait ? "" : "hidden"} role="status" aria-live="polite">
         // Awaiting other operators&hellip;
       </div>
 
@@ -147,7 +147,7 @@
               onclick={() => selectCard(idx)}
               role="button"
               tabindex="0"
-              onkeydown={(e) => e.key === "Enter" && selectCard(idx)}
+              onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectCard(idx); } }}
             >
               <div class="card-num">Δ{card.init}</div>
               <div class="card-label">{card.shape.name}</div>
