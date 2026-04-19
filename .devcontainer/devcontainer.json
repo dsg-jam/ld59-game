@@ -1,6 +1,6 @@
 {
   "name": "ld59-game-dev",
-  "image": "debian:13",
+  "image": "debian:trixie-20260406",
   "features": {
     "ghcr.io/devcontainers/features/common-utils:2.5.7": {
       "username": "dev",
@@ -25,11 +25,7 @@
   "remoteUser": "dev",
   "updateRemoteUserUID": true,
   "postCreateCommand": "bash .devcontainer/scripts/post-create.sh",
-  "forwardPorts": [
-    5173,
-    4173,
-    9323
-  ],
+  "forwardPorts": [5173, 4173, 9323],
   "portsAttributes": {
     "5173": {
       "label": "Vite dev server",
@@ -48,11 +44,7 @@
         "terminal.integrated.defaultProfile.linux": "bash",
         "editor.formatOnSave": true,
         "files.eol": "\n",
-        "eslint.validate": [
-          "javascript",
-          "typescript",
-          "svelte"
-        ]
+        "eslint.validate": ["javascript", "typescript", "svelte"]
       },
       "extensions": [
         "svelte.svelte-vscode",
