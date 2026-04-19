@@ -121,10 +121,20 @@ const SIGNAL_DESCRIPTIONS: Record<SignalCommand, string> = {
   "rocks-right": "Danger on starboard side",
 };
 
+/** Ordered list of all signal commands — used to ensure consistent iteration across environments. */
+const COMMAND_ORDER: readonly SignalCommand[] = [
+  "go",
+  "left",
+  "right",
+  "stop",
+  "reverse",
+  "rocks-ahead",
+  "rocks-left",
+  "rocks-right",
+];
+
 /** Full reference card data for display to both players. */
-export const SIGNAL_REFERENCE: readonly SignalRefEntry[] = (
-  Object.keys(SIGNAL_ALPHABET) as SignalCommand[]
-).map((cmd) => ({
+export const SIGNAL_REFERENCE: readonly SignalRefEntry[] = COMMAND_ORDER.map((cmd) => ({
   command: cmd,
   label: SIGNAL_LABELS[cmd],
   description: SIGNAL_DESCRIPTIONS[cmd],

@@ -28,9 +28,9 @@ export interface GameMap {
 
 // ── SEEDED RNG ────────────────────────────────────────────────────────────────
 
-/** Linear Congruential Generator seeded with an integer. Returns values in [0, 1). */
+/** Return values in [0, 1). `seed` is coerced to a 32-bit integer. */
 export function makePRNG(seed: number): () => number {
-  let s = seed | 0;
+  let s = Math.trunc(seed);
   return () => {
     s = (Math.imul(1664525, s) + 1013904223) | 0;
     return (s >>> 0) / 4294967296;

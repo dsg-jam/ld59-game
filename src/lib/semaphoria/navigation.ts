@@ -151,7 +151,10 @@ export function getNearestReefDistance(ship: ShipState, map: GameMap): number {
   for (let dy = -searchR; dy <= searchR; dy++) {
     for (let dx = -searchR; dx <= searchR; dx++) {
       if (map.tiles[cy + dy]?.[cx + dx]?.type === "reef") {
-        const d = Math.hypot(dx - (ship.x - cx), dy - (ship.y - cy));
+        // Include the fractional tile offset so distance is from the ship's exact position
+        const offsetX = ship.x - cx;
+        const offsetY = ship.y - cy;
+        const d = Math.hypot(dx - offsetX, dy - offsetY);
         if (d < minDist) minDist = d;
       }
     }

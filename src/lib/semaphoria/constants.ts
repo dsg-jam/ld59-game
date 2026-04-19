@@ -80,3 +80,6 @@ export const DIFFICULTY_CONFIG: readonly DifficultyConfig[] = [
 ];
 
 export type Difficulty = 0 | 1 | 2;
+
+/** Upper bound (exclusive) for the PRNG seed — 24-bit range gives 16M distinct maps. */
+export const SEED_MAX = 0x1000000; // 16,777,216

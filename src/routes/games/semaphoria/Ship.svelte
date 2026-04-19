@@ -12,10 +12,8 @@
   } = $props();
 
   let groupRef: THREE.Group | undefined;
-  let targetPos = $derived(new THREE.Vector3(ship.x, 0, ship.y));
-  let targetRot = $derived(Math.PI - ship.heading);
 
-  // Smooth camera-follow lerp — initialised to 0 and set on first useTask frame
+  // Smooth lerp — initialised to 0 and set on first useTask frame
   let smoothX = $state(0);
   let smoothY = $state(0);
   let shipInitialised = false;
@@ -32,7 +30,7 @@
 
     if (groupRef) {
       groupRef.position.set(smoothX, 0, smoothY);
-      // Smooth rotation
+      // Smooth rotation toward heading
       const target = Math.PI - ship.heading;
       let diff = target - groupRef.rotation.y;
       // Normalise difference to [-π, π]
@@ -40,10 +38,6 @@
       while (diff < -Math.PI) diff += Math.PI * 2;
       groupRef.rotation.y += diff * lerpK;
     }
-
-    // Use derived to keep reactivity linter happy
-    void targetPos;
-    void targetRot;
   });
 </script>
 

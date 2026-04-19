@@ -23,6 +23,7 @@
   import { SIGNAL_REFERENCE, encodeSignal } from "$lib/semaphoria/signals";
   import type { SignalCommand, FlashPattern } from "$lib/semaphoria/signals";
   import type { SigColor } from "$lib/semaphoria/constants";
+  import { SEED_MAX } from "$lib/semaphoria/constants";
   import {
     signalFlash,
     shipBell,
@@ -214,7 +215,7 @@
 
   function handleStart(): void {
     if (!isHost || !canStart) return;
-    const seed = Math.floor(Math.random() * 0xffffff);
+    const seed = Math.floor(Math.random() * SEED_MAX);
     const difficulty = 0 as 0 | 1 | 2;
     send({ t: "game-start", seed, difficulty });
     startGame(seed, difficulty, true);
