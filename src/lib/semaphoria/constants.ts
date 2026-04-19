@@ -55,12 +55,12 @@ export const PROXIMITY_WARN_DIST = 2.0;
 // ── SIGNAL COLORS ─────────────────────────────────────────────────────────────
 
 /** Hex color values for lighthouse beam signal colours. */
-export const SIG_COLOR_HEX: Record<string, number> = {
+export const SIG_COLOR_HEX = {
   white: 0xffffff,
   red: 0xff3333,
   green: 0x44ff88,
   yellow: 0xffdd00,
-};
+} as const;
 
 export type SigColor = keyof typeof SIG_COLOR_HEX;
 

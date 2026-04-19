@@ -7,7 +7,7 @@ import {
   SIG_WORD_GAP,
   SIG_COOLDOWN,
 } from "./constants";
-import type { Difficulty } from "./constants";
+import type { Difficulty, SigColor } from "./constants";
 import { generateMap } from "./map-generator";
 import type { GameMap } from "./map-generator";
 import {
@@ -20,7 +20,7 @@ import {
   getRevealedTileKeys,
 } from "./navigation";
 import type { ShipState, TurnDirection } from "./navigation";
-import type { SignalCommand, FlashPattern } from "./signals";
+import type { SignalCommand, FlashPattern, Flash } from "./signals";
 import { encodeSignal } from "./signals";
 
 // ── TYPES ─────────────────────────────────────────────────────────────────────
@@ -37,7 +37,7 @@ export interface CaptainInput {
 /** A single flash event in progress on the lighthouse. */
 export interface ActiveFlash {
   /** The flash currently being displayed (undefined = dark / inter-gap). */
-  flash: { color: string; type: "dot" | "dash" } | null;
+  flash: Flash | null;
   /** Remaining time for this flash or gap, in seconds. */
   timeLeft: number;
   /** Index of the next flash to play in the pattern. */
@@ -305,8 +305,8 @@ export function deriveStats(state: GameState): GameStats {
   };
 }
 
-/** Get the current flash colour as a CSS hex string, or null when dark. */
-export function getCurrentFlashColor(state: GameState): string | null {
+/** Get the current flash signal colour, or null when dark. */
+export function getCurrentFlashColor(state: GameState): SigColor | null {
   return state.activeFlash?.flash?.color ?? null;
 }
 
