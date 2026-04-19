@@ -1,4 +1,4 @@
-:root {
+.deconstruct-page {
   --bg: #0a0a10;
   --surface: #1a1a24;
   --primary: #4fd0ff;
@@ -8,12 +8,12 @@
   --ok: #8dff9d;
   --warn: #ffb36b;
 }
-* {
+.deconstruct-page * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
-body {
+.deconstruct-page {
   font-family: ui-monospace, "Consolas", "Menlo", monospace;
   background: var(--bg);
   color: var(--text);
@@ -31,7 +31,7 @@ body {
 }
 
 /* Scanline overlay */
-body::before {
+.deconstruct-page::before {
   content: "";
   position: fixed;
   inset: 0;

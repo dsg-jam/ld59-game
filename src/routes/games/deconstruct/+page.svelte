@@ -30,7 +30,8 @@
   <title>Deconstruct — LDJAM 59</title>
 </svelte:head>
 
-<canvas id="three-canvas"></canvas>
+<div class="deconstruct-page">
+  <canvas id="three-canvas"></canvas>
 
 <div id="lobby">
   <div class="lobby-box">
@@ -67,25 +68,26 @@
   </div>
 </div>
 
-<div id="ui-overlay" class="hidden">
-  <div class="score-bar">
-    <div class="title">// DECONSTRUCT</div>
-    <div id="score-chips"></div>
-  </div>
-  <div id="hint">
-    Drag to rotate &bull; Scroll to zoom &bull; Click top blocks to select &bull; Cycle <span
-      id="round-num">1</span
-    >/10
-  </div>
-  <div id="log-panel"></div>
-  <div id="msg-bar" class="msg-bar"></div>
-  <div id="wait-banner" class="hidden">// Awaiting other operators&hellip;</div>
-  <div id="side-panel">
-    <div id="player-hand" class="hand"></div>
-    <div class="btn-group">
-      <button id="resolve-btn" disabled onclick={onPickCard}>TRANSMIT</button>
-      <button class="btn-secondary" onclick={onClear}>CLEAR</button>
-      <button class="btn-secondary" onclick={onPass}>HOLD</button>
+  <div id="ui-overlay" class="hidden">
+    <div class="score-bar">
+      <div class="title">// DECONSTRUCT</div>
+      <div id="score-chips"></div>
+    </div>
+    <div id="hint">
+      Drag to rotate &bull; Scroll to zoom &bull; Click top blocks to select &bull; Cycle <span
+        id="round-num">1</span
+      >/10
+    </div>
+    <div id="log-panel"></div>
+    <div id="msg-bar" class="msg-bar"></div>
+    <div id="wait-banner" class="hidden">// Awaiting other operators&hellip;</div>
+    <div id="side-panel">
+      <div id="player-hand" class="hand"></div>
+      <div class="btn-group">
+        <button id="resolve-btn" disabled onclick={onPickCard}>TRANSMIT</button>
+        <button class="btn-secondary" onclick={onClear}>CLEAR</button>
+        <button class="btn-secondary" onclick={onPass}>HOLD</button>
+      </div>
     </div>
   </div>
 </div>

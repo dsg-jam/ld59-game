@@ -1,5 +1,5 @@
 /* SIGNAL // ldjam59 */
-:root {
+.signal-2-page {
   --bg: #05080a;
   --bg2: #0a1014;
   --panel: #0e1620;
@@ -15,12 +15,11 @@
   --amber: #ffb347;
 }
 
-* {
+.signal-2-page * {
   box-sizing: border-box;
 }
 
-html,
-body {
+.signal-2-page {
   margin: 0;
   padding: 0;
   background: #000;

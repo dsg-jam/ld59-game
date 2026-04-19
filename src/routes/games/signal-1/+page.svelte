@@ -11,7 +11,8 @@
   <title>SIGNAL CROSS — LDJAM59</title>
 </svelte:head>
 
-<div class="scanlines"></div>
+<div class="signal-1-page">
+  <div class="scanlines"></div>
 
 <!-- ================= TITLE ================= -->
 <div id="title-screen" class="screen active">
@@ -200,17 +201,18 @@
 </div>
 
 <!-- ================= END ================= -->
-<div id="end-screen" class="screen">
-  <div class="title-stack">
-    <h1 id="end-title">SHIFT OVER</h1>
-    <p id="end-blurb" class="subtitle"></p>
-    <div class="panel-head">CREW TOTALS</div>
-    <div id="leaderboard" class="leaderboard"></div>
-    <div class="button-row tight">
-      <button id="next-btn" class="big-btn host-only">NEXT SHIFT ▸</button>
-      <button id="replay-btn" class="big-btn secondary host-only">REPLAY</button>
+  <div id="end-screen" class="screen">
+    <div class="title-stack">
+      <h1 id="end-title">SHIFT OVER</h1>
+      <p id="end-blurb" class="subtitle"></p>
+      <div class="panel-head">CREW TOTALS</div>
+      <div id="leaderboard" class="leaderboard"></div>
+      <div class="button-row tight">
+        <button id="next-btn" class="big-btn host-only">NEXT SHIFT ▸</button>
+        <button id="replay-btn" class="big-btn secondary host-only">REPLAY</button>
+      </div>
+      <div id="end-wait" class="lobby-wait">Waiting for host...</div>
+      <button id="end-leave-btn" class="mini-btn">LEAVE ROOM</button>
     </div>
-    <div id="end-wait" class="lobby-wait">Waiting for host...</div>
-    <button id="end-leave-btn" class="mini-btn">LEAVE ROOM</button>
   </div>
 </div>

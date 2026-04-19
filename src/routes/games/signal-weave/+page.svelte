@@ -85,86 +85,88 @@
   <title>Signal Weave – Multiplayer Waveform Game</title>
 </svelte:head>
 
-{#if phase === "lobby"}
-  <div id="lobby">
-    <div class="card">
-      <h1>SIGNAL WEAVE</h1>
-      <p>Two operators shape one impossible waveform.</p>
-      <p>Match the target signal and fire synchronized pulses.</p>
-      <div class="row" style="margin-top:10px">
-        <button id="host-btn" onclick={() => controls?.hostGame()}>OPEN CHANNEL</button>
-      </div>
-      <div style="margin:10px 0;color:var(--dim)">— or —</div>
-      <input
-        id="join-code"
-        maxlength="6"
-        placeholder="ROOM CODE"
-        bind:value={joinCode}
-      />
-      <div class="row" style="margin-top:8px">
-        <button id="join-btn" onclick={() => controls?.joinGame(joinCode.trim().toUpperCase())}
-          >TUNE IN</button
-        >
-      </div>
-      {#if roomWrapVisible}
-        <div id="room-wrap">
-          <p style="margin-top:10px">Share this code:</p>
-          <div class="room" id="room-code">{roomCode}</div>
-          <button id="start-btn" disabled={!startEnabled} onclick={() => controls?.startGame()}
-            >BEGIN WEAVE</button
+<div class="signal-weave-page">
+  {#if phase === "lobby"}
+    <div id="lobby">
+      <div class="card">
+        <h1>SIGNAL WEAVE</h1>
+        <p>Two operators shape one impossible waveform.</p>
+        <p>Match the target signal and fire synchronized pulses.</p>
+        <div class="row" style="margin-top:10px">
+          <button id="host-btn" onclick={() => controls?.hostGame()}>OPEN CHANNEL</button>
+        </div>
+        <div style="margin:10px 0;color:var(--dim)">— or —</div>
+        <input
+          id="join-code"
+          maxlength="6"
+          placeholder="ROOM CODE"
+          bind:value={joinCode}
+        />
+        <div class="row" style="margin-top:8px">
+          <button id="join-btn" onclick={() => controls?.joinGame(joinCode.trim().toUpperCase())}
+            >TUNE IN</button
           >
         </div>
-      {/if}
-      <p id="lobby-status">{lobbyStatus}</p>
+        {#if roomWrapVisible}
+          <div id="room-wrap">
+            <p style="margin-top:10px">Share this code:</p>
+            <div class="room" id="room-code">{roomCode}</div>
+            <button id="start-btn" disabled={!startEnabled} onclick={() => controls?.startGame()}
+              >BEGIN WEAVE</button
+            >
+          </div>
+        {/if}
+        <p id="lobby-status">{lobbyStatus}</p>
+      </div>
     </div>
-  </div>
-{/if}
+  {/if}
 
-<div id="app">
-  <div id="stage">
-    <canvas bind:this={canvasEl} width="1200" height="800"></canvas>
-    <div class="hud">
-      <div class="chip">TIME <b>{hudTime}</b></div>
-      <div class="chip">HARMONY <b>{hudHarmony}</b></div>
-      <div class="chip">COMBO <b>{hudCombo}</b></div>
-      <div class="chip">YOU <b id="slot">{slotLabel}</b></div>
-    </div>
-    <div id="flash" class={flashClass} style:opacity={flashClass ? "1" : "0"}></div>
-  </div>
-  <div id="sidebar">
-    <div class="panel">
-      <h3>CONTROL</h3>
-      <div>PHASE OFFSET</div>
-      <input
-        id="offset"
-        type="range"
-        min={OFFSET_MIN}
-        max={OFFSET_MAX}
-        bind:value={offsetValue}
-        oninput={() => controls?.setOffset(offsetValue)}
-      />
-      <div id="offset-label">{offsetLabel}</div>
-      <div class="row" style="margin-top:8px">
-        <button id="pulse-btn" onclick={() => controls?.pulse()}>TRANSMIT PULSE [SPACE]</button>
+  <div id="app">
+    <div id="stage">
+      <canvas bind:this={canvasEl} width="1200" height="800"></canvas>
+      <div class="hud">
+        <div class="chip">TIME <b>{hudTime}</b></div>
+        <div class="chip">HARMONY <b>{hudHarmony}</b></div>
+        <div class="chip">COMBO <b>{hudCombo}</b></div>
+        <div class="chip">YOU <b id="slot">{slotLabel}</b></div>
       </div>
+      <div id="flash" class={flashClass} style:opacity={flashClass ? "1" : "0"}></div>
     </div>
-    <div class="panel">
-      <h3>PROTOCOL</h3>
-      <div style="color:var(--dim)">
-        Keep the cyan combined wave close to the magenta target.<br />
-        Synchronized pulses (&lt; 0.8s apart) amplify harmony when alignment is good.
+    <div id="sidebar">
+      <div class="panel">
+        <h3>CONTROL</h3>
+        <div>PHASE OFFSET</div>
+        <input
+          id="offset"
+          type="range"
+          min={OFFSET_MIN}
+          max={OFFSET_MAX}
+          bind:value={offsetValue}
+          oninput={() => controls?.setOffset(offsetValue)}
+        />
+        <div id="offset-label">{offsetLabel}</div>
+        <div class="row" style="margin-top:8px">
+          <button id="pulse-btn" onclick={() => controls?.pulse()}>TRANSMIT PULSE [SPACE]</button>
+        </div>
       </div>
-    </div>
-    <div class="panel">
-      <h3>NETWORK</h3>
-      <div id="status">{netStatus}</div>
-    </div>
-    <div class="panel">
-      <h3>LOG</h3>
-      <div id="log">
-        {#each logs as entry (entry)}
-          <div class={entry.kind}>{entry.text}</div>
-        {/each}
+      <div class="panel">
+        <h3>PROTOCOL</h3>
+        <div style="color:var(--dim)">
+          Keep the cyan combined wave close to the magenta target.<br />
+          Synchronized pulses (&lt; 0.8s apart) amplify harmony when alignment is good.
+        </div>
+      </div>
+      <div class="panel">
+        <h3>NETWORK</h3>
+        <div id="status">{netStatus}</div>
+      </div>
+      <div class="panel">
+        <h3>LOG</h3>
+        <div id="log">
+          {#each logs as entry (entry)}
+            <div class={entry.kind}>{entry.text}</div>
+          {/each}
+        </div>
       </div>
     </div>
   </div>
