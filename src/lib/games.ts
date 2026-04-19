@@ -44,4 +44,11 @@ export const games: GameEntry[] = [
     path: "/games/dead-air",
     description: "Voice-and-signal social deduction in a haunted facility.",
   },
+  {
+    id: "semaphoria",
+    title: "Semaphoria",
+    tag: "Co-op",
+    path: "/games/semaphoria",
+    description: "Asymmetric lighthouse signalling co-op. Navigate the reef by light alone.",
+  },
 ];
