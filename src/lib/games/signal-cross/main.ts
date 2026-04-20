@@ -275,6 +275,12 @@ export function mount(callbacks: Signal1Callbacks): Signal1Controls {
         const idx = state.players.findIndex((p) => p.id === conn.peer);
         if (idx >= 0) {
           state.players.splice(idx, 1);
+          if (lobbySupervisorId === conn.peer) {
+            lobbySupervisorId = state.players[0]?.id ?? null;
+          }
+          if (state.supervisorId === conn.peer) {
+            state.supervisorId = state.players[0]?.id ?? null;
+          }
           broadcastState();
           broadcastLobbyState();
         }
@@ -323,6 +329,12 @@ export function mount(callbacks: Signal1Callbacks): Signal1Controls {
       conn.on("close", () => {
         setNetStatus("DISCONNECTED", "err");
         callbacks.onToast("Host disconnected. Returning to title.");
+        resetNet();
+        isHost = false;
+        myId = "";
+        roomCode = "";
+        callbacks.onIdentity("", false);
+        callbacks.onRoomCode("");
         resetLocalState();
       });
       conn.on("error", (err) => {
@@ -967,8 +979,6 @@ export function mount(callbacks: Signal1Callbacks): Signal1Controls {
     if (dirty || broadcastAccum > HOST_TICK_HZ) {
       broadcastAccum = 0;
       broadcastState();
-    } else {
-      emitSnapshot();
     }
 
     if (state.timeLeft <= 0) endLevel();
