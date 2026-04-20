@@ -27,7 +27,6 @@
   const blockSize = BLOCK_SIZE * 0.88;
   const sharedBlockGeo = new THREE.BoxGeometry(blockSize, blockSize, blockSize);
   const sharedEdgeGeo = new THREE.EdgesGeometry(sharedBlockGeo);
-  const Primitive = T["primitive"];
 
   type BlockRiseRuntime = {
     id: string;
@@ -288,7 +287,7 @@
           </T.Mesh>
           <!-- Edge wireframe -->
           <T.LineSegments position={[wx, wy, wz]}>
-            <Primitive object={sharedEdgeGeo} />
+            <T is={sharedEdgeGeo} />
             <T.LineBasicMaterial color={0x4fd0ff} transparent opacity={0.25} />
           </T.LineSegments>
           <!-- Antenna on top block -->
