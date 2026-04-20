@@ -41,9 +41,15 @@
   const allTiles = $derived(map.tiles.flat());
 </script>
 
-<!-- Orthographic camera looking straight down -->
+<!--
+  Orthographic camera looking straight down.
+  `manual` is required: without it Threlte's `updateCamera` overwrites
+  left/right/top/bottom with pixel-sized values on every resize, which
+  shrinks the world-unit map to a tiny patch inside a massive frustum.
+-->
 <T.OrthographicCamera
   makeDefault
+  manual
   position.x={camX}
   position.y={camHeight}
   position.z={camZ}
