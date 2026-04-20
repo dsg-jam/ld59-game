@@ -1,5 +1,24 @@
 import { Audio } from "./audio.js";
 import { GRID_H, GRID_W, LEVELS, type Level, type Source, type Sink } from "./levels.js";
+import {
+  clientSendIntent,
+  getRoomCode,
+  hostBroadcastSnapshot,
+  isClient,
+  isHost,
+  isMultiplayer,
+  leaveRoom,
+  startClient,
+  startHost,
+  type ClientIntent,
+  type PlayerInfo,
+} from "./multiplayer.js";
+import {
+  buildRoomShareUrl,
+  clearRoomCodeFromUrl,
+  copyToClipboard,
+  readRoomCodeFromUrl,
+} from "$lib/room-url";
 
 // SIGNAL // ldjam59 -- main game logic
 // Tile-based signal routing puzzle. See levels.js for level data.
@@ -26,6 +45,7 @@ interface Tile {
   offset?: number;
   loop?: boolean;
   expected?: number[];
+  owner?: string;
   _emittedIdx?: number;
   _lastEmitTick?: number;
 }
@@ -178,6 +198,7 @@ function makeTile(type: string, props: Partial<Tile> = {}): Tile {
   if (props.offset !== undefined) t.offset = props.offset;
   if (props.loop !== undefined) t.loop = props.loop;
   if (props.expected !== undefined) t.expected = props.expected;
+  if (props.owner !== undefined) t.owner = props.owner;
   if (props._emittedIdx !== undefined) t._emittedIdx = props._emittedIdx;
   if (type === "pipe" && props.shape == null) t.shape = 0;
   if (type === "amp" && props.n == null) t.n = 1;
@@ -366,7 +387,7 @@ function renderLevelList() {
     b.title = lv.name;
     b.onclick = () => {
       Audio.click();
-      loadLevel(i);
+      dispatchLoadLevel(i);
     };
     wrap.appendChild(b);
   });
@@ -492,9 +513,13 @@ function renderInspector() {
       const sel2 = state.selected;
       const tt = state.grid[sel2.y]?.[sel2.x];
       if (!tt) return;
-      if (id === "i-shape") tt.shape = parseInt(el.value, 10);
-      if (id === "i-axis") tt.axis = el.value;
-      if (id === "i-op") tt.op = el.value;
+      if (id === "i-shape") {
+        dispatchInspectUpdate(sel2.x, sel2.y, "shape", parseInt(el.value, 10));
+      } else if (id === "i-axis") {
+        dispatchInspectUpdate(sel2.x, sel2.y, "axis", el.value);
+      } else if (id === "i-op") {
+        dispatchInspectUpdate(sel2.x, sel2.y, "op", el.value);
+      }
       draw();
     };
   });
@@ -505,7 +530,7 @@ function renderInspector() {
       const sel3 = state.selected;
       const tt = state.grid[sel3.y]?.[sel3.x];
       if (!tt) return;
-      tt.n = parseInt(nEl.value, 10) || 0;
+      dispatchInspectUpdate(sel3.x, sel3.y, "n", parseInt(nEl.value, 10) || 0);
       draw();
     };
 }
@@ -540,17 +565,24 @@ function removeTileAt(x: number, y: number): boolean {
   return true;
 }
 
-// Place the current tool at (x,y). If fromDir is given and tool is wire,
-// pick a shape whose connections include fromDir (i.e. connects back to the
-// previous cell in a drag). Returns true if placement happened.
-function placeToolAt(x: number, y: number, fromDir: number | null): boolean {
-  if (!state.tool) return false;
+// Place a tool at (x,y). If fromDir is given and tool is "pipe", pick a
+// shape whose connections include fromDir (i.e. connects back to the previous
+// cell in a drag). Returns true if placement happened.
+function placeToolAt(
+  x: number,
+  y: number,
+  fromDir: number | null,
+  tool: string,
+  toolShape: number,
+  owner?: string
+): boolean {
+  if (!tool) return false;
   const row = state.grid[y];
   if (!row) return false;
   const existing = row[x];
   if (existing && existing.fixed) return false;
 
-  if (state.tool === "pipe") {
+  if (tool === "pipe") {
     // Wire: build or extend a pipe so it connects to fromDir (if given).
     let conns: number[] = [];
     if (existing && existing.type === "pipe") {
@@ -560,8 +592,8 @@ function placeToolAt(x: number, y: number, fromDir: number | null): boolean {
       conns.push(fromDir);
     }
     if (conns.length === 0) {
-      // Fresh place with no drag context: use currently-selected shape.
-      conns = [...(PIPE_SHAPES[state.toolPipeShape] ?? DEFAULT_PIPE).conn];
+      // Fresh place with no drag context: use the requested shape.
+      conns = [...(PIPE_SHAPES[toolShape] ?? DEFAULT_PIPE).conn];
     }
     if (conns.length === 1) {
       // A single stub: promote to straight so signal can pass through.
@@ -579,18 +611,22 @@ function placeToolAt(x: number, y: number, fromDir: number | null): boolean {
       if ((state.bin["pipe"] ?? 0) <= 0) return false;
       state.bin["pipe"] = (state.bin["pipe"] ?? 1) - 1;
     }
-    row[x] = makeTile("pipe", { shape: shapeIdx });
+    const pipeProps: Partial<Tile> = { shape: shapeIdx };
+    if (owner !== undefined) pipeProps.owner = owner;
+    row[x] = makeTile("pipe", pipeProps);
     return true;
   }
 
   // Non-wire tools: one-shot placement per cell.
-  if ((state.bin[state.tool] ?? 0) <= 0) return false;
-  if (existing && existing.type === state.tool) return false; // nothing to do
+  if ((state.bin[tool] ?? 0) <= 0) return false;
+  if (existing && existing.type === tool) return false; // nothing to do
   if (existing && !existing.fixed) {
     state.bin[existing.type] = (state.bin[existing.type] ?? 0) + 1;
   }
-  row[x] = makeTile(state.tool);
-  state.bin[state.tool] = (state.bin[state.tool] ?? 1) - 1;
+  const props: Partial<Tile> = {};
+  if (owner !== undefined) props.owner = owner;
+  row[x] = makeTile(tool, props);
+  state.bin[tool] = (state.bin[tool] ?? 1) - 1;
   return true;
 }
 
@@ -650,7 +686,10 @@ board.addEventListener("mousemove", (ev) => {
     const toDir = dirFromTo(last, step); // side we went toward, relative to previous cell
     // Extend the previous cell so it connects to the step cell (wire only).
     if (state.tool === "pipe" && drag.button === 0 && toDir != null) {
-      extendPipeAt(last.x, last.y, toDir);
+      const prev = state.grid[last.y]?.[last.x];
+      if (prev && prev.type === "pipe" && !prev.fixed) {
+        dispatchPlace(last.x, last.y, "pipe", state.toolPipeShape, toDir);
+      }
     }
     handleDragCell(step, fromDir, drag.button);
     drag.last = step;
@@ -669,23 +708,13 @@ board.addEventListener("mouseup", endDrag);
 board.addEventListener("mouseleave", endDrag);
 window.addEventListener("blur", endDrag);
 
-function extendPipeAt(x: number, y: number, dir: number) {
-  const t = state.grid[y]?.[x];
-  if (!t || t.type !== "pipe" || t.fixed) return;
-  const conns = [...(PIPE_SHAPES[t.shape] ?? DEFAULT_PIPE).conn];
-  if (conns.includes(dir)) return;
-  conns.push(dir);
-  const idx = findPipeShape(conns);
-  if (idx >= 0) t.shape = idx;
-}
-
 function handleDragCell(c: Cell, fromDir: number | null, button: number) {
   const t = state.grid[c.y]?.[c.x];
 
   // Right-button drag: delete non-fixed tiles (pipes and gates both).
   if (button === 2) {
     if (t && !t.fixed) {
-      if (removeTileAt(c.x, c.y)) {
+      if (dispatchRemove(c.x, c.y)) {
         drag.placed = true;
         Audio.remove();
       }
@@ -702,7 +731,7 @@ function handleDragCell(c: Cell, fromDir: number | null, button: number) {
   }
 
   if (state.tool && (state.bin[state.tool] ?? 0) >= 0) {
-    if (placeToolAt(c.x, c.y, fromDir)) {
+    if (dispatchPlace(c.x, c.y, state.tool, state.toolPipeShape, fromDir)) {
       state.selected = { x: c.x, y: c.y };
       drag.placed = true;
       Audio.place();
@@ -767,6 +796,7 @@ function stopRun() {
 function loop() {
   if (!state.running) return;
   step();
+  if (isHost()) hostBroadcastSnapshot(buildSnapshot());
   state.timer = setTimeout(loop, state.speedMs);
 }
 
@@ -1086,6 +1116,21 @@ function draw() {
   state.signals.forEach((s) => drawSignal(s));
 }
 
+function drawOwnerBadge(px: number, py: number, t: Tile) {
+  if (!isMultiplayer()) return;
+  if (t.fixed) return;
+  const color = ownerColor(t.owner);
+  if (!color) return;
+  ctx.save();
+  ctx.shadowBlur = 4;
+  ctx.shadowColor = color;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(px + 6, py + 6, 3.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 function drawHeldSignal(h: Hold) {
   const px = PADDING + h.x * CELL + CELL / 2;
   const py = PADDING + h.y * CELL + CELL / 2;
@@ -1106,6 +1151,9 @@ function drawTile(x: number, y: number, t: Tile) {
   const py = PADDING + y * CELL;
   const cx = px + CELL / 2,
     cy = py + CELL / 2;
+
+  // Owner color marker — rendered ABOVE the tile body via post-pass below.
+  // This is purely cosmetic; owner has no gameplay effect.
 
   if (t.type === "wall") {
     ctx.fillStyle = "#1a2530";
@@ -1146,6 +1194,7 @@ function drawTile(x: number, y: number, t: Tile) {
 
   if (t.type === "pipe") {
     drawPipe(x, y, t);
+    drawOwnerBadge(px, py, t);
     return;
   }
 
@@ -1153,6 +1202,7 @@ function drawTile(x: number, y: number, t: Tile) {
   drawGateBody(px, py, t);
   drawGateConnections(x, y, t);
   drawGateLabel(cx, cy, t);
+  drawOwnerBadge(px, py, t);
 }
 
 function drawNeonRect(px: number, py: number, color: string, fill: string) {
@@ -1354,118 +1404,30 @@ function rafLoop() {
 // ---------------- Buttons ----------------
 $("btn-run").onclick = () => {
   Audio.click();
-  startRun();
+  dispatchRun();
 };
 $("btn-step").onclick = () => {
-  if (state.running) return;
-  if (state.tick === 0) resetSimState();
   Audio.click();
-  step();
+  dispatchStep();
 };
 $("btn-stop").onclick = () => {
   Audio.click();
-  stopRun();
+  dispatchStop();
 };
 $("btn-reset").onclick = () => {
   Audio.click();
-  stopRun();
-  resetSimState();
-  state.status = "IDLE";
-  $("hud-status").textContent = "IDLE";
-  clearLog();
-  draw();
+  dispatchReset();
 };
 $("btn-clear").onclick = () => {
   Audio.click();
-  // restore all non-fixed tiles to bin
-  for (let y = 0; y < GRID_H; y++)
-    for (let x = 0; x < GRID_W; x++) {
-      const t = state.grid[y]?.[x];
-      if (t && !t.fixed) {
-        state.bin[t.type] = (state.bin[t.type] ?? 0) + 1;
-        const row = state.grid[y];
-        if (row) row[x] = null;
-      }
-    }
-  state.selected = null;
-  resetSimState();
-  state.status = "IDLE";
-  $("hud-status").textContent = state.status;
-  renderPalette();
-  renderInspector();
-  clearLog();
-  draw();
+  dispatchClearAll();
 };
 $("speed").oninput = (e) => {
   const target = e.target;
   if (!(target instanceof HTMLInputElement)) return;
   const v = parseInt(target.value ?? "0", 10);
-  state.speedMs = Math.round(550 - v * 25);
+  dispatchSpeed(Math.round(550 - v * 25));
 };
-
-// ---------------- Boot sequence ----------------
-const bootLines: string[] = [
-  "> initializing SIGNAL/OS v0.59 ...",
-  "> loading carrier wave .................. [OK]",
-  "> calibrating wire impedance ............ [OK]",
-  "> handshaking with cosmic background .... [OK]",
-  "> dispatching welcome packet ............ [OK]",
-  "",
-  "   ╔══════════════════════════════════════╗",
-  "   ║   SIGNAL — a programmable puzzler   ║",
-  "   ║   ldjam59  //  theme: SIGNAL         ║",
-  "   ╚══════════════════════════════════════╝",
-  "",
-  "> press any key to begin transmission ...",
-];
-
-function bootScreen() {
-  const el = $("boot-text");
-  let idx = 0;
-  let line = "";
-  let charIdx = 0;
-  let dismissed = false;
-  function dismiss() {
-    if (dismissed) return;
-    dismissed = true;
-    Audio.boot();
-    $("boot").classList.add("fade");
-    setTimeout(() => {
-      const b = document.getElementById("boot");
-      if (b) b.remove();
-    }, 1000);
-  }
-  document.addEventListener("keydown", dismiss);
-  document.addEventListener("mousedown", dismiss);
-  function tick() {
-    if (dismissed) return;
-    if (idx >= bootLines.length) {
-      el.textContent = el.textContent?.replace(/\u2588$/, "") ?? "";
-      el.textContent += "\n\n▌";
-      return;
-    }
-    const currentLine = bootLines[idx];
-    if (charIdx === 0 && (currentLine?.length ?? 0) === 0) {
-      el.textContent += "\n";
-      idx++;
-      setTimeout(tick, 40);
-      return;
-    }
-    line = currentLine ?? "";
-    el.textContent =
-      (el.textContent?.replace(/\u2588$/, "") ?? "") + line.charAt(charIdx) + "\u2588";
-    charIdx++;
-    if (charIdx >= line.length) {
-      el.textContent = el.textContent?.replace(/\u2588$/, "\n") ?? "";
-      idx++;
-      charIdx = 0;
-      setTimeout(tick, 40);
-    } else {
-      setTimeout(tick, 10);
-    }
-  }
-  tick();
-}
 
 // ---------------- Keyboard ----------------
 document.addEventListener("keydown", (e) => {
@@ -1474,20 +1436,13 @@ document.addEventListener("keydown", (e) => {
   const k = e.key.toLowerCase();
   if (k === " ") {
     e.preventDefault();
-    if (state.running) stopRun();
-    else startRun();
+    if (state.running) dispatchStop();
+    else dispatchRun();
   } else if (k === "r") {
-    stopRun();
-    resetSimState();
-    state.status = "IDLE";
-    $("hud-status").textContent = state.status;
-    clearLog();
-    draw();
+    dispatchReset();
     Audio.click();
   } else if (k === "s") {
-    if (state.running) return;
-    if (state.tick === 0) resetSimState();
-    step();
+    dispatchStep();
     Audio.click();
   } else if (k === "escape") {
     state.selected = null;
@@ -1511,11 +1466,544 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
+// ---------------- Multiplayer plumbing ----------------
+//
+// Layered on top of the existing single-player engine:
+//  * Solo path: dispatchers fall through to local mutators (zero overhead).
+//  * Host: applies locally + broadcasts a fresh snapshot so guests stay in sync.
+//  * Client: forwards every user action as an intent and renders snapshots.
+//
+// The host runs the simulation; clients only render. This keeps the
+// (non-deterministic, RNG-driven) simulation single-source-of-truth.
+
+interface MpSelfState {
+  me: PlayerInfo | null;
+  roster: Map<string, PlayerInfo>;
+}
+const mp: MpSelfState = { me: null, roster: new Map() };
+
+function rosterRefresh(players: PlayerInfo[]): void {
+  mp.roster.clear();
+  for (const p of players) mp.roster.set(p.id, p);
+  renderMpGameRoster();
+  renderMpLobbyRoster();
+  draw();
+}
+
+function ownerColor(ownerId: string | undefined): string | null {
+  if (!ownerId) return null;
+  return mp.roster.get(ownerId)?.color ?? null;
+}
+
+interface SnapshotShape {
+  levelIdx: number;
+  grid: (Tile | null)[][];
+  bin: Record<string, number>;
+  signals: Signal[];
+  holds: Hold[];
+  results: Record<string, number[]>;
+  tick: number;
+  running: boolean;
+  status: string;
+  speedMs: number;
+}
+
+function buildSnapshot(): SnapshotShape {
+  return {
+    levelIdx: state.levelIdx,
+    grid: state.grid,
+    bin: state.bin,
+    signals: state.signals,
+    holds: state.holds,
+    results: state.results,
+    tick: state.tick,
+    running: state.running,
+    status: state.status,
+    speedMs: state.speedMs,
+  };
+}
+
+function isSnapshot(value: unknown): value is SnapshotShape {
+  if (typeof value !== "object" || value === null) return false;
+  return (
+    "levelIdx" in value &&
+    typeof value.levelIdx === "number" &&
+    "grid" in value &&
+    Array.isArray(value.grid) &&
+    "bin" in value &&
+    typeof value.bin === "object" &&
+    "signals" in value &&
+    Array.isArray(value.signals) &&
+    "holds" in value &&
+    Array.isArray(value.holds) &&
+    "results" in value &&
+    typeof value.results === "object" &&
+    "tick" in value &&
+    typeof value.tick === "number" &&
+    "running" in value &&
+    typeof value.running === "boolean" &&
+    "status" in value &&
+    typeof value.status === "string" &&
+    "speedMs" in value &&
+    typeof value.speedMs === "number"
+  );
+}
+
+function applySnapshot(snap: SnapshotShape): void {
+  const lvl = LEVELS[snap.levelIdx] ?? null;
+  state.levelIdx = snap.levelIdx;
+  state.level = lvl;
+  state.grid = snap.grid;
+  state.bin = snap.bin;
+  state.signals = snap.signals;
+  state.holds = snap.holds;
+  state.results = snap.results;
+  state.tick = snap.tick;
+  state.running = snap.running;
+  state.status = snap.status;
+  state.speedMs = snap.speedMs;
+
+  $("hud-level").textContent = String(snap.levelIdx + 1).padStart(2, "0");
+  $("hud-tick").textContent = String(snap.tick).padStart(3, "0");
+  $("hud-status").textContent = snap.status || "IDLE";
+  if (lvl) {
+    $("brief-title").textContent = lvl.title;
+    $("brief-text").textContent = lvl.brief;
+  }
+  renderGoals();
+  renderPalette();
+  renderInspector();
+  renderLevelList();
+  draw();
+}
+
+function pushHostSnapshot(): void {
+  if (!isHost()) return;
+  hostBroadcastSnapshot(buildSnapshot());
+}
+
+// ── User action dispatchers (replace direct mutator calls) ─────────────────
+
+function dispatchPlace(
+  x: number,
+  y: number,
+  tool: string,
+  shape: number,
+  fromDir: number | null
+): boolean {
+  if (isClient()) {
+    clientSendIntent({ t: "place", x, y, tool, shape, fromDir });
+    return true; // optimistic — host snapshot will correct if rejected
+  }
+  const ok = placeToolAt(x, y, fromDir, tool, shape, mp.me?.id);
+  if (ok) pushHostSnapshot();
+  return ok;
+}
+
+function dispatchRemove(x: number, y: number): boolean {
+  if (isClient()) {
+    clientSendIntent({ t: "remove", x, y });
+    return true;
+  }
+  const ok = removeTileAt(x, y);
+  if (ok) pushHostSnapshot();
+  return ok;
+}
+
+function dispatchClearAll(): void {
+  if (isClient()) {
+    clientSendIntent({ t: "clear" });
+    return;
+  }
+  clearAllLocal();
+  pushHostSnapshot();
+}
+
+function clearAllLocal(): void {
+  for (let y = 0; y < GRID_H; y++) {
+    for (let x = 0; x < GRID_W; x++) {
+      const t = state.grid[y]?.[x];
+      if (t && !t.fixed) {
+        state.bin[t.type] = (state.bin[t.type] ?? 0) + 1;
+        const row = state.grid[y];
+        if (row) row[x] = null;
+      }
+    }
+  }
+  state.selected = null;
+  resetSimState();
+  state.status = "IDLE";
+  $("hud-status").textContent = state.status;
+  renderPalette();
+  renderInspector();
+  clearLog();
+  draw();
+}
+
+function dispatchRun(): void {
+  if (isClient()) {
+    clientSendIntent({ t: "run" });
+    return;
+  }
+  startRun();
+  pushHostSnapshot();
+}
+
+function dispatchStop(): void {
+  if (isClient()) {
+    clientSendIntent({ t: "stop" });
+    return;
+  }
+  stopRun();
+  pushHostSnapshot();
+}
+
+function dispatchStep(): void {
+  if (isClient()) {
+    clientSendIntent({ t: "step" });
+    return;
+  }
+  if (state.running) return;
+  if (state.tick === 0) resetSimState();
+  step();
+  pushHostSnapshot();
+}
+
+function dispatchReset(): void {
+  if (isClient()) {
+    clientSendIntent({ t: "reset" });
+    return;
+  }
+  stopRun();
+  resetSimState();
+  state.status = "IDLE";
+  $("hud-status").textContent = "IDLE";
+  clearLog();
+  draw();
+  pushHostSnapshot();
+}
+
+function dispatchLoadLevel(idx: number): void {
+  if (isClient()) {
+    clientSendIntent({ t: "level", idx });
+    return;
+  }
+  loadLevel(idx);
+  pushHostSnapshot();
+}
+
+function dispatchInspectUpdate(x: number, y: number, field: string, value: number | string): void {
+  if (isClient()) {
+    clientSendIntent({ t: "inspect-update", x, y, field, value });
+    return;
+  }
+  applyInspectUpdate(x, y, field, value);
+  pushHostSnapshot();
+}
+
+function dispatchSpeed(ms: number): void {
+  state.speedMs = ms; // local UI feedback
+  if (isClient()) {
+    clientSendIntent({ t: "speed", ms });
+    return;
+  }
+  // host: broadcast so other operators see the same speed
+  pushHostSnapshot();
+}
+
+function applyInspectUpdate(x: number, y: number, field: string, value: number | string): void {
+  const row = state.grid[y];
+  const t = row?.[x];
+  if (!t || t.fixed) return;
+  if (field === "shape" && typeof value === "number") t.shape = value;
+  else if (field === "axis" && typeof value === "string") t.axis = value;
+  else if (field === "op" && typeof value === "string") t.op = value;
+  else if (field === "n" && typeof value === "number") t.n = value;
+}
+
+// Host receives an intent from a guest and applies it.
+function applyHostIntent(from: PlayerInfo, intent: ClientIntent): void {
+  switch (intent.t) {
+    case "place":
+      placeToolAt(intent.x, intent.y, intent.fromDir, intent.tool, intent.shape, from.id);
+      break;
+    case "remove":
+      removeTileAt(intent.x, intent.y);
+      break;
+    case "clear":
+      clearAllLocal();
+      break;
+    case "reset":
+      stopRun();
+      resetSimState();
+      state.status = "IDLE";
+      $("hud-status").textContent = "IDLE";
+      clearLog();
+      break;
+    case "run":
+      startRun();
+      break;
+    case "stop":
+      stopRun();
+      break;
+    case "step":
+      if (state.running) return;
+      if (state.tick === 0) resetSimState();
+      step();
+      break;
+    case "level":
+      loadLevel(intent.idx);
+      break;
+    case "inspect-update":
+      if (typeof intent.value === "boolean") return;
+      applyInspectUpdate(intent.x, intent.y, intent.field, intent.value);
+      break;
+    case "speed":
+      state.speedMs = intent.ms;
+      break;
+  }
+  renderPalette();
+  renderInspector();
+  draw();
+  pushHostSnapshot();
+}
+
+// ── Lobby UI ──────────────────────────────────────────────────────────────
+
+function $opt(id: string): HTMLElement | null {
+  return document.getElementById(id);
+}
+
+let _copyStatusTimer: ReturnType<typeof setTimeout> | null = null;
+function setCopyStatus(text: string): void {
+  const el = $opt("mp-copy-status");
+  if (!el) return;
+  el.textContent = text;
+  if (_copyStatusTimer !== null) clearTimeout(_copyStatusTimer);
+  _copyStatusTimer = setTimeout(() => {
+    el.textContent = "";
+  }, 1600);
+}
+
+function renderMpLobbyRoster(): void {
+  const wrap = $opt("mp-roster");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+  for (const p of mp.roster.values()) {
+    const chip = document.createElement("span");
+    chip.className = "mp-chip";
+    chip.style.color = p.color;
+    chip.innerHTML = `<span class="mp-dot"></span><span style="color:var(--ink)">${escapeHtml(p.name)}</span>`;
+    wrap.appendChild(chip);
+  }
+}
+
+function renderMpGameRoster(): void {
+  const wrap = $opt("mp-game-roster");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+  if (mp.roster.size === 0) {
+    wrap.innerHTML = '<span style="opacity:0.6">solo</span>';
+    return;
+  }
+  for (const p of mp.roster.values()) {
+    const chip = document.createElement("div");
+    chip.className = "mp-chip";
+    chip.style.color = p.color;
+    chip.innerHTML = `<span class="mp-dot"></span><span style="color:var(--ink)">${escapeHtml(p.name)}${p.id === mp.me?.id ? " (you)" : ""}</span>`;
+    wrap.appendChild(chip);
+  }
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(
+    /[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] ?? c
+  );
+}
+
+function showLobby(): void {
+  const lobby = $opt("mp-lobby");
+  if (lobby) lobby.classList.remove("hidden");
+}
+
+function hideLobby(): void {
+  const lobby = $opt("mp-lobby");
+  if (lobby) lobby.classList.add("hidden");
+}
+
+function showRoomBox(): void {
+  $opt("mp-room-box")?.classList.remove("hidden");
+}
+
+function hideRoomBox(): void {
+  $opt("mp-room-box")?.classList.add("hidden");
+}
+
+function startGameplay(): void {
+  hideLobby();
+  const overlay = $opt("mp-overlay");
+  if (overlay) {
+    if (isMultiplayer()) overlay.classList.remove("hidden");
+    else overlay.classList.add("hidden");
+  }
+  const badge = $opt("mp-badge");
+  if (badge) {
+    if (isHost()) badge.textContent = `HOST · ${getRoomCode() ?? ""}`;
+    else if (isClient()) badge.textContent = `OPERATOR · ${getRoomCode() ?? ""}`;
+    else badge.textContent = "SOLO";
+  }
+  renderMpGameRoster();
+  // Host/Solo: load the first level. Clients wait for snapshot.
+  if (!isClient()) {
+    loadLevel(0);
+    if (isHost()) pushHostSnapshot();
+  }
+  if (!_rafHandle) rafLoop();
+}
+
+function setupLobbyHandlers(): void {
+  const nameInput = $opt("mp-name");
+  const codeInput = $opt("mp-join-code");
+  const soloBtn = $opt("mp-solo-btn");
+  const hostBtn = $opt("mp-host-btn");
+  const joinBtn = $opt("mp-join-btn");
+  const beginBtn = $opt("mp-begin-btn");
+  const leaveBtn = $opt("mp-leave-btn");
+  const copyCodeBtn = $opt("mp-copy-code-btn");
+  const copyLinkBtn = $opt("mp-copy-link-btn");
+
+  function readName(): string {
+    if (!(nameInput instanceof HTMLInputElement)) return "OPERATOR";
+    return nameInput.value;
+  }
+  function readCode(): string {
+    if (!(codeInput instanceof HTMLInputElement)) return "";
+    return codeInput.value;
+  }
+
+  const common = {
+    onRoster: (players: PlayerInfo[]) => {
+      rosterRefresh(players);
+    },
+    onStatus: (text: string) => {
+      const el = $opt("mp-status");
+      if (el) el.textContent = text;
+    },
+    onIdentity: (me: PlayerInfo) => {
+      mp.me = me;
+    },
+    onJoinError: (msg: string) => {
+      const el = $opt("mp-status");
+      if (el) el.textContent = msg;
+    },
+    onRoomCode: (code: string | null) => {
+      const el = $opt("mp-room-code");
+      if (el) el.textContent = code ?? "—";
+      if (code) showRoomBox();
+      else hideRoomBox();
+    },
+    onHostDisconnected: () => {
+      // Drop back to lobby so the player can rejoin or go solo.
+      mp.me = null;
+      mp.roster.clear();
+      renderMpGameRoster();
+      hideRoomBox();
+      showLobby();
+    },
+  };
+
+  soloBtn?.addEventListener("click", () => {
+    leaveRoom();
+    mp.me = null;
+    mp.roster.clear();
+    Audio.click();
+    startGameplay();
+  });
+
+  hostBtn?.addEventListener("click", () => {
+    Audio.click();
+    void startHost({
+      name: readName(),
+      common,
+      host: {
+        applyIntent: (from, intent) => applyHostIntent(from, intent),
+        buildSnapshot: () => buildSnapshot(),
+      },
+    });
+  });
+
+  joinBtn?.addEventListener("click", () => {
+    Audio.click();
+    void startClient({
+      code: readCode(),
+      name: readName(),
+      common,
+      client: {
+        onSnapshot: (raw) => {
+          if (isSnapshot(raw)) applySnapshot(raw);
+        },
+        onLog: (text, cls) => log(text, cls),
+      },
+    }).then(() => {
+      // For clients the begin-shift button still applies (host triggers
+      // `begin`); but auto-enter once a snapshot arrives.
+      const onceSnapshot = setInterval(() => {
+        if (state.level) {
+          clearInterval(onceSnapshot);
+          startGameplay();
+        }
+      }, 200);
+      setTimeout(() => clearInterval(onceSnapshot), 15000);
+    });
+  });
+
+  beginBtn?.addEventListener("click", () => {
+    Audio.click();
+    startGameplay();
+  });
+
+  leaveBtn?.addEventListener("click", () => {
+    Audio.click();
+    leaveRoom();
+    mp.me = null;
+    mp.roster.clear();
+    renderMpLobbyRoster();
+    hideRoomBox();
+    const status = $opt("mp-status");
+    if (status) status.textContent = "Left room.";
+  });
+
+  copyCodeBtn?.addEventListener("click", () => {
+    const code = getRoomCode();
+    if (!code) return;
+    void copyToClipboard(code).then((ok) => {
+      setCopyStatus(ok ? `Copied ${code}` : "Copy failed");
+    });
+  });
+
+  copyLinkBtn?.addEventListener("click", () => {
+    const code = getRoomCode();
+    if (!code) return;
+    void copyToClipboard(buildRoomShareUrl(code)).then((ok) => {
+      setCopyStatus(ok ? "Copied invite link" : "Copy failed");
+    });
+  });
+
+  // ?room=CODE -> pre-fill join code
+  const urlCode = readRoomCodeFromUrl();
+  if (urlCode && codeInput instanceof HTMLInputElement) {
+    codeInput.value = urlCode;
+    clearRoomCodeFromUrl();
+    const status = $opt("mp-status");
+    if (status) status.textContent = `Invite ${urlCode} loaded — set callsign and JOIN.`;
+  }
+}
+
 // ---------------- Init ----------------
 function init() {
-  loadLevel(0);
-  rafLoop();
-  bootScreen();
+  setupLobbyHandlers();
+  showLobby();
 }
 
 /** Stop the RAF loop and release the simulation timer on route teardown. */
@@ -1526,6 +2014,11 @@ export function destroy(): void {
     clearTimeout(state.timer);
     state.timer = null;
   }
+  if (_copyStatusTimer !== null) {
+    clearTimeout(_copyStatusTimer);
+    _copyStatusTimer = null;
+  }
+  leaveRoom();
 }
 
 init();

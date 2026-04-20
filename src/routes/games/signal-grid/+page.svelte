@@ -106,8 +106,71 @@
       </div>
     </div>
 
-    <div id="boot" class="boot">
+    <div id="boot" class="boot hidden" hidden>
       <pre id="boot-text"></pre>
+    </div>
+
+    <div id="mp-lobby" class="mp-lobby">
+      <div class="mp-lobby-card">
+        <div class="mp-title">SIGNAL // relay mode</div>
+        <div class="mp-sub">Pick a shift. Solo, or two-to-eight operators on one grid.</div>
+
+        <label class="mp-field" for="mp-name">
+          <span>OPERATOR CALLSIGN</span>
+          <input
+            id="mp-name"
+            type="text"
+            maxlength="14"
+            placeholder="OPERATOR"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </label>
+
+        <div class="mp-row">
+          <button id="mp-solo-btn" class="btn primary">▶ START SOLO</button>
+        </div>
+        <div class="mp-divider">— RELAY CO-OP —</div>
+        <div class="mp-row">
+          <button id="mp-host-btn" class="btn">⌘ HOST</button>
+          <label class="mp-field" for="mp-join-code">
+            <span>ROOM CODE</span>
+            <input
+              id="mp-join-code"
+              type="text"
+              maxlength="5"
+              placeholder="XXXXX"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </label>
+          <button id="mp-join-btn" class="btn">⚡ JOIN</button>
+        </div>
+
+        <div id="mp-room-box" class="mp-room-box hidden">
+          <div class="mp-label">SHARE THIS CODE</div>
+          <div class="mp-room-code" id="mp-room-code">—</div>
+          <div class="mp-row">
+            <button id="mp-copy-code-btn" class="btn">COPY CODE</button>
+            <button id="mp-copy-link-btn" class="btn">COPY LINK</button>
+            <button id="mp-leave-btn" class="btn warn">LEAVE ROOM</button>
+          </div>
+          <div id="mp-copy-status" class="mp-hint" role="status" aria-live="polite"></div>
+          <div class="mp-label">OPERATORS ON DECK</div>
+          <div id="mp-roster" class="mp-roster"></div>
+          <button id="mp-begin-btn" class="btn primary">▶ BEGIN SHIFT</button>
+        </div>
+
+        <div id="mp-status" class="mp-status" role="status" aria-live="polite"></div>
+      </div>
+    </div>
+
+    <div id="mp-overlay" class="mp-overlay hidden">
+      <div class="mp-badge" id="mp-badge">SOLO</div>
+      <div class="mp-panel">
+        <h3>OPERATORS</h3>
+        <div id="mp-game-roster"></div>
+      </div>
     </div>
   </div>
 </div>
