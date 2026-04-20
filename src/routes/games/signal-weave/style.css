@@ -174,14 +174,92 @@
     inset: 0;
     pointer-events: none;
     opacity: 0;
-    transition: opacity 0.18s;
+    transition: opacity 0.22s;
     z-index: 1;
   }
   #flash.good {
     background: radial-gradient(circle, rgba(141, 255, 157, 0.22), transparent 55%);
   }
+  #flash.perfect {
+    background: radial-gradient(circle, rgba(255, 221, 0, 0.45), transparent 60%);
+  }
   #flash.bad {
     background: radial-gradient(circle, rgba(255, 124, 207, 0.2), transparent 55%);
+  }
+  #milestone {
+    position: absolute;
+    top: 56%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 5;
+    padding: 8px 18px;
+    border: 1px solid var(--acc);
+    color: var(--acc);
+    background: rgba(8, 14, 32, 0.85);
+    font-size: 18px;
+    letter-spacing: 0.18em;
+    text-shadow: 0 0 12px rgba(121, 243, 255, 0.6);
+    pointer-events: none;
+    animation: milestone-pop 2.4s ease-out forwards;
+  }
+  @keyframes milestone-pop {
+    0% {
+      opacity: 0;
+      transform: translate(-50%, calc(-50% + 8px));
+    }
+    15% {
+      opacity: 1;
+      transform: translate(-50%, -50%);
+    }
+    85% {
+      opacity: 1;
+      transform: translate(-50%, calc(-50% - 4px));
+    }
+    100% {
+      opacity: 0;
+      transform: translate(-50%, calc(-50% - 16px));
+    }
+  }
+  #mode-chip {
+    border-color: var(--hot);
+    color: var(--hot);
+  }
+  .lobby-roster {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .op-chip {
+    padding: 3px 8px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    background: rgba(8, 14, 32, 0.4);
+  }
+  .game-roster {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+  }
+  .op-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    letter-spacing: 0.05em;
+  }
+  .op-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    box-shadow: 0 0 6px currentColor;
+  }
+  .you-tag {
+    color: var(--dim);
+    font-size: 10px;
+    letter-spacing: 0.2em;
   }
   #log {
     max-height: 180px;
