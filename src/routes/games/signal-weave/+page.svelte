@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import "./style.css";
   import { OFFSET_MIN, OFFSET_MAX } from "$lib/games/signal-weave/main";
-  import type { SignalWeaveControls } from "$lib/games/signal-weave/main";
+  import type { SignalWeaveControls, PlayerInfo } from "$lib/games/signal-weave/main";
   import {
     buildRoomShareUrl,
     clearRoomCodeFromUrl,
@@ -43,11 +43,18 @@
   let hudTime = $state("90.0");
   let hudHarmony = $state("0.0");
   let hudCombo = $state("x0");
+  let modeLabel = $state("MOV. I — DRIFT");
+  let modeColor = $state("#ff7ccf");
+  let roster = $state<PlayerInfo[]>([]);
+  let milestone = $state("");
+  let milestoneTimer: ReturnType<typeof setTimeout> | undefined;
 
   interface LogEntry {
+    id: number;
     text: string;
     kind: string;
   }
+  let logSeq = 0;
   let logs = $state<LogEntry[]>([]);
   let netStatus = $state("Idle.");
   let offsetLabel = $state("0.00 rad");
@@ -86,7 +93,8 @@
         hudCombo = "x" + c;
       },
       onLog: (text, kind) => {
-        logs = [{ text, kind }, ...logs].slice(0, 20);
+        logSeq += 1;
+        logs = [{ id: logSeq, text, kind }, ...logs].slice(0, 20);
       },
       onNetStatus: (t) => {
         netStatus = t;
@@ -99,7 +107,21 @@
         flashClass = k;
         setTimeout(() => {
           flashClass = "";
-        }, 140);
+        }, 200);
+      },
+      onMode: (label, color) => {
+        modeLabel = label;
+        modeColor = color;
+      },
+      onRoster: (next) => {
+        roster = next;
+      },
+      onMilestone: (text) => {
+        milestone = text;
+        if (milestoneTimer !== undefined) clearTimeout(milestoneTimer);
+        milestoneTimer = setTimeout(() => {
+          milestone = "";
+        }, 2400);
       },
     });
 
@@ -114,6 +136,7 @@
   onDestroy(() => {
     controls?.destroy();
     if (copyStatusTimer !== undefined) clearTimeout(copyStatusTimer);
+    if (milestoneTimer !== undefined) clearTimeout(milestoneTimer);
   });
 </script>
 
@@ -126,8 +149,11 @@
     <div id="lobby">
       <div class="card">
         <h1>SIGNAL WEAVE</h1>
-        <p>Two operators shape one impossible waveform.</p>
-        <p>Match the target signal and fire synchronized pulses.</p>
+        <p>Two to six operators shape one impossible waveform.</p>
+        <p>
+          Each slot owns its own sine component. Slide your phase to match the magenta target, then
+          fire synchronized pulses for combo bursts.
+        </p>
         <div class="row" style="margin-top:10px">
           <button id="host-btn" onclick={() => controls?.hostGame()}>OPEN CHANNEL</button>
         </div>
@@ -155,6 +181,15 @@
                 {copyStatus}
               </p>
             {/if}
+            {#if roster.length}
+              <div id="lobby-roster" class="lobby-roster">
+                {#each roster as p (p.slot)}
+                  <span class="op-chip" style:border-color={p.color} style:color={p.color}>
+                    P{p.slot + 1} · {p.label}{p.isYou ? " (you)" : ""}
+                  </span>
+                {/each}
+              </div>
+            {/if}
             <button id="start-btn" disabled={!startEnabled} onclick={() => controls?.startGame()}
               >BEGIN WEAVE</button
             >
@@ -173,8 +208,14 @@
         <div class="chip">HARMONY <b>{hudHarmony}</b></div>
         <div class="chip">COMBO <b>{hudCombo}</b></div>
         <div class="chip">YOU <b id="slot">{slotLabel}</b></div>
+        <div class="chip" id="mode-chip" style:color={modeColor} style:border-color={modeColor}>
+          {modeLabel}
+        </div>
       </div>
       <div id="flash" class={flashClass} style:opacity={flashClass ? "1" : "0"}></div>
+      {#if milestone}
+        <div id="milestone" role="status" aria-live="polite">{milestone}</div>
+      {/if}
     </div>
     <div id="sidebar">
       <div class="panel">
@@ -194,10 +235,26 @@
         </div>
       </div>
       <div class="panel">
+        <h3>OPERATORS</h3>
+        <div id="game-roster" class="game-roster">
+          {#each roster as p (p.slot)}
+            <div class="op-row">
+              <span class="op-dot" style:background={p.color}></span>
+              <span style:color={p.color}>P{p.slot + 1} · {p.label}</span>
+              {#if p.isYou}<span class="you-tag">you</span>{/if}
+            </div>
+          {:else}
+            <div style="color:var(--dim)">solo</div>
+          {/each}
+        </div>
+      </div>
+      <div class="panel">
         <h3>PROTOCOL</h3>
-        <div style="color:var(--dim)">
-          Keep the cyan combined wave close to the magenta target.<br />
-          Synchronized pulses (&lt; 0.8s apart) amplify harmony when alignment is good.
+        <div style="color:var(--dim);font-size:12px">
+          Each operator owns one sine component. Slide your phase to match the magenta target.<br />
+          <b>Pair pulse</b> = 2 ops within 0.85 s · <b>Team burst</b> = 3+ · <b>Constellation</b> =
+          all of you in sync. Bigger sync, bigger harmony.<br />
+          Movements rotate every 25 s — drift, double, tempest.
         </div>
       </div>
       <div class="panel">
@@ -207,7 +264,7 @@
       <div class="panel">
         <h3>LOG</h3>
         <div id="log">
-          {#each logs as entry, i (i)}
+          {#each logs as entry (entry.id)}
             <div class={entry.kind}>{entry.text}</div>
           {/each}
         </div>
