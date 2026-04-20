@@ -147,17 +147,18 @@ test.describe("Semaphoria – full game flow", () => {
     try {
       const sendGo = keeperPage.getByRole("button", { name: /Send signal: GO/i });
 
-      // Send "go" twice; synchronize on the button re-enabling so we don't
-      // race the cooldown on slow CI runs.
       await sendGo.click();
       await expect(captainPage.getByText("↓ Signal: go")).toBeVisible({ timeout: 10_000 });
-      await expect(sendGo).toBeEnabled({ timeout: 10_000 });
-      await sendGo.click();
+
+      // Cooldown is 2.5 s; Playwright's `click()` auto-waits for the button
+      // to leave the `disabled` state, so this second click reliably fires
+      // once the cooldown clears even if the loop is throttled in CI.
+      await sendGo.click({ timeout: 30_000 });
 
       // Both entries should appear in the log (unique keys per entry, not text)
       await expect(captainPage.locator(".log div").filter({ hasText: "↓ Signal: go" })).toHaveCount(
         2,
-        { timeout: 10_000 }
+        { timeout: 15_000 }
       );
     } finally {
       await Promise.all([keeperPage.close(), captainPage.close()]);
