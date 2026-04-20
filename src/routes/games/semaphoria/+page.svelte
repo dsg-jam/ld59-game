@@ -7,6 +7,7 @@
 
   import { makeCode, describePeerError } from "$lib/peer";
   import { createGameLoop } from "$lib/game-loop";
+  import { clearRoomCodeFromUrl, readRoomCodeFromUrl } from "$lib/room-url";
   import Lobby from "$lib/components/Lobby.svelte";
   import Timer from "$lib/components/Timer.svelte";
   import SignalReference from "$lib/components/SignalReference.svelte";
@@ -56,6 +57,7 @@
   let players = $state<string[]>([]);
   let canStart = $state(false);
   let lobbyStatus = $state("");
+  let autoJoinCode = $state("");
 
   let gameState = $state<GameState | null>(null);
   let captainInput = $state<CaptainInput>({ turning: "none", moving: false });
@@ -331,6 +333,13 @@
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   onMount(() => {
+    const urlCode = readRoomCodeFromUrl();
+    if (urlCode) {
+      autoJoinCode = urlCode;
+      handleJoin(urlCode);
+      clearRoomCodeFromUrl();
+    }
+
     // Test event bridge: allows Playwright e2e tests to trigger game-over
     // without waiting for the full timer. Dispatching these events during
     // normal gameplay has no effect and is harmless in production.
@@ -408,6 +417,7 @@
           {canStart}
           onStart={handleStart}
           status={lobbyStatus}
+          initialJoinCode={autoJoinCode}
         />
 
         <div style="margin-top: 8px;">

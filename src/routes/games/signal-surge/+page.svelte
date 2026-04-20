@@ -4,19 +4,36 @@
   import "./style.css";
   import { gs } from "$lib/games/signal-surge/gameState.svelte.js";
   import Scene from "$lib/games/signal-surge/Scene.svelte";
+  import {
+    buildRoomShareUrl,
+    clearRoomCodeFromUrl,
+    copyToClipboard,
+    readRoomCodeFromUrl,
+  } from "$lib/room-url";
 
   type SurgeMod = typeof import("$lib/games/signal-surge/main");
   let mod: SurgeMod | null = null;
+
+  let copyStatus = $state("");
+  let copyStatusTimer: ReturnType<typeof setTimeout> | undefined;
 
   onMount(() => {
     void (async () => {
       mod = await import("$lib/games/signal-surge/main");
       mod.init();
+
+      const autoJoinCode = readRoomCodeFromUrl();
+      if (autoJoinCode) {
+        gs.joinCode = autoJoinCode;
+        mod.joinGame(autoJoinCode, resolvedName());
+        clearRoomCodeFromUrl();
+      }
     })();
   });
 
   onDestroy(() => {
     mod?.destroy();
+    if (copyStatusTimer !== undefined) clearTimeout(copyStatusTimer);
   });
 
   function resolvedName(): string {
@@ -34,6 +51,26 @@
   }
   function onNextTrack(): void {
     mod?.nextTrack();
+  }
+
+  function flashCopyStatus(msg: string): void {
+    copyStatus = msg;
+    if (copyStatusTimer !== undefined) clearTimeout(copyStatusTimer);
+    copyStatusTimer = setTimeout(() => {
+      copyStatus = "";
+    }, 1600);
+  }
+
+  async function copyRoomCode(): Promise<void> {
+    if (!gs.roomCode) return;
+    const ok = await copyToClipboard(gs.roomCode);
+    flashCopyStatus(ok ? `Copied code ${gs.roomCode}` : "Copy failed");
+  }
+
+  async function copyRoomLink(): Promise<void> {
+    if (!gs.roomCode) return;
+    const ok = await copyToClipboard(buildRoomShareUrl(gs.roomCode));
+    flashCopyStatus(ok ? "Copied invite link" : "Copy failed");
   }
 
   const isHostUI = $derived(gs.mySlot === 0);
@@ -94,6 +131,13 @@
           <div id="room-wrap">
             <p style="margin-top:10px">Share this code:</p>
             <div class="room">{gs.roomCode}</div>
+            <div class="row" style="margin-top:8px">
+              <button type="button" onclick={copyRoomCode}>COPY CODE</button>
+              <button type="button" onclick={copyRoomLink}>COPY LINK</button>
+            </div>
+            {#if copyStatus}
+              <p class="hint" role="status" aria-live="polite">{copyStatus}</p>
+            {/if}
             <div class="players">
               {#each gs.lobbyPlayers as player (player.slot)}
                 <div class="player-tag" style:border-color={player.color}>

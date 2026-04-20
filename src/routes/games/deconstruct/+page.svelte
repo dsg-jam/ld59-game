@@ -5,16 +5,33 @@
   import { gs } from "$lib/games/deconstruct/gameState.svelte.js";
   import Scene from "$lib/games/deconstruct/Scene.svelte";
   import { COLORS_CSS, PLAYER_CSS } from "$lib/games/deconstruct/types.js";
+  import {
+    buildRoomShareUrl,
+    clearRoomCodeFromUrl,
+    copyToClipboard,
+    readRoomCodeFromUrl,
+  } from "$lib/room-url";
 
   type DeconMod = typeof import("$lib/games/deconstruct/main");
   let mod: DeconMod | null = null;
 
+  let copyStatus = $state("");
+  let copyStatusTimer: ReturnType<typeof setTimeout> | undefined;
+
   onMount(async () => {
     mod = await import("$lib/games/deconstruct/main");
+
+    const autoJoinCode = readRoomCodeFromUrl();
+    if (autoJoinCode) {
+      gs.joinCodeInput = autoJoinCode;
+      mod.joinGame();
+      clearRoomCodeFromUrl();
+    }
   });
 
   onDestroy(() => {
     mod?.destroy();
+    if (copyStatusTimer !== undefined) clearTimeout(copyStatusTimer);
   });
 
   const soloGame = () => mod?.soloGame();
@@ -24,6 +41,26 @@
   const onPickCard = () => mod?.onPickCard();
   const onClear = () => mod?.onClear();
   const onPass = () => mod?.onPass();
+
+  function flashCopyStatus(msg: string): void {
+    copyStatus = msg;
+    if (copyStatusTimer !== undefined) clearTimeout(copyStatusTimer);
+    copyStatusTimer = setTimeout(() => {
+      copyStatus = "";
+    }, 1600);
+  }
+
+  async function copyRoomCode(): Promise<void> {
+    if (!gs.roomCode) return;
+    const ok = await copyToClipboard(gs.roomCode);
+    flashCopyStatus(ok ? `Copied ${gs.roomCode}` : "Copy failed");
+  }
+
+  async function copyRoomLink(): Promise<void> {
+    if (!gs.roomCode) return;
+    const ok = await copyToClipboard(buildRoomShareUrl(gs.roomCode));
+    flashCopyStatus(ok ? "Copied invite link" : "Copy failed");
+  }
   const selectCard = (idx: number) => {
     if (!gs.locked) {
       gs.selectedCardIdx = idx;
@@ -87,6 +124,19 @@
           <div id="lobby-waiting">
             <div style="opacity:0.6;">Share this frequency ID:</div>
             <div class="room-code-display">{gs.roomCode}</div>
+            <div class="lobby-btns" style="margin-top:6px;">
+              <div class="row" style="gap:8px;justify-content:center;">
+                <button class="btn-secondary" type="button" onclick={copyRoomCode}>COPY CODE</button
+                >
+                <button class="btn-secondary" type="button" onclick={copyRoomLink}>COPY LINK</button
+                >
+              </div>
+              {#if copyStatus}
+                <div style="font-size:12px;opacity:0.85;" role="status" aria-live="polite">
+                  {copyStatus}
+                </div>
+              {/if}
+            </div>
             <div class="player-list">
               {#each gs.playerList as entry (entry.slot)}
                 <div style="color: {entry.color};">

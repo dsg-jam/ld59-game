@@ -39,8 +39,15 @@
         <div class="row">
           <input id="join-code" maxlength="5" placeholder="ROOM CODE" />
         </div>
-        <div class="row" id="room-wrap" style="display:none">
-          <span>ROOM:</span><span id="room-code">-----</span>
+        <div class="stack" id="room-wrap" style="display:none">
+          <div class="row">
+            <span>ROOM:</span><span id="room-code">-----</span>
+          </div>
+          <div class="row">
+            <button id="copy-code-btn" type="button">COPY CODE</button>
+            <button id="copy-link-btn" type="button">COPY LINK</button>
+          </div>
+          <div id="copy-status" aria-live="polite"></div>
         </div>
         <div id="lobby-status"></div>
       </div>
