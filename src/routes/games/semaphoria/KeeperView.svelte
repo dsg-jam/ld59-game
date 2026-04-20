@@ -8,6 +8,8 @@
   import { getKeeperAreaTile } from "$lib/semaphoria/navigation";
   import Lighthouse from "./Lighthouse.svelte";
 
+  let camRef: THREE.OrthographicCamera | undefined = $state(undefined);
+
   let {
     map,
     ship,
@@ -100,6 +102,25 @@
   const gridCenterZ = $derived(map.rows / 2 - 0.5);
   const gridSpanX = $derived(map.cols);
   const gridSpanZ = $derived(map.rows);
+
+  // With `manual` set, Threlte stops auto-updating the projection matrix when
+  // left/right/top/bottom change. Push the matrix update + a re-render
+  // ourselves whenever the frustum recomputes (canvas resize, map swap, …).
+  const { invalidate } = useThrelte();
+  $effect(() => {
+    const cam = camRef;
+    if (!cam) return;
+    cam.left = frustum.left;
+    cam.right = frustum.right;
+    cam.top = frustum.top;
+    cam.bottom = frustum.bottom;
+    cam.near = 0.1;
+    cam.far = camHeight * 2;
+    cam.position.set(camX, camHeight, camZ);
+    cam.lookAt(camX, 0, camZ);
+    cam.updateProjectionMatrix();
+    invalidate();
+  });
 </script>
 
 <!--
@@ -112,19 +133,19 @@
 <T.OrthographicCamera
   makeDefault
   manual
-  position.x={camX}
-  position.y={camHeight}
-  position.z={camZ}
-  left={frustum.left}
-  right={frustum.right}
-  top={frustum.top}
-  bottom={frustum.bottom}
-  near={0.1}
-  far={camHeight * 2}
   oncreate={(ref) => {
     const cam = ref as THREE.OrthographicCamera;
     cam.up.set(0, 0, -1); // looking straight down — orient screen-up to world -Z
+    cam.position.set(camX, camHeight, camZ);
+    cam.left = frustum.left;
+    cam.right = frustum.right;
+    cam.top = frustum.top;
+    cam.bottom = frustum.bottom;
+    cam.near = 0.1;
+    cam.far = camHeight * 2;
     cam.lookAt(camX, 0, camZ);
+    cam.updateProjectionMatrix();
+    camRef = cam;
   }}
 />
 
