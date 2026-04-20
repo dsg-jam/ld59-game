@@ -64,15 +64,42 @@
   const camZ = $derived(map.rows / 2 - 0.5);
 
   // ── Tile palette ──────────────────────────────────────────────────────────
+  //
+  // Pushed water + reef contrast way up vs. the page background so the
+  // keeper can actually read the board. Reefs now glow danger-red so they
+  // pop against water.
 
   const TILE_COLORS: Record<string, string> = {
-    water: "#0e2240",
-    reef: "#1a1410",
+    water: "#14355e",
+    reef: "#5a1a1a",
     harbor: "#44ff88",
     start: "#ffdd00",
   };
 
+  const DEFAULT_EMISSIVE = { color: "#1b4a7a", intensity: 0.12 };
+  const TILE_EMISSIVE: Record<string, { color: string; intensity: number }> = {
+    water: DEFAULT_EMISSIVE,
+    reef: { color: "#ff4a4a", intensity: 0.55 },
+    harbor: { color: "#44ff88", intensity: 0.45 },
+    start: { color: "#ffdd00", intensity: 0.35 },
+  };
+
   const allTiles = $derived(map.tiles.flat());
+
+  // Build a set of [x, z] pairs for vertical / horizontal grid lines so we
+  // don't have to recompute them every frame.
+  const gridLines = $derived.by(() => {
+    const v: { x: number }[] = [];
+    for (let x = 0; x <= map.cols; x += 1) v.push({ x: x - 0.5 });
+    const h: { z: number }[] = [];
+    for (let y = 0; y <= map.rows; y += 1) h.push({ z: y - 0.5 });
+    return { v, h };
+  });
+
+  const gridCenterX = $derived(map.cols / 2 - 0.5);
+  const gridCenterZ = $derived(map.rows / 2 - 0.5);
+  const gridSpanX = $derived(map.cols);
+  const gridSpanZ = $derived(map.rows);
 </script>
 
 <!--
@@ -101,27 +128,53 @@
   }}
 />
 
-<T.AmbientLight intensity={0.8} color="#c8d8ff" />
-<T.DirectionalLight position={[camX, 20, camZ - 5]} intensity={0.4} />
+<T.AmbientLight intensity={1.1} color="#d4e0ff" />
+<T.DirectionalLight position={[camX, 20, camZ - 5]} intensity={0.6} />
+
+<!-- Board backplate so the grid reads even when most tiles are water -->
+<T.Mesh
+  position.x={gridCenterX}
+  position.y={-0.02}
+  position.z={gridCenterZ}
+  rotation.x={-Math.PI / 2}
+>
+  <T.PlaneGeometry args={[gridSpanX + 1, gridSpanZ + 1]} />
+  <T.MeshBasicMaterial color="#07101c" />
+</T.Mesh>
 
 <!-- Map tiles as flat planes -->
 {#each allTiles as tile (`${tile.x},${tile.y}`)}
+  {@const emi = TILE_EMISSIVE[tile.type] ?? DEFAULT_EMISSIVE}
   <T.Mesh position.x={tile.x} position.y={0} position.z={tile.y} rotation.x={-Math.PI / 2}>
-    <T.PlaneGeometry args={[0.92, 0.92]} />
+    <T.PlaneGeometry args={[0.96, 0.96]} />
     <T.MeshStandardMaterial
-      color={TILE_COLORS[tile.type] ?? "#0e2240"}
-      roughness={0.9}
-      emissive={tile.type === "harbor" ? "#44ff88" : tile.onPath ? "#1a3a55" : "#000000"}
-      emissiveIntensity={tile.type === "harbor" ? 0.4 : tile.onPath ? 0.3 : 0}
+      color={TILE_COLORS[tile.type] ?? "#14355e"}
+      roughness={0.85}
+      emissive={tile.onPath ? "#2a6fa3" : emi.color}
+      emissiveIntensity={tile.onPath ? 0.5 : emi.intensity}
     />
+  </T.Mesh>
+{/each}
+
+<!-- Grid lines — thin dark strips between tiles so the board reads as a grid -->
+{#each gridLines.v as line (line.x)}
+  <T.Mesh position.x={line.x} position.y={0.005} position.z={gridCenterZ} rotation.x={-Math.PI / 2}>
+    <T.PlaneGeometry args={[0.04, gridSpanZ]} />
+    <T.MeshBasicMaterial color="#0a1828" transparent opacity={0.9} depthWrite={false} />
+  </T.Mesh>
+{/each}
+{#each gridLines.h as line (line.z)}
+  <T.Mesh position.x={gridCenterX} position.y={0.005} position.z={line.z} rotation.x={-Math.PI / 2}>
+    <T.PlaneGeometry args={[gridSpanX, 0.04]} />
+    <T.MeshBasicMaterial color="#0a1828" transparent opacity={0.9} depthWrite={false} />
   </T.Mesh>
 {/each}
 
 <!-- Safe path highlight (thin overlay) -->
 {#each map.path as pt, i (i)}
   <T.Mesh position.x={pt.x} position.y={0.01} position.z={pt.y} rotation.x={-Math.PI / 2}>
-    <T.PlaneGeometry args={[0.5, 0.5]} />
-    <T.MeshBasicMaterial color="#2266aa" transparent opacity={0.35} depthWrite={false} />
+    <T.PlaneGeometry args={[0.6, 0.6]} />
+    <T.MeshBasicMaterial color="#4fa8ff" transparent opacity={0.55} depthWrite={false} />
   </T.Mesh>
 {/each}
 
