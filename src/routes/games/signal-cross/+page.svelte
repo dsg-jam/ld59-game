@@ -579,9 +579,23 @@
   }
 
   function onKeyDown(e: KeyboardEvent): void {
-    if (e.key === "Escape" && snapshot.phase === "playing" && me?.selected) {
+    if (e.key !== "Escape") return;
+    if (slipModalTicketId != null) {
+      onSlipCancel();
+      return;
+    }
+    if (agencyModalTicketId != null) {
+      agencyModalTicketId = null;
+      return;
+    }
+    if (snapshot.phase === "playing" && me?.selected) {
       controls?.sendAction({ type: "deselect" });
     }
+  }
+
+  function autoFocus(node: HTMLElement): void {
+    const target = node.querySelector<HTMLElement>("button, [tabindex]");
+    target?.focus();
   }
 
   function onContextMenu(e: MouseEvent): void {
@@ -637,7 +651,7 @@
               maxlength="12"
               placeholder="SIG-XXXX"
               autocomplete="off"
-              bind:value={roomInput}
+              value={roomInput}
               oninput={(e) => {
                 roomInput = (e.target as HTMLInputElement).value.toUpperCase();
               }}
@@ -987,20 +1001,7 @@
       <div id="cable-layer" aria-hidden="true">
         <svg width="100%" height="100%">
           {#each cablePaths as cp (cp.id)}
-            <g
-              class="cable"
-              style:cursor="pointer"
-              onclick={() => controls?.sendAction({ type: "disconnect", ticketId: cp.id })}
-              onkeydown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  controls?.sendAction({ type: "disconnect", ticketId: cp.id });
-                }
-              }}
-              role="button"
-              tabindex="0"
-              aria-label="Disconnect cable"
-            >
+            <g class="cable">
               <path
                 d={cp.d}
                 stroke={cp.color}
@@ -1008,7 +1009,7 @@
                 stroke-width="12"
                 fill="none"
                 stroke-linecap="round"
-                pointer-events="stroke"
+                pointer-events="none"
               />
               <path
                 d={cp.d}
@@ -1016,7 +1017,7 @@
                 stroke-width="5"
                 fill="none"
                 stroke-linecap="round"
-                pointer-events="stroke"
+                pointer-events="none"
               />
               <path
                 d={cp.d}
@@ -1026,8 +1027,8 @@
                 stroke-linecap="round"
                 pointer-events="none"
               />
-              <circle cx={cp.ax} cy={cp.ay} r="7" fill={cp.color} />
-              <circle cx={cp.bx} cy={cp.by} r="7" fill={cp.color} />
+              <circle cx={cp.ax} cy={cp.ay} r="7" fill={cp.color} pointer-events="none" />
+              <circle cx={cp.bx} cy={cp.by} r="7" fill={cp.color} pointer-events="none" />
             </g>
           {/each}
         </svg>
@@ -1045,7 +1046,13 @@
 
       {#if slipTicket && slipTicket.slip}
         {@const slip = slipTicket.slip}
-        <div class="slip-modal" role="dialog" aria-modal="true" aria-labelledby="slip-heading">
+        <div
+          class="slip-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="slip-heading"
+          use:autoFocus
+        >
           <div class="slip">
             <div class="slip-head">
               <span id="slip-heading">CALL SLIP</span>
@@ -1080,7 +1087,13 @@
       {/if}
 
       {#if agencyTicket && agencyTicket.agencyQ}
-        <div class="agency-modal" role="dialog" aria-modal="true" aria-labelledby="agency-heading">
+        <div
+          class="agency-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="agency-heading"
+          use:autoFocus
+        >
           <div class="dossier">
             <div class="dossier-head">
               <span class="dossier-tag" id="agency-heading">🕴 THE AGENCY</span>
@@ -1095,7 +1108,7 @@
               {/each}
             </div>
             <div class="agency-timer">
-              <div style:width="{agencyTimerPct(agencyTicket)}%"></div>
+              <div id="agency-timer-fill" style:width="{agencyTimerPct(agencyTicket)}%"></div>
             </div>
           </div>
         </div>
