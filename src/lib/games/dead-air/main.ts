@@ -4,6 +4,12 @@ import {
   describePeerError as sharedDescribePeerError,
   makeCode as sharedMakeCode,
 } from "$lib/peer";
+import {
+  buildRoomShareUrl,
+  clearRoomCodeFromUrl,
+  copyToClipboard,
+  readRoomCodeFromUrl,
+} from "$lib/room-url";
 import { endState as endStateStore } from "$lib/games/dead-air/endState";
 import { isGameMessage } from "$lib/validators";
 import {
@@ -1370,6 +1376,28 @@ export function destroy(): void {
   $("join-btn").addEventListener("click", joinRoom);
   $("start-btn").addEventListener("click", beginGame);
 
+  let _copyStatusTimer: ReturnType<typeof setTimeout> | null = null;
+  function flashCopyStatus(msg: string): void {
+    const el = $("copy-status");
+    el.textContent = msg;
+    if (_copyStatusTimer !== null) clearTimeout(_copyStatusTimer);
+    _copyStatusTimer = setTimeout(() => {
+      el.textContent = "";
+    }, 1600);
+  }
+  $("copy-code-btn").addEventListener("click", () => {
+    if (!roomCode) return;
+    void copyToClipboard(roomCode).then((ok) => {
+      flashCopyStatus(ok ? `Copied ${roomCode}` : "Copy failed");
+    });
+  });
+  $("copy-link-btn").addEventListener("click", () => {
+    if (!roomCode) return;
+    void copyToClipboard(buildRoomShareUrl(roomCode)).then((ok) => {
+      flashCopyStatus(ok ? "Copied invite link" : "Copy failed");
+    });
+  });
+
   $("name").addEventListener("change", () => {
     const name = ($input("name").value || "OPERATIVE").slice(0, 16);
     $input("name").value = name;
@@ -1420,4 +1448,11 @@ export function destroy(): void {
 
   renderLobbyPlayers();
   _raf = requestAnimationFrame(loop);
+
+  const autoJoinCode = readRoomCodeFromUrl();
+  if (autoJoinCode) {
+    $input("join-code").value = autoJoinCode;
+    clearRoomCodeFromUrl();
+    joinRoom();
+  }
 })();

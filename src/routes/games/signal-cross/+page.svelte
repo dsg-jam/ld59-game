@@ -20,6 +20,12 @@
     Signal1Controls,
     Ticket,
   } from "$lib/games/signal-cross/types";
+  import {
+    buildRoomShareUrl,
+    clearRoomCodeFromUrl,
+    copyToClipboard,
+    readRoomCodeFromUrl,
+  } from "$lib/room-url";
   import "./styles.css";
 
   type Floater = {
@@ -296,6 +302,13 @@
         onEvent: handleEvent,
         onToast: showToast,
       });
+
+      const urlCode = readRoomCodeFromUrl();
+      if (urlCode) {
+        roomInput = urlCode;
+        controls.joinGame(urlCode, readName());
+        clearRoomCodeFromUrl();
+      }
     });
 
     const step = (): void => {
@@ -383,8 +396,16 @@
 
   function onCopy(): void {
     if (!roomCode) return;
-    void navigator.clipboard?.writeText(roomCode).catch(() => undefined);
-    showToast("copied " + roomCode);
+    void copyToClipboard(roomCode).then((ok) => {
+      showToast(ok ? "copied " + roomCode : "copy failed");
+    });
+  }
+
+  function onCopyLink(): void {
+    if (!roomCode) return;
+    void copyToClipboard(buildRoomShareUrl(roomCode)).then((ok) => {
+      showToast(ok ? "copied invite link" : "copy failed");
+    });
   }
 
   function ringBarPct(t: Ticket): number {
@@ -678,7 +699,10 @@
         <div class="room-code-wrap">
           <span class="hud-label">SHARE THIS CODE</span>
           <div class="room-code">{roomCode || "..."}</div>
-          <button class="mini-btn" onclick={onCopy}>COPY</button>
+          <div class="button-row tight">
+            <button class="mini-btn" onclick={onCopy}>COPY CODE</button>
+            <button class="mini-btn" onclick={onCopyLink}>COPY LINK</button>
+          </div>
         </div>
 
         <div class="panel-head">OPERATORS ON DUTY</div>

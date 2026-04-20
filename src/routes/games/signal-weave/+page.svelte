@@ -3,6 +3,12 @@
   import "./style.css";
   import { OFFSET_MIN, OFFSET_MAX } from "$lib/games/signal-weave/main";
   import type { SignalWeaveControls } from "$lib/games/signal-weave/main";
+  import {
+    buildRoomShareUrl,
+    clearRoomCodeFromUrl,
+    copyToClipboard,
+    readRoomCodeFromUrl,
+  } from "$lib/room-url";
 
   // ── UI state ────────────────────────────────────────────────────────────────
   let phase = $state<"lobby" | "game">("lobby");
@@ -11,6 +17,28 @@
   let startEnabled = $state(false);
   let lobbyStatus = $state("");
   let slotLabel = $state("--");
+  let copyStatus = $state("");
+  let copyStatusTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function flashCopyStatus(msg: string): void {
+    copyStatus = msg;
+    if (copyStatusTimer !== undefined) clearTimeout(copyStatusTimer);
+    copyStatusTimer = setTimeout(() => {
+      copyStatus = "";
+    }, 1600);
+  }
+
+  async function copyRoomCode(): Promise<void> {
+    if (!roomCode) return;
+    const ok = await copyToClipboard(roomCode);
+    flashCopyStatus(ok ? `Copied code ${roomCode}` : "Copy failed");
+  }
+
+  async function copyRoomLink(): Promise<void> {
+    if (!roomCode) return;
+    const ok = await copyToClipboard(buildRoomShareUrl(roomCode));
+    flashCopyStatus(ok ? "Copied invite link" : "Copy failed");
+  }
 
   let hudTime = $state("90.0");
   let hudHarmony = $state("0.0");
@@ -74,10 +102,18 @@
         }, 140);
       },
     });
+
+    const autoJoinCode = readRoomCodeFromUrl();
+    if (autoJoinCode) {
+      joinCode = autoJoinCode;
+      controls.joinGame(autoJoinCode);
+      clearRoomCodeFromUrl();
+    }
   });
 
   onDestroy(() => {
     controls?.destroy();
+    if (copyStatusTimer !== undefined) clearTimeout(copyStatusTimer);
   });
 </script>
 
@@ -106,6 +142,19 @@
           <div id="room-wrap">
             <p style="margin-top:10px">Share this code:</p>
             <div class="room" id="room-code">{roomCode}</div>
+            <div class="row" style="margin-top:8px">
+              <button type="button" onclick={copyRoomCode}>COPY CODE</button>
+              <button type="button" onclick={copyRoomLink}>COPY LINK</button>
+            </div>
+            {#if copyStatus}
+              <p
+                style="margin-top:4px;color:var(--good);font-size:12px"
+                role="status"
+                aria-live="polite"
+              >
+                {copyStatus}
+              </p>
+            {/if}
             <button id="start-btn" disabled={!startEnabled} onclick={() => controls?.startGame()}
               >BEGIN WEAVE</button
             >
