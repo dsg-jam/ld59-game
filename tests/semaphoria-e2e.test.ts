@@ -145,15 +145,16 @@ test.describe("Semaphoria – full game flow", () => {
     const { keeperPage, captainPage } = await startTwoPlayerGame(browser);
 
     try {
-      // Send "go" twice; after the cooldown resets we send it again
-      await keeperPage.getByRole("button", { name: /Send signal: GO/i }).click();
+      const sendGo = keeperPage.getByRole("button", { name: /Send signal: GO/i });
+
+      // Send "go" twice; synchronize on the button re-enabling so we don't
+      // race the cooldown on slow CI runs.
+      await sendGo.click();
       await expect(captainPage.getByText("↓ Signal: go")).toBeVisible({ timeout: 10_000 });
+      await expect(sendGo).toBeEnabled({ timeout: 10_000 });
+      await sendGo.click();
 
-      // Wait for cooldown before sending again (cooldown = 2.5 s)
-      await captainPage.waitForTimeout(3_000);
-      await keeperPage.getByRole("button", { name: /Send signal: GO/i }).click();
-
-      // Both entries should appear in the log (unique keys by index, not text)
+      // Both entries should appear in the log (unique keys per entry, not text)
       await expect(captainPage.locator(".log div").filter({ hasText: "↓ Signal: go" })).toHaveCount(
         2,
         { timeout: 10_000 }

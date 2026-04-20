@@ -3,13 +3,13 @@
     entries = [],
     maxEntries = 20,
   }: {
-    entries: { text: string; kind?: "ok" | "bad" | "" }[];
+    entries: { id: string | number; text: string; kind?: "ok" | "bad" | "" }[];
     maxEntries?: number;
   } = $props();
 </script>
 
 <div class="log">
-  {#each entries.slice(0, maxEntries) as entry, i (i)}
+  {#each entries.slice(0, maxEntries) as entry (entry.id)}
     <div class={entry.kind ?? ""}>{entry.text}</div>
   {/each}
 </div>

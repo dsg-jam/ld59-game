@@ -68,7 +68,8 @@
    */
   let activePattern = $state<FlashPattern | null>(null);
 
-  let logs = $state<{ text: string; kind?: "ok" | "bad" | "" }[]>([]);
+  let logs = $state<{ id: number; text: string; kind?: "ok" | "bad" | "" }[]>([]);
+  let logSeq = 0;
   let netOk = $state(false);
 
   // Peer networking
@@ -97,7 +98,8 @@
   // ── Logging ────────────────────────────────────────────────────────────────
 
   function log(text: string, kind: "ok" | "bad" | "" = ""): void {
-    logs = [{ text, kind }, ...logs].slice(0, 30);
+    logSeq += 1;
+    logs = [{ id: logSeq, text, kind }, ...logs].slice(0, 30);
   }
 
   // ── Networking ────────────────────────────────────────────────────────────
