@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { T } from "@threlte/core";
+  import { T, useThrelte } from "@threlte/core";
   import * as THREE from "three";
+  import { fromStore } from "svelte/store";
   import type { GameMap } from "$lib/semaphoria/map-generator";
   import type { ShipState } from "$lib/semaphoria/navigation";
   import type { SigColor } from "$lib/semaphoria/constants";
@@ -25,12 +26,45 @@
   // Coarsened ship area shown to keeper (not exact position)
   const areaIndicator = $derived(getKeeperAreaTile(ship));
 
-  // Camera: orthographic overhead view of the whole map
+  // ── Camera sizing ─────────────────────────────────────────────────────────
+  //
+  // The keeper wants an overhead view that frames the ENTIRE map. Using a
+  // fixed ±cols/2 × ±rows/2 frustum stretches the map whenever the canvas
+  // aspect ratio differs from the map's (e.g. a 16:9 canvas on a 20×20
+  // map would squash the map vertically). Instead, compute the frustum from
+  // the live canvas aspect so the map is letterboxed or pillarboxed rather
+  // than distorted.
+
+  const { size } = useThrelte();
+  const canvasSize = fromStore(size);
+
+  const EDGE_MARGIN = 2; // world units of slack around the map
+  const mapHalfW = $derived(map.cols / 2 + EDGE_MARGIN);
+  const mapHalfH = $derived(map.rows / 2 + EDGE_MARGIN);
+
+  const canvasAspect = $derived.by(() => {
+    const s = canvasSize.current;
+    if (!s || s.height <= 0) return 1;
+    return s.width / s.height;
+  });
+  const mapAspect = $derived(mapHalfW / mapHalfH);
+
+  // Extend one axis so the map fits inside the frustum without distortion.
+  const frustum = $derived.by(() => {
+    if (canvasAspect >= mapAspect) {
+      const w = mapHalfH * canvasAspect;
+      return { left: -w, right: w, top: mapHalfH, bottom: -mapHalfH };
+    }
+    const h = mapHalfW / canvasAspect;
+    return { left: -mapHalfW, right: mapHalfW, top: h, bottom: -h };
+  });
+
   const camHeight = $derived(Math.max(map.cols, map.rows) * 0.9);
   const camX = $derived(map.cols / 2 - 0.5);
   const camZ = $derived(map.rows / 2 - 0.5);
 
-  // Colour map for tile types
+  // ── Tile palette ──────────────────────────────────────────────────────────
+
   const TILE_COLORS: Record<string, string> = {
     water: "#0e2240",
     reef: "#1a1410",
@@ -44,8 +78,9 @@
 <!--
   Orthographic camera looking straight down.
   `manual` is required: without it Threlte's `updateCamera` overwrites
-  left/right/top/bottom with pixel-sized values on every resize, which
-  shrinks the world-unit map to a tiny patch inside a massive frustum.
+  left/right/top/bottom with pixel-sized values on every resize. The
+  frustum is recomputed from the live canvas aspect so the map fills
+  the viewport without stretching.
 -->
 <T.OrthographicCamera
   makeDefault
@@ -53,14 +88,15 @@
   position.x={camX}
   position.y={camHeight}
   position.z={camZ}
-  left={-map.cols / 2}
-  right={map.cols / 2}
-  top={map.rows / 2}
-  bottom={-map.rows / 2}
+  left={frustum.left}
+  right={frustum.right}
+  top={frustum.top}
+  bottom={frustum.bottom}
   near={0.1}
   far={camHeight * 2}
   oncreate={(ref) => {
     const cam = ref as THREE.OrthographicCamera;
+    cam.up.set(0, 0, -1); // looking straight down — orient screen-up to world -Z
     cam.lookAt(camX, 0, camZ);
   }}
 />
