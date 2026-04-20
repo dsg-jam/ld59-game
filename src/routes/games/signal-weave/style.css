@@ -1,37 +1,38 @@
-.signal-weave-page {
-  --bg: #06080f;
-  --ink: #d7e5ff;
-  --dim: #7d8cb1;
-  --line: #1b2340;
-  --acc: #79f3ff;
-  --hot: #ff7ccf;
-  --good: #8dff9d;
-  --warn: #ffb36b;
-}
-.signal-weave-page * {
-  box-sizing: border-box;
-}
-.signal-weave-page {
-  height: 100%;
-  margin: 0;
-  background: radial-gradient(circle at 30% 20%, #0b1230, #06080f 60%);
-  color: var(--ink);
-  font:
-    14px/1.4 ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    Consolas,
-    monospace;
-  overflow: hidden;
-}
-.signal-weave-page::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 30;
-  background: repeating-linear-gradient(0deg, transparent 0 2px, rgba(121, 243, 255, 0.04) 2px 3px);
-}
+@scope (.signal-weave-page) {
+  :scope {
+    --bg: #06080f;
+    --ink: #d7e5ff;
+    --dim: #7d8cb1;
+    --line: #1b2340;
+    --acc: #79f3ff;
+    --hot: #ff7ccf;
+    --good: #8dff9d;
+    --warn: #ffb36b;
+  }
+  * {
+    box-sizing: border-box;
+  }
+  :scope {
+    height: 100%;
+    margin: 0;
+    background: radial-gradient(circle at 30% 20%, #0b1230, #06080f 60%);
+    color: var(--ink);
+    font:
+      14px/1.4 ui-monospace,
+      SFMono-Regular,
+      Menlo,
+      Consolas,
+      monospace;
+    overflow: hidden;
+  }
+  :scope::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 30;
+    background: repeating-linear-gradient(0deg, transparent 0 2px, rgba(121, 243, 255, 0.04) 2px 3px);
+  }
 #app {
   display: grid;
   grid-template-columns: 1fr 320px;
@@ -192,4 +193,6 @@ input[type="range"] {
 }
 #log .bad {
   color: var(--warn);
+}
+
 }

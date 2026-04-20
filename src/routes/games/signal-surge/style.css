@@ -1,39 +1,40 @@
-.signal-surge-page {
-  --bg: #040610;
-  --ink: #d7e5ff;
-  --dim: #7d8cb1;
-  --line: #1b2340;
-  --acc: #79f3ff;
-  --hot: #ff7ccf;
-  --good: #8dff9d;
-  --warn: #ffb36b;
-}
-.signal-surge-page * {
-  box-sizing: border-box;
-}
-.signal-surge-page {
-  position: relative;
-  height: 100vh;
-  width: 100%;
-  margin: 0;
-  background: #040610;
-  color: var(--ink);
-  font:
-    14px/1.4 ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    Consolas,
-    monospace;
-  overflow: hidden;
-}
-.signal-surge-page::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 30;
-  background: repeating-linear-gradient(0deg, transparent 0 2px, rgba(121, 243, 255, 0.03) 2px 3px);
-}
+@scope (.signal-surge-page) {
+  :scope {
+    --bg: #040610;
+    --ink: #d7e5ff;
+    --dim: #7d8cb1;
+    --line: #1b2340;
+    --acc: #79f3ff;
+    --hot: #ff7ccf;
+    --good: #8dff9d;
+    --warn: #ffb36b;
+  }
+  * {
+    box-sizing: border-box;
+  }
+  :scope {
+    position: relative;
+    height: 100vh;
+    width: 100%;
+    margin: 0;
+    background: #040610;
+    color: var(--ink);
+    font:
+      14px/1.4 ui-monospace,
+      SFMono-Regular,
+      Menlo,
+      Consolas,
+      monospace;
+    overflow: hidden;
+  }
+  :scope::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 30;
+    background: repeating-linear-gradient(0deg, transparent 0 2px, rgba(121, 243, 255, 0.03) 2px 3px);
+  }
 
 .canvas-wrapper {
   position: absolute;
@@ -330,4 +331,6 @@ input[type="text"] {
   color: var(--acc);
   text-shadow: 0 0 40px rgba(121, 243, 255, 0.55);
   letter-spacing: 0.1em;
+}
+
 }

@@ -1,34 +1,35 @@
 /* SIGNAL // ldjam59 */
-.signal-grid-page {
-  --bg: #05080a;
-  --bg2: #0a1014;
-  --panel: #0e1620;
-  --panel2: #142030;
-  --line: #1c2a38;
-  --ink: #cfeaff;
-  --dim: #5d7a93;
-  --neon: #00ffd0;
-  --neon2: #ff2bd6;
-  --warn: #ffaa00;
-  --bad: #ff3a64;
-  --good: #5cffa1;
-  --amber: #ffb347;
-}
+@scope (.signal-grid-page) {
+  :scope {
+    --bg: #05080a;
+    --bg2: #0a1014;
+    --panel: #0e1620;
+    --panel2: #142030;
+    --line: #1c2a38;
+    --ink: #cfeaff;
+    --dim: #5d7a93;
+    --neon: #00ffd0;
+    --neon2: #ff2bd6;
+    --warn: #ffaa00;
+    --bad: #ff3a64;
+    --good: #5cffa1;
+    --amber: #ffb347;
+  }
 
-.signal-grid-page * {
-  box-sizing: border-box;
-}
+  * {
+    box-sizing: border-box;
+  }
 
-.signal-grid-page {
-  margin: 0;
-  padding: 0;
-  background: #000;
-  color: var(--ink);
-  font-family: "Consolas", "Menlo", "Courier New", monospace;
-  height: 100%;
-  overflow: hidden;
-  user-select: none;
-}
+  :scope {
+    margin: 0;
+    padding: 0;
+    background: #000;
+    color: var(--ink);
+    font-family: "Consolas", "Menlo", "Courier New", monospace;
+    height: 100%;
+    overflow: hidden;
+    user-select: none;
+  }
 
 #crt {
   position: relative;
@@ -578,4 +579,6 @@ section {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--neon);
+}
+
 }

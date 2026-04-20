@@ -1,34 +1,35 @@
-.signal-cross-page {
-  --brass: #d8a34a;
-  --brass-deep: #7a5a1e;
-  --wood: #3a2414;
-  --wood-light: #5c3821;
-  --cream: #f3e3bd;
-  --ink: #1a0f07;
-  --green: #6fe07a;
-  --red: #ff5a4e;
-  --blue: #68c6ff;
-  --neon: #ffd561;
-  --shadow: rgba(0, 0, 0, 0.55);
-}
+@scope (.signal-cross-page) {
+  :scope {
+    --brass: #d8a34a;
+    --brass-deep: #7a5a1e;
+    --wood: #3a2414;
+    --wood-light: #5c3821;
+    --cream: #f3e3bd;
+    --ink: #1a0f07;
+    --green: #6fe07a;
+    --red: #ff5a4e;
+    --blue: #68c6ff;
+    --neon: #ffd561;
+    --shadow: rgba(0, 0, 0, 0.55);
+  }
 
-.signal-cross-page * {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
 
-.signal-cross-page {
-  height: 100%;
-  font-family: "Courier New", ui-monospace, monospace;
-  color: var(--cream);
-  background: radial-gradient(ellipse at top, #2c1a0d 0%, #120900 75%);
-  overflow: hidden;
-  user-select: none;
-  -webkit-user-select: none;
-  position: relative;
-  min-height: 100vh;
-}
+  :scope {
+    height: 100%;
+    font-family: "Courier New", ui-monospace, monospace;
+    color: var(--cream);
+    background: radial-gradient(ellipse at top, #2c1a0d 0%, #120900 75%);
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+    position: relative;
+    min-height: 100vh;
+  }
 
 .scanlines {
   pointer-events: none;
@@ -1532,4 +1533,5 @@ input[type="text"]:focus {
   .panel {
     flex: 1;
   }
+}
 }
