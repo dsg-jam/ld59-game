@@ -1,4 +1,4 @@
-import type { Card, ColKey, ScoreEntry } from "./types.js";
+import type { Card, ColKey, MoveResult, ScoreEntry } from "./types.js";
 
 export type BlockRiseTrigger = {
   id: string;
@@ -23,7 +23,7 @@ export type LogEntry = { text: string; kind?: string };
 export type PlayerListEntry = { slot: number; name: string; color: string };
 
 export type GameState = {
-  phase: "lobby" | "game";
+  phase: "lobby" | "game" | "end";
   grid: ColKey[][][];
   myHand: Card[];
   selectedCardIdx: number | null;
@@ -47,6 +47,14 @@ export type GameState = {
   joinStatus: string;
   joinCodeInput: string;
   lobbyPanel: "menu" | "waiting" | "joining";
+  lastRoundResults: MoveResult[];
+  lastRoundTurn: number;
+  showRoundSummary: boolean;
+  invalidShake: number;
+  finalResults: {
+    winnerSlot: number;
+    scores: ScoreEntry[];
+  } | null;
 };
 
 export const gs = $state<GameState>({
@@ -74,4 +82,9 @@ export const gs = $state<GameState>({
   joinStatus: "",
   joinCodeInput: "",
   lobbyPanel: "menu",
+  lastRoundResults: [],
+  lastRoundTurn: 0,
+  showRoundSummary: false,
+  invalidShake: 0,
+  finalResults: null,
 });

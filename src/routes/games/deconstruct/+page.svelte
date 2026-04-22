@@ -5,6 +5,7 @@
   import { gs } from "$lib/games/deconstruct/gameState.svelte.js";
   import Scene from "$lib/games/deconstruct/Scene.svelte";
   import { COLORS_CSS, PLAYER_CSS } from "$lib/games/deconstruct/types.js";
+  import type { Card } from "$lib/games/deconstruct/types.js";
   import {
     buildRoomShareUrl,
     clearRoomCodeFromUrl,
@@ -41,6 +42,12 @@
   const onPickCard = () => mod?.onPickCard();
   const onClear = () => mod?.onClear();
   const onPass = () => mod?.onPass();
+  const returnToLobby = () => mod?.returnToLobby();
+  const dismissResults = () => mod?.dismissResults();
+
+  function cardHasPlacement(card: Card): boolean {
+    return mod?.cardHasPlacement(card) ?? true;
+  }
 
   function flashCopyStatus(msg: string): void {
     copyStatus = msg;
@@ -78,6 +85,17 @@
   function slotName(slot: number): string {
     if (slot === gs.mySlot) return "You";
     return gs.playerNames[slot] || (gs.isSolo ? "CPU" : "P" + (slot + 1));
+  }
+
+  function colorName(key: string): string {
+    const names: Record<string, string> = {
+      R: "ALPHA",
+      G: "BETA",
+      B: "GAMMA",
+      Y: "DELTA",
+      P: "EPSILON",
+    };
+    return names[key] ?? key;
   }
 </script>
 
@@ -204,47 +222,126 @@
         // Awaiting other operators&hellip;
       </div>
 
-      <div id="side-panel">
-        <div id="player-hand" class="hand">
-          {#each gs.myHand as card, idx (idx)}
-            {@const mx = Math.max(...card.shape.cells.map((p) => p[0] ?? 0)) + 1}
-            {@const my = Math.max(...card.shape.cells.map((p) => p[1] ?? 0)) + 1}
-            <div
-              class="card{gs.selectedCardIdx === idx ? ' selected' : ''}"
-              style="border-color: {COLORS_CSS[card.color]};"
-              onclick={() => selectCard(idx)}
-              role="button"
-              tabindex="0"
-              onkeydown={(e) => handleCardKeydown(e, idx)}
-            >
-              <div class="card-num">Δ{card.init}</div>
-              <div class="card-label">{card.shape.name}</div>
-              <div class="mini-grid" style="grid-template-columns: repeat({mx}, 12px);">
-                {#each Array.from({ length: my }, (_, i) => i) as dy (dy)}
-                  {#each Array.from({ length: mx }, (_, i) => i) as dx (dx)}
-                    <div
-                      class="mini-dot{card.shape.cells.some((p) => p[0] === dx && p[1] === dy)
-                        ? ' active'
-                        : ''}"
-                      style={card.shape.cells.some((p) => p[0] === dx && p[1] === dy)
-                        ? `background-color: ${COLORS_CSS[card.color]}`
-                        : ""}
-                    ></div>
+      {#key gs.invalidShake}
+        <div id="side-panel" class={gs.invalidShake > 0 ? "shake" : ""}>
+          <div id="player-hand" class="hand">
+            {#each gs.myHand as card, idx (card.init)}
+              {@const mx = Math.max(...card.shape.cells.map((p) => p[0] ?? 0)) + 1}
+              {@const my = Math.max(...card.shape.cells.map((p) => p[1] ?? 0)) + 1}
+              {@const playable = cardHasPlacement(card)}
+              <div
+                class="card{gs.selectedCardIdx === idx ? ' selected' : ''}{playable
+                  ? ''
+                  : ' unplayable'}"
+                style="border-color: {COLORS_CSS[card.color]};"
+                onclick={() => selectCard(idx)}
+                role="button"
+                tabindex="0"
+                title={playable
+                  ? `${card.shape.name} on ${colorName(card.color)}`
+                  : `No valid target for ${colorName(card.color)} on the grid`}
+                aria-disabled={!playable}
+                onkeydown={(e) => handleCardKeydown(e, idx)}
+              >
+                <div class="card-num">Δ{card.init}</div>
+                <div class="card-label">{card.shape.name}</div>
+                <div class="mini-grid" style="grid-template-columns: repeat({mx}, 12px);">
+                  {#each Array.from({ length: my }, (_, i) => i) as dy (dy)}
+                    {#each Array.from({ length: mx }, (_, i) => i) as dx (dx)}
+                      <div
+                        class="mini-dot{card.shape.cells.some((p) => p[0] === dx && p[1] === dy)
+                          ? ' active'
+                          : ''}"
+                        style={card.shape.cells.some((p) => p[0] === dx && p[1] === dy)
+                          ? `background-color: ${COLORS_CSS[card.color]}`
+                          : ""}
+                      ></div>
+                    {/each}
                   {/each}
-                {/each}
+                </div>
+                {#if !playable}
+                  <div class="card-badge">NO MATCH</div>
+                {/if}
               </div>
+            {/each}
+          </div>
+          <div class="btn-group">
+            <button
+              id="resolve-btn"
+              disabled={gs.locked || gs.selectedCardIdx == null || gs.selected.length === 0}
+              onclick={onPickCard}>TRANSMIT</button
+            >
+            <button class="btn-secondary" onclick={onClear}>CLEAR</button>
+            <button class="btn-secondary" onclick={onPass}>HOLD</button>
+          </div>
+        </div>
+      {/key}
+
+      {#if gs.showRoundSummary && gs.lastRoundResults.length > 0}
+        <div class="round-summary" role="dialog" aria-label="Round results">
+          <div class="round-summary-head">
+            // CYCLE {gs.lastRoundTurn} RESULTS
+          </div>
+          <div class="round-summary-body">
+            {#each gs.lastRoundResults as r (r.slot)}
+              <div class="round-row" style="border-left-color: {PLAYER_CSS[r.slot] ?? '#888'};">
+                <span class="round-player" style="color: {PLAYER_CSS[r.slot] ?? '#ccc'};"
+                  >{slotName(r.slot)}</span
+                >
+                <span class="round-play">
+                  {#if r.card}
+                    Δ{r.card.init} · {r.card.shape.name} · {colorName(r.card.color)}
+                  {:else}
+                    held carrier
+                  {/if}
+                </span>
+                <span
+                  class="round-points {r.points > 0
+                    ? 'pts-ok'
+                    : r.card
+                      ? 'pts-bad'
+                      : 'pts-neutral'}"
+                >
+                  {r.points > 0 ? "+" + r.points : r.card ? "0 (lost)" : "—"}
+                </span>
+              </div>
+            {/each}
+          </div>
+          <button class="btn-secondary round-dismiss" onclick={dismissResults}>DISMISS</button>
+        </div>
+      {/if}
+    </div>
+  {/if}
+
+  {#if gs.phase === "end" && gs.finalResults}
+    {@const finalScores = [...gs.finalResults.scores].sort((a, b) => b.score - a.score)}
+    <div id="end-screen" role="dialog" aria-label="Final transmission results">
+      <div class="end-box">
+        <h1>// TRANSMISSION CLOSED</h1>
+        <div class="end-winner">
+          {#if gs.finalResults.winnerSlot === -2}
+            Signal split — tied transmission.
+          {:else if gs.finalResults.winnerSlot === gs.mySlot}
+            You intercepted the transmission.
+          {:else}
+            {slotName(gs.finalResults.winnerSlot)} intercepted the transmission.
+          {/if}
+        </div>
+        <div class="end-scores">
+          {#each finalScores as s, i (s.slot)}
+            <div
+              class="end-score-row {i === 0 ? 'top' : ''}"
+              style="border-color: {PLAYER_CSS[s.slot] ?? '#3a3a4a'};"
+            >
+              <span class="end-rank">{i + 1}</span>
+              <span class="end-name" style="color: {PLAYER_CSS[s.slot] ?? '#fff'};"
+                >{slotName(s.slot)}</span
+              >
+              <span class="end-points">{s.score}</span>
             </div>
           {/each}
         </div>
-        <div class="btn-group">
-          <button
-            id="resolve-btn"
-            disabled={gs.locked || gs.selectedCardIdx == null || gs.selected.length === 0}
-            onclick={onPickCard}>TRANSMIT</button
-          >
-          <button class="btn-secondary" onclick={onClear}>CLEAR</button>
-          <button class="btn-secondary" onclick={onPass}>HOLD</button>
-        </div>
+        <button onclick={returnToLobby}>RETURN TO LOBBY</button>
       </div>
     </div>
   {/if}
