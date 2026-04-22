@@ -255,6 +255,36 @@
     color: var(--hot);
     border-color: var(--hot);
   }
+  .chip.laser {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .chip.laser .bar {
+    display: inline-block;
+    position: relative;
+    width: 56px;
+    height: 6px;
+    border: 1px solid #32456d;
+    border-radius: 3px;
+    background: rgba(0, 0, 0, 0.35);
+    overflow: hidden;
+  }
+  .chip.laser .fill {
+    display: block;
+    height: 100%;
+    background: var(--hot);
+    transition: width 120ms linear;
+  }
+  .chip.laser.ready {
+    color: var(--hot);
+    border-color: var(--hot);
+    box-shadow: 0 0 12px rgba(255, 124, 207, 0.45);
+  }
+  .chip.laser.ready .fill {
+    background: var(--hot);
+    box-shadow: 0 0 8px var(--hot);
+  }
 
   .controls-hint {
     position: absolute;

@@ -14,6 +14,18 @@ export const BURST_SPEED = 34;
 export const BURST_DURATION = 1.2;
 export const BURST_CHARGES = 3;
 
+// Laser (catch-up mechanic): slows hit opponents, obliterates walls in its path.
+export const LASER_COOLDOWN_BASE = 9; // seconds to fully recharge from empty when leading
+export const LASER_COOLDOWN_TAIL = 4; // seconds to fully recharge from empty when last
+export const LASER_RANGE = 60;
+export const LASER_SLOW_DURATION = 1.4;
+export const LASER_SHOW_DURATION = 0.35; // how long the beam is drawn after firing
+export const LASER_WALL_PENALTY = 0.15; // wall hit cost to laser beam carrier speed (brief)
+
+// Wall bust (players smash through walls and take a speed penalty)
+export const WALL_BUST_PENALTY_DURATION = 0.6;
+export const WALL_BUST_PENALTY_SPEED = 0.55;
+
 export const NETWORK_TICK_RATE = 0.033;
 export const ROOM_CODE_LENGTH = 5;
 export const COUNTDOWN_SECONDS = 3;
@@ -21,7 +33,15 @@ export const OBSTACLE_START_Z = 16;
 export const FINISH_GRACE_SECONDS = 10;
 export const NAME_MAX = 14;
 
-export type PropStyle = "antenna" | "crystal" | "ring" | "pillar";
+export type PropStyle = "antenna" | "crystal" | "ring" | "pillar" | "monolith" | "spire";
+export type ThemeStyle =
+  | "neon-city"
+  | "magenta-storm"
+  | "emerald-grid"
+  | "violet-void"
+  | "solar-flare"
+  | "deep-ocean"
+  | "volcanic";
 
 export interface TrackVariant {
   id: string;
@@ -51,6 +71,10 @@ export interface TrackVariant {
   // Occasional overhead gates.
   archStride: number;
   archColor: number;
+  // Theme selector for environment rendering (skyline, colour palette, ground tiles).
+  theme: ThemeStyle;
+  // Extra accent colour used by a few themes (e.g. rim lights, particle tints).
+  glowColor: number;
 }
 
 export const TRACK_VARIANTS: readonly TrackVariant[] = [
@@ -79,6 +103,8 @@ export const TRACK_VARIANTS: readonly TrackVariant[] = [
     propOffset: 2.5,
     archStride: 60,
     archColor: 0x79f3ff,
+    theme: "neon-city",
+    glowColor: 0x4fe3ff,
   },
   {
     id: "static-storm",
@@ -105,6 +131,8 @@ export const TRACK_VARIANTS: readonly TrackVariant[] = [
     propOffset: 2.2,
     archStride: 42,
     archColor: 0xff4fa0,
+    theme: "magenta-storm",
+    glowColor: 0xff4fa0,
   },
   {
     id: "amp-grid",
@@ -131,6 +159,8 @@ export const TRACK_VARIANTS: readonly TrackVariant[] = [
     propOffset: 2.8,
     archStride: 48,
     archColor: 0x8dff9d,
+    theme: "emerald-grid",
+    glowColor: 0x6df0a0,
   },
   {
     id: "long-haul",
@@ -157,6 +187,92 @@ export const TRACK_VARIANTS: readonly TrackVariant[] = [
     propOffset: 3.2,
     archStride: 72,
     archColor: 0xba7cff,
+    theme: "violet-void",
+    glowColor: 0xa065ff,
+  },
+  {
+    id: "solar-flare",
+    name: "SOLAR FLARE",
+    description: "Blazing corridor. Tight amp bursts under a molten sky.",
+    trackLength: 220,
+    obstacleStride: 5,
+    ampRatio: 0.42,
+    maxLanesOccupied: 3,
+    trackColor: 0x240a00,
+    railColor: 0xffc36b,
+    accentColor: 0x5a1f10,
+    fogColor: 0x1a0404,
+    fogNear: 50,
+    fogFar: 240,
+    curveAmplitude: 6,
+    curveFrequency: 0.03,
+    curvePhase: 0.2,
+    curveAmplitude2: 2.5,
+    curveFrequency2: 0.08,
+    propStyle: "spire",
+    propColor: 0xffa04f,
+    propStride: 10,
+    propOffset: 2.6,
+    archStride: 50,
+    archColor: 0xffc36b,
+    theme: "solar-flare",
+    glowColor: 0xff6a2a,
+  },
+  {
+    id: "deep-signal",
+    name: "DEEP SIGNAL",
+    description: "Abyssal band. Long glides between walls of static.",
+    trackLength: 280,
+    obstacleStride: 6.4,
+    ampRatio: 0.22,
+    maxLanesOccupied: 3,
+    trackColor: 0x04182a,
+    railColor: 0x4fc0ff,
+    accentColor: 0x0d304a,
+    fogColor: 0x020a14,
+    fogNear: 45,
+    fogFar: 260,
+    curveAmplitude: 8,
+    curveFrequency: 0.018,
+    curvePhase: 1.8,
+    curveAmplitude2: 3,
+    curveFrequency2: 0.045,
+    propStyle: "monolith",
+    propColor: 0x4fc0ff,
+    propStride: 16,
+    propOffset: 3.0,
+    archStride: 64,
+    archColor: 0x4fc0ff,
+    theme: "deep-ocean",
+    glowColor: 0x2890d0,
+  },
+  {
+    id: "magma-pulse",
+    name: "MAGMA PULSE",
+    description: "Volcanic relay. Crushing wall density, rare amps.",
+    trackLength: 250,
+    obstacleStride: 4,
+    ampRatio: 0.12,
+    maxLanesOccupied: 4,
+    trackColor: 0x1a0606,
+    railColor: 0xff5a3a,
+    accentColor: 0x4a0e0a,
+    fogColor: 0x100303,
+    fogNear: 35,
+    fogFar: 200,
+    curveAmplitude: 9,
+    curveFrequency: 0.035,
+    curvePhase: 0.7,
+    curveAmplitude2: 3,
+    curveFrequency2: 0.09,
+    propStyle: "spire",
+    propColor: 0xff5a3a,
+    propStride: 9,
+    propOffset: 2.4,
+    archStride: 40,
+    archColor: 0xff3a1a,
+    theme: "volcanic",
+    glowColor: 0xff7a2a,
   },
 ];
 
@@ -197,6 +313,21 @@ export interface Obstacle {
   kind: ObstacleKind;
   lane: number;
   z: number;
+  /** Walls (noise) are destructible. Amps are always alive. Host-authoritative. */
+  alive: boolean;
+}
+
+export interface LaserBeam {
+  /** Slot of the firing player. */
+  slot: number;
+  /** z coordinate at the shooter's nose when fired. */
+  fromZ: number;
+  /** z coordinate of the farthest point the beam reached (hit or max range). */
+  toZ: number;
+  /** Lane the beam travels in. */
+  lane: number;
+  /** Host time when the beam was fired. */
+  firedAt: number;
 }
 
 export interface PlayerSnap {
@@ -210,6 +341,8 @@ export interface PlayerSnap {
   boostUntil: number;
   burstUntil: number;
   burstsLeft: number;
+  /** 0..1 laser charge, 1 = ready. */
+  laserCharge: number;
   finished: boolean;
   finishTime: number | null;
 }
@@ -221,6 +354,7 @@ export interface GameSnapshot {
   countdown: number;
   players: PlayerSnap[];
   obstacles: Obstacle[];
+  beams: LaserBeam[];
   trackLength: number;
   laneCount: number;
   trackId: string;
