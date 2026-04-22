@@ -211,6 +211,51 @@ export const CORRECT: Record<string, DialogLine[]> = {
     { s: "pope", t: "She hissed at a cardinal." },
     { s: "quack", t: "That's just swans. Bless you. Bye." },
   ],
+  "henderson>quack": [
+    { s: "henderson", t: "Doctor! The finch is — is it MEANT to look like that?" },
+    { s: "quack", t: "Ma'am, which finch." },
+    { s: "henderson", t: "The one on the sill. He's sideways." },
+    { s: "quack", t: "I'll stop by after six. Good evening." },
+  ],
+  "butcher>dog": [
+    { s: "butcher", t: "Buster. Bone's on the counter. Come get it." },
+    { s: "dog", t: "(delighted huff)" },
+    { s: "butcher", t: "…how are you even on this line." },
+    { s: "dog", t: "(tail thumping wood)" },
+  ],
+  "mayor>henderson": [
+    { s: "mayor", t: "Edna. Returning your call. The streetlight?" },
+    { s: "henderson", t: "Also the SQUIRRELS, mayor. The SQUIRRELS." },
+    { s: "mayor", t: "…I'll form a committee. Evening." },
+  ],
+  "spy>butcher": [
+    { s: "spy", t: "Butcher. Package arrives 0400. Triple-wrapped." },
+    { s: "butcher", t: "Chuck or brisket, pal." },
+    { s: "spy", t: "…chuck. Confirmed. Out." },
+  ],
+  "mom>butcher": [
+    { s: "mom", t: "Marty dear, I need a roast for Sunday." },
+    { s: "butcher", t: "Three pounds, bone in. I'll set it aside." },
+    { s: "mom", t: "You're a saint, Marty." },
+    { s: "butcher", t: "I'm a butcher. Goodbye." },
+  ],
+  "traveler>butcher": [
+    { s: "traveler", t: "Butcher — from February. DO NOT stock the clams Thursday." },
+    { s: "butcher", t: "Pal, it's TUESDAY." },
+    { s: "traveler", t: "I know. I'm ahead. Out." },
+  ],
+  "ghost>mom": [
+    { s: "ghost", t: "MMMOOOOTHEEEERR……" },
+    { s: "mom", t: "Derek??" },
+    { s: "ghost", t: "N̸O̸ — CAAARL. FROM THE BASEMENT." },
+    { s: "mom", t: "Carl sweetie did you eat." },
+    { s: "ghost", t: "…nooOOOoo……" },
+  ],
+  "moon>henderson": [
+    { s: "moon", t: "Edna. It is I. The Moon." },
+    { s: "henderson", t: "I've got a LIGHT on the corner, Luna." },
+    { s: "moon", t: "That's… not me. Goodnight." },
+  ],
 };
 
 export const WRONG: Record<string, DialogLine[]> = {
@@ -297,6 +342,46 @@ export const WRONG: Record<string, DialogLine[]> = {
     { s: "spy", t: "…the asset is a pork loin?" },
     { s: "butcher", t: "It can be. Buh-bye." },
   ],
+  "ghost>mayor": [
+    { s: "ghost", t: "MAYOR……… PIBBLEEEEEY……" },
+    { s: "mayor", t: "Sir, my re-election is on Tuesday." },
+    { s: "ghost", t: "I VOTE TWICE." },
+    { s: "mayor", t: "…noted. Goodbye." },
+  ],
+  "pope>mom": [
+    { s: "pope", t: "Madam. We are calling from the Holy See." },
+    { s: "mom", t: "Is this about DEREK." },
+    { s: "pope", t: "…we, regrettably, do not know a Derek." },
+    { s: "mom", t: "Bless you anyway. Goodbye." },
+  ],
+  "mom>mayor": [
+    { s: "mom", t: "Mayor. About my Derek." },
+    { s: "mayor", t: "Ma'am, this is the mayor's line, not the—" },
+    { s: "mom", t: "He's a SPY, mayor. A GOOD BOY spy." },
+    { s: "mayor", t: "…that's classified. Goodbye." },
+  ],
+  "dog>quack": [
+    { s: "dog", t: "Woof." },
+    { s: "quack", t: "Buster. Is it the paw again." },
+    { s: "dog", t: "(whimper)" },
+    { s: "quack", t: "I'll come by. Keep it up. Bye." },
+  ],
+  "elvis>butcher": [
+    { s: "elvis", t: "Hound dog needs a BONE, partner." },
+    { s: "butcher", t: "Sir, we close at six." },
+    { s: "elvis", t: "Thank you, thank you very much. G'night." },
+  ],
+  "traveler>mom": [
+    { s: "traveler", t: "Ma'am — from NEXT Monday. Don't answer the door at 3pm." },
+    { s: "mom", t: "Is this DEREK." },
+    { s: "traveler", t: "…temporally speaking, no. Out." },
+  ],
+  "henderson>mom": [
+    { s: "henderson", t: "Mother of Derek? This is Edna." },
+    { s: "mom", t: "Oh Edna is he WITH you?" },
+    { s: "henderson", t: "No dear. Wrong number. Ta-ta." },
+    { s: "mom", t: "(sighs)" },
+  ],
 };
 
 export const WRONG_FALLBACK_A = [
@@ -305,6 +390,11 @@ export const WRONG_FALLBACK_A = [
   "[EXPECT], is that you?",
   "Put [EXPECT] on.",
   "This is about [EXPECT].",
+  "Hi, I'm trying to reach [EXPECT].",
+  "Operator said this was [EXPECT]'s line.",
+  "Oh good, [EXPECT]! Finally.",
+  "[EXPECT]? It's urgent.",
+  "Sorry — connection's bad. [EXPECT]?",
 ];
 
 export const WRONG_FALLBACK_B = [
@@ -313,6 +403,11 @@ export const WRONG_FALLBACK_B = [
   "Negative. [ACTUAL] speaking.",
   "You've got [ACTUAL]. Who is this?",
   "[ACTUAL] here. Who are you calling for?",
+  "…this is [ACTUAL]. Who?",
+  "Ma'am, this is [ACTUAL]'s phone.",
+  "I am [ACTUAL]. You have the wrong line.",
+  "[ACTUAL] residence. You must be crossed.",
+  "Hello? Yeah, [ACTUAL]. Not who you wanted.",
 ];
 
 export const WRONG_FALLBACK_C = [
@@ -320,6 +415,44 @@ export const WRONG_FALLBACK_C = [
   "Nevermind. Bye.",
   "Forget I called. Bye.",
   "Hello? Wait no. Goodbye.",
+  "Gosh — OPERATOR get it right. Bye.",
+  "I'm hanging up. Sorry.",
+  "Tell the operator they're CROSSED.",
+  "Well this is awkward. Bye.",
+  "My mistake. Have a good one.",
+  "Drat. Back to the directory. Click.",
+];
+
+export const CORRECT_FALLBACK_OPEN = [
+  "Hello, [ACTUAL]?",
+  "[ACTUAL]? It's me.",
+  "Hi [ACTUAL], quick one.",
+  "[ACTUAL] — sorry to ring late.",
+  "That you, [ACTUAL]?",
+];
+
+export const CORRECT_FALLBACK_REPLY = [
+  "Speaking.",
+  "Yes, this is [ACTUAL].",
+  "Go ahead.",
+  "I hear you.",
+  "[ACTUAL] here.",
+];
+
+export const CORRECT_FALLBACK_MID = [
+  "Just a quick one.",
+  "Won't keep you long.",
+  "Real fast, then I'll go.",
+  "Got a second?",
+  "Listen, about that thing.",
+];
+
+export const CORRECT_FALLBACK_CLOSE = [
+  "Understood. Goodbye.",
+  "Got it. Bye now.",
+  "All right. Take care.",
+  "Thank you. Goodnight.",
+  "Right then. Bye.",
 ];
 
 export const CLOSERS = [
@@ -327,6 +460,10 @@ export const CLOSERS = [
   "*click — receiver set down*",
   "*tone — call ended*",
   "*click — both hung up*",
+  "*soft click — the line rests*",
+  "*dial tone returns*",
+  "*kachunk — the plug pulls free*",
+  "*click — silence*",
 ];
 
 export const PLAYER_COLORS = [
