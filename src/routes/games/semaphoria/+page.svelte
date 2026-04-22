@@ -20,11 +20,12 @@
     sendSignal,
     getCurrentFlashColor,
     deriveStats,
+    markWreckRescued,
   } from "$lib/semaphoria/engine";
   import type { GameState, PlayerRole, CaptainInput } from "$lib/semaphoria/engine";
   import { SIGNAL_REFERENCE, encodeSignal } from "$lib/semaphoria/signals";
   import type { SignalCommand, FlashPattern } from "$lib/semaphoria/signals";
-  import { SEED_MAX } from "$lib/semaphoria/constants";
+  import { SEED_MAX, RESCUE_VARIANT_LABEL } from "$lib/semaphoria/constants";
   import {
     signalFlash,
     shipBell,
@@ -46,7 +47,8 @@
     | { t: "ship-pos"; x: number; y: number; heading: number }
     | { t: "signal"; command: SignalCommand }
     | { t: "game-over"; result: "success" | "failure" }
-    | { t: "role"; role: PlayerRole };
+    | { t: "role"; role: PlayerRole }
+    | { t: "wreck-rescued"; id: number };
 
   // ── State ─────────────────────────────────────────────────────────────────
 
@@ -75,6 +77,15 @@
   // Peer networking
   let peer: Peer | null = null;
   let conn: DataConnection | null = null;
+  /**
+   * Tracks which of {host, join, idle} the user initiated.  Guards against
+   * double-clicks of TUNE IN / OPEN CHANNEL while a connection is in flight,
+   * which previously caused the first peer to be orphaned and the lobby
+   * status to get wedged.
+   */
+  let netMode = $state<"idle" | "hosting" | "joining">("idle");
+  /** Room code being dialled, for idempotency checks. Clears on teardown. */
+  let joiningCode = $state("");
   let stopAmbient: (() => void) | null = null;
   let loop: ReturnType<typeof createGameLoop> | null = null;
 
@@ -148,6 +159,16 @@
           finishGame(msg.result);
         }
         break;
+      case "wreck-rescued":
+        if (gameState && myRole === "keeper") {
+          const updated = markWreckRescued(gameState, msg.id);
+          if (updated !== gameState) {
+            gameState = updated;
+            const wreck = gameState.map.wrecks.find((w) => w.id === msg.id);
+            if (wreck) log(`🛟 Rescued ${RESCUE_VARIANT_LABEL[wreck.variant]}`, "ok");
+          }
+        }
+        break;
     }
   }
 
@@ -168,20 +189,51 @@
     });
   }
 
+  /**
+   * Tear down any existing peer / connection so a fresh host / join attempt
+   * starts from a clean slate.  Safe to call multiple times.  Does NOT touch
+   * gameState / role / UI fields — callers own those.
+   */
+  function tearDownNet(): void {
+    try {
+      conn?.close();
+    } catch {
+      // ignore
+    }
+    try {
+      peer?.destroy();
+    } catch {
+      // ignore
+    }
+    conn = null;
+    peer = null;
+    netOk = false;
+    joiningCode = "";
+  }
+
   // ── Lobby actions ─────────────────────────────────────────────────────────
 
   function handleHost(): void {
+    // Idempotent: if we're already hosting, don't spin up a second peer.
+    if (netMode === "hosting") return;
+    // If the user was mid-join when they clicked OPEN CHANNEL, tear the
+    // previous peer down before creating the new one.
+    tearDownNet();
+    netMode = "hosting";
+    lobbyStatus = "";
     const code = makeCode(5);
-    peer = new Peer(`semaphoria-${code}`);
-    peer.on("open", () => {
+    const localPeer = new Peer(`semaphoria-${code}`);
+    peer = localPeer;
+    localPeer.on("open", () => {
       roomCode = code;
       isHost = true;
       myRole = "keeper";
       log(`Room ${code} open. You are the KEEPER.`, "ok");
       players = ["Keeper (you)"];
     });
-    peer.on("connection", (c) => {
-      if (conn) {
+    localPeer.on("connection", (c) => {
+      // Ignore connections that arrive after we've torn this peer down.
+      if (peer !== localPeer || conn) {
         c.close();
         return;
       }
@@ -195,9 +247,15 @@
       canStart = true;
       log("Captain connected!", "ok");
     });
-    peer.on("error", (err) => {
+    localPeer.on("error", (err) => {
       const e = err as { type?: string; message?: string };
       log(describePeerError(e), "bad");
+      // Fatal host errors (peer-unavailable, unavailable-id, network) leave the
+      // peer in an unusable state — reset so the user can re-try.
+      if (e.type === "unavailable-id" || e.type === "network") {
+        tearDownNet();
+        netMode = "idle";
+      }
     });
   }
 
@@ -207,20 +265,45 @@
       lobbyStatus = "Enter room code.";
       return;
     }
+    // Idempotent: if we're already dialling the same room, a repeat TUNE IN
+    // used to spawn a parallel Peer and wedge the lobby.  Short-circuit when
+    // the target matches; otherwise tear the previous peer down cleanly.
+    if (netMode === "joining") {
+      if (joiningCode === trimmed) return;
+      tearDownNet();
+    } else if (netMode === "hosting") {
+      // Switching from host → join: tear the host peer down.
+      tearDownNet();
+      isHost = false;
+      roomCode = "";
+      canStart = false;
+      players = [];
+    }
     myRole = "captain";
-    peer = new Peer(`semaphoria-g-${makeCode(8)}`);
-    peer.on("open", () => {
-      const c = (peer as Peer).connect(`semaphoria-${trimmed}`, { reliable: true });
+    netMode = "joining";
+    joiningCode = trimmed;
+    const localPeer = new Peer(`semaphoria-g-${makeCode(8)}`);
+    peer = localPeer;
+    localPeer.on("open", () => {
+      // If this peer was torn down (e.g. user clicked TUNE IN for a different
+      // room before the handshake resolved) don't dial — we'd race with the
+      // replacement peer and leak a zombie connection.
+      if (peer !== localPeer) return;
+      const c = localPeer.connect(`semaphoria-${trimmed}`, { reliable: true });
       setupConn(c, () => {
         lobbyStatus = "Waiting for keeper to start…";
       });
       lobbyStatus = "Connecting…";
       log(`Joining ${trimmed}…`);
     });
-    peer.on("error", (err) => {
+    localPeer.on("error", (err) => {
       const e = err as { type?: string; message?: string };
       lobbyStatus = describePeerError(e);
       log(lobbyStatus, "bad");
+      if (e.type === "peer-unavailable" || e.type === "network") {
+        tearDownNet();
+        netMode = "idle";
+      }
     });
   }
 
@@ -248,6 +331,7 @@
 
       const prevPhase = gameState.phase;
       const prevFlash = getCurrentFlashColor(gameState);
+      const prevLastRescue = gameState.lastRescuedWreckId;
 
       // Only the captain side advances ship physics.
       // Keeper side only updates the signal flash animation (no ship movement).
@@ -255,6 +339,21 @@
         myRole === "captain" ? captainInput : { turning: "none", moving: false };
 
       gameState = tick(gameState, dt, inputForThisSide, activePattern, myRole === "keeper");
+
+      // Captain-side rescue detection → tell the keeper so their map / log updates.
+      if (
+        myRole === "captain" &&
+        gameState.lastRescuedWreckId !== null &&
+        gameState.lastRescuedWreckId !== prevLastRescue
+      ) {
+        const id = gameState.lastRescuedWreckId;
+        const wreck = gameState.map.wrecks.find((w) => w.id === id);
+        if (wreck) {
+          log(`🛟 Rescued ${RESCUE_VARIANT_LABEL[wreck.variant]}`, "ok");
+          shipBell();
+          send({ t: "wreck-rescued", id });
+        }
+      }
 
       // Clear pattern once flash animation completes
       if (!gameState.activeFlash) {
@@ -361,12 +460,7 @@
   onDestroy(() => {
     loop?.stop();
     stopAmbient?.();
-    try {
-      conn?.close();
-      peer?.destroy();
-    } catch {
-      // ignore
-    }
+    tearDownNet();
   });
 
   // ── Derived display values ─────────────────────────────────────────────────
@@ -453,11 +547,18 @@
                 ship={gameState.ship}
                 map={gameState.map}
                 revealedTileKeys={gameState.revealedTileKeys}
+                rescuedWreckIds={gameState.rescuedWreckIds}
                 {flashColor}
                 {isFlashing}
               />
             {:else}
-              <KeeperView ship={gameState.ship} map={gameState.map} {flashColor} {isFlashing} />
+              <KeeperView
+                ship={gameState.ship}
+                map={gameState.map}
+                rescuedWreckIds={gameState.rescuedWreckIds}
+                {flashColor}
+                {isFlashing}
+              />
             {/if}
           </Canvas>
 
@@ -472,9 +573,19 @@
 
           <!-- Captain HUD -->
           {#if myRole === "captain"}
+            {@const allRescued =
+              gameState.rescuedWreckIds.size >= gameState.map.wrecks.length &&
+              gameState.map.wrecks.length > 0}
             <div class="hud-captain">
               <div class="hud-chip">
                 HEADING {((gameState.ship.heading * 180) / Math.PI).toFixed(0)}°
+              </div>
+              <div class="hud-chip" class:hud-chip-ok={allRescued}>
+                {#if allRescued}
+                  ALL ABOARD — MAKE FOR HARBOUR
+                {:else}
+                  SURVIVORS {gameState.rescuedWreckIds.size} / {gameState.map.wrecks.length}
+                {/if}
               </div>
               <div class="hud-chip steer-hint">WASD / ↑←→ to steer</div>
             </div>
@@ -493,6 +604,27 @@
               />
             </div>
           {/if}
+
+          <div class="panel">
+            <div class="panel-title">
+              RESCUES {gameState.rescuedWreckIds.size} / {gameState.map.wrecks.length}
+            </div>
+            <ul class="wreck-list">
+              {#each gameState.map.wrecks as wreck (wreck.id)}
+                {@const done = gameState.rescuedWreckIds.has(wreck.id)}
+                <li class:done>
+                  <span class="wreck-mark" aria-hidden="true">{done ? "✓" : "•"}</span>
+                  <span class="wreck-label">{RESCUE_VARIANT_LABEL[wreck.variant]}</span>
+                  {#if myRole === "keeper"}
+                    <span class="wreck-coord">({wreck.x},{wreck.y})</span>
+                  {/if}
+                </li>
+              {/each}
+              {#if gameState.map.wrecks.length === 0}
+                <li class="empty">No survivors on this route.</li>
+              {/if}
+            </ul>
+          </div>
 
           <div class="panel">
             <div class="panel-title">SIGNAL REFERENCE</div>
@@ -531,6 +663,10 @@
             <li>
               <span>Near misses</span>
               <span>{stats.nearMisses}</span>
+            </li>
+            <li>
+              <span>Survivors rescued</span>
+              <span>{stats.wrecksRescued} / {stats.wrecksTotal}</span>
             </li>
           </ul>
           <button onclick={() => location.reload()}>PLAY AGAIN</button>

@@ -162,6 +162,57 @@
     margin-bottom: 8px;
   }
 
+  /* ── Rescue list ──────────────────────────────────────────────────────────── */
+
+  .wreck-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+  }
+
+  .wreck-list li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.02);
+    transition: color 0.2s;
+  }
+
+  .wreck-list li.done {
+    color: #44ff88;
+    opacity: 0.75;
+    text-decoration: line-through;
+  }
+
+  .wreck-list li.empty {
+    opacity: 0.4;
+    font-style: italic;
+  }
+
+  .wreck-list .wreck-mark {
+    flex-shrink: 0;
+    width: 12px;
+    text-align: center;
+    opacity: 0.8;
+  }
+
+  .wreck-list .wreck-label {
+    flex: 1;
+    letter-spacing: 0.04em;
+  }
+
+  .wreck-list .wreck-coord {
+    font-size: 10px;
+    opacity: 0.55;
+    font-variant-numeric: tabular-nums;
+  }
+
   /* ── Countdown ────────────────────────────────────────────────────────────── */
 
   .countdown-overlay {
@@ -258,6 +309,12 @@
     border-radius: 2px;
     font-size: 12px;
     letter-spacing: 0.08em;
+  }
+
+  .hud-chip.hud-chip-ok {
+    color: #44ff88;
+    border-color: rgba(68, 255, 136, 0.5);
+    background: rgba(20, 60, 40, 0.7);
   }
 
   /* ── Buttons ──────────────────────────────────────────────────────────────── */

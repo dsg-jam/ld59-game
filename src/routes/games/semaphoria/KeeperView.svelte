@@ -7,17 +7,20 @@
   import type { SigColor } from "$lib/semaphoria/constants";
   import { getKeeperAreaTile } from "$lib/semaphoria/navigation";
   import Lighthouse from "./Lighthouse.svelte";
+  import Shipwreck from "./Shipwreck.svelte";
 
   let camRef: THREE.OrthographicCamera | undefined = $state(undefined);
 
   let {
     map,
     ship,
+    rescuedWreckIds,
     flashColor = null,
     isFlashing = false,
   }: {
     map: GameMap;
     ship: ShipState;
+    rescuedWreckIds: ReadonlySet<number>;
     flashColor?: SigColor | null;
     isFlashing?: boolean;
   } = $props();
@@ -209,6 +212,11 @@
   <T.CircleGeometry args={[1.8, 16]} />
   <T.MeshBasicMaterial color="#ffdd00" transparent opacity={0.22} depthWrite={false} />
 </T.Mesh>
+
+<!-- Shipwreck markers so the keeper knows where to guide the captain -->
+{#each map.wrecks as wreck (wreck.id)}
+  <Shipwreck x={wreck.x} y={wreck.y} rescued={rescuedWreckIds.has(wreck.id)} overhead />
+{/each}
 
 <!-- Lighthouse model at fixed position -->
 <Lighthouse x={LIGHTHOUSE_X} z={LIGHTHOUSE_Z} {flashColor} {isFlashing} />

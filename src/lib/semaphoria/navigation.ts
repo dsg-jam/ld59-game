@@ -6,10 +6,11 @@ import {
   FOG_RADIUS,
   KEEPER_AREA_COARSENESS,
   PROXIMITY_WARN_DIST,
+  WRECK_RESCUE_DIST,
   GRID_COLS,
   GRID_ROWS,
 } from "./constants";
-import type { GameMap } from "./map-generator";
+import type { GameMap, Shipwreck } from "./map-generator";
 
 // ── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -167,4 +168,24 @@ export function getNearestReefDistance(ship: ShipState, map: GameMap): number {
  */
 export function isNearReef(ship: ShipState, map: GameMap): boolean {
   return getNearestReefDistance(ship, map) <= PROXIMITY_WARN_DIST;
+}
+
+// ── SHIPWRECK RESCUE ──────────────────────────────────────────────────────────
+
+/**
+ * Returns the first unrescued wreck within {@link WRECK_RESCUE_DIST} of the
+ * ship, or `null` if none are in range.  The captain rescues a wreck by
+ * sailing within this radius.
+ */
+export function findRescueableWreck(
+  ship: ShipState,
+  wrecks: readonly Shipwreck[],
+  rescued: ReadonlySet<number>
+): Shipwreck | null {
+  for (const w of wrecks) {
+    if (rescued.has(w.id)) continue;
+    const d = Math.hypot(ship.x - w.x, ship.y - w.y);
+    if (d <= WRECK_RESCUE_DIST) return w;
+  }
+  return null;
 }
