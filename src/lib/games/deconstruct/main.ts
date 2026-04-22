@@ -122,15 +122,19 @@ const HS: {
 };
 
 // ---- Game logic ----
-function topColor(x: number, y: number): ColKey | null {
-  const stack = gs.grid[x]?.[y] ?? [];
+function topColorIn(grid: ColKey[][][], x: number, y: number): ColKey | null {
+  const stack = grid[x]?.[y] ?? [];
   return stack.length ? (stack[stack.length - 1] ?? null) : null;
 }
 
-function validates(sel: [number, number][], card: Card): boolean {
+function topColor(x: number, y: number): ColKey | null {
+  return topColorIn(gs.grid, x, y);
+}
+
+function validatesIn(grid: ColKey[][][], sel: [number, number][], card: Card): boolean {
   if (sel.length !== card.shape.cells.length) return false;
   for (const pos of sel) {
-    if (topColor(pos[0] ?? 0, pos[1] ?? 0) !== card.color) return false;
+    if (topColorIn(grid, pos[0] ?? 0, pos[1] ?? 0) !== card.color) return false;
   }
   const norm = function (a: [number, number][]) {
     const mx = Math.min(...a.map((p) => p[0] ?? 0));
@@ -146,6 +150,10 @@ function validates(sel: [number, number][], card: Card): boolean {
     cells = mapCoordinates(cells, (x, y) => [-(y ?? 0), x ?? 0]);
   }
   return false;
+}
+
+function validates(sel: [number, number][], card: Card): boolean {
+  return validatesIn(gs.grid, sel, card);
 }
 
 function generateGrid(): ColKey[][][] {
@@ -182,6 +190,46 @@ function generateHand(): Card[] {
     });
   }
   return h.sort((a, b) => a.init - b.init);
+}
+
+/**
+ * Returns true if this card can legally be placed somewhere on the client's
+ * current grid. Used to gray-out cards that have no valid placement.
+ */
+export function cardHasPlacement(card: Card): boolean {
+  return findPlacement(gs.grid, card) !== null;
+}
+
+function findPlacement(grid: ColKey[][][], card: Card): [number, number][] | null {
+  const tops: [number, number][] = [];
+  for (let x = 0; x < W; x++)
+    for (let y = 0; y < H; y++) {
+      if (topColorIn(grid, x, y) === card.color) tops.push([x, y]);
+    }
+  let cells: [number, number][] = cloneTupleArray(card.shape.cells);
+  for (let r = 0; r < 4; r++) {
+    for (const anchor of tops) {
+      const mx = Math.min(...cells.map((p) => p[0] ?? 0));
+      const my = Math.min(...cells.map((p) => p[1] ?? 0));
+      const placed: [number, number][] = cells.map((c) => [
+        (c[0] ?? 0) - mx + (anchor[0] ?? 0),
+        (c[1] ?? 0) - my + (anchor[1] ?? 0),
+      ]);
+      if (
+        placed.every(
+          (p) =>
+            (p[0] ?? 0) >= 0 &&
+            (p[0] ?? 0) < W &&
+            (p[1] ?? 0) >= 0 &&
+            (p[1] ?? 0) < H &&
+            topColorIn(grid, p[0] ?? 0, p[1] ?? 0) === card.color
+        )
+      )
+        return placed;
+    }
+    cells = cells.map((c) => [-(c[1] ?? 0), c[0] ?? 0]);
+  }
+  return null;
 }
 
 function cpuFind(card: Card): [number, number][] | null {
@@ -337,6 +385,28 @@ function resolveTurn(moves: MoveResult[], gridAfter: ColKey[][][] | null) {
 }
 
 // ---- Host logic ----
+function refillHand(existing: Card[]): Card[] {
+  // Preserve unplayed cards across rounds; only top up to 5.
+  const used = new Set(existing.map((c) => c.init));
+  const next: Card[] = existing.slice();
+  let safety = 200;
+  while (next.length < 5 && safety-- > 0) {
+    const init = 1 + Math.floor(rand() * MAX_INITIATIVE);
+    if (used.has(init)) continue;
+    used.add(init);
+    const maxIdx = Math.min(SHAPES.length - 1, Math.floor(init / 4));
+    const shapeIdx = Math.floor(rand() * (maxIdx + 1));
+    const shape = SHAPES[shapeIdx] ?? SHAPES[0];
+    if (!shape) continue;
+    next.push({
+      init,
+      shape,
+      color: COLKEYS[Math.floor(rand() * COLKEYS.length)] ?? "R",
+    });
+  }
+  return next.sort((a, b) => a.init - b.init);
+}
+
 function hostStartRound() {
   if (HS.turn === 1) {
     HS.seed = (Math.random() * 2 ** 32) >>> 0;
@@ -346,7 +416,12 @@ function hostStartRound() {
   HS.picks = {};
   const n = HS.N;
   for (let i = 0; i < n; i++) {
-    HS.hands[i] = generateHand();
+    const existing = HS.hands[i];
+    if (HS.turn === 1 || !existing || existing.length === 0) {
+      HS.hands[i] = generateHand();
+    } else {
+      HS.hands[i] = refillHand(existing);
+    }
   }
   const scores: ScoreEntry[] = [];
   for (let i = 0; i < n; i++) {
@@ -408,20 +483,28 @@ function hostResolveTurn() {
       results.push({ slot: act.slot, card: null, sel: null, points: 0 });
       continue;
     }
-    if (act.sel && validates(act.sel, act.card)) {
+    const playedCard = act.card;
+    if (act.sel && validatesIn(HS.grid, act.sel, playedCard)) {
       removeCubes(act.sel);
       const pts = act.sel.length;
       HS.scores[act.slot] = (HS.scores[act.slot] || 0) + pts;
+      // Remove the played card from the player's hand so unplayed cards persist.
+      const hand = HS.hands[act.slot];
+      if (hand) HS.hands[act.slot] = hand.filter((c) => c.init !== playedCard.init);
       results.push({
         slot: act.slot,
-        card: act.card,
+        card: playedCard,
         sel: act.sel,
         points: pts,
       });
     } else {
+      // Played card was invalid (silent channel). Still consume it so players can't
+      // retry the same dud card indefinitely.
+      const hand = HS.hands[act.slot];
+      if (hand) HS.hands[act.slot] = hand.filter((c) => c.init !== playedCard.init);
       results.push({
         slot: act.slot,
-        card: act.card,
+        card: playedCard,
         sel: act.sel,
         points: 0,
       });
@@ -491,6 +574,7 @@ function onRoundStart(data: RoundStartMsg) {
   gs.mySlot = data.yourSlot;
   mySlot = data.yourSlot;
   showWait(false);
+  gs.showRoundSummary = false;
   if (data.turn === 1)
     log(
       "▶ Transmission detected. Select a filter card, then click matching tiles on the grid.",
@@ -500,7 +584,6 @@ function onRoundStart(data: RoundStartMsg) {
 
 function onTurnResult(data: TurnResultMsg) {
   gs.allScores = data.scores;
-  gs.turn = data.turn;
   gs.playerNames = Object.fromEntries(
     Object.entries(data.names)
       .map(([k, v]) => [parseInt(k, 10), v])
@@ -510,10 +593,15 @@ function onTurnResult(data: TurnResultMsg) {
   gs.selectedCardIdx = null;
   gs.selected = [];
 
+  // Remember which turn just completed (data.turn is already advanced to the next round).
+  const completedTurn = Math.max(1, data.turn - 1);
+  gs.lastRoundResults = data.results;
+  gs.lastRoundTurn = completedTurn;
+
   resolveTurn(data.results, data.grid);
 
+  const totalDelay = data.results.length * 450 + 1200;
   if (data.gameOver) {
-    const totalDelay = data.results.length * 450 + 1200;
     setTimeout(function () {
       let msg: string;
       if (data.winnerSlot === WINNER_TIED) msg = "Signal split — tied transmission!";
@@ -523,8 +611,70 @@ function onTurnResult(data: TurnResultMsg) {
       log("━━ CARRIER LOST — " + msg + " ━━", "ok");
       log(scoreText);
       showMsg(msg, "ok");
+      gs.finalResults = { winnerSlot: data.winnerSlot, scores: data.scores };
+      gs.showRoundSummary = false;
+      gs.phase = "end";
+    }, totalDelay);
+  } else {
+    // Show the per-round summary so players can see exactly what each operator played.
+    // The summary is cleared when onRoundStart fires for the next round.
+    setTimeout(function () {
+      gs.showRoundSummary = true;
+      gs.turn = data.turn;
     }, totalDelay);
   }
+}
+
+function resetGameState() {
+  gs.logEntries = [];
+  gs.lastRoundResults = [];
+  gs.lastRoundTurn = 0;
+  gs.showRoundSummary = false;
+  gs.finalResults = null;
+  gs.msgText = "";
+  gs.msgKind = "";
+  gs.showWait = false;
+  gs.invalidShake = 0;
+  gs.selected = [];
+  gs.selectedCardIdx = null;
+  gs.locked = false;
+  gs.turn = 1;
+  gs.allScores = [];
+}
+
+export function dismissResults() {
+  gs.showRoundSummary = false;
+}
+
+export function returnToLobby() {
+  destroy();
+  HS.started = false;
+  HS.turn = 1;
+  HS.picks = {};
+  HS.hands = {};
+  HS.scores = {};
+  HS.playerIds = [];
+  HS.playerNames = {};
+  HS.N = 1;
+  mySlot = 0;
+  conns = [];
+  isHost = false;
+  isSolo = false;
+  gs.finalResults = null;
+  gs.phase = "lobby";
+  gs.lobbyPanel = "menu";
+  gs.roomCode = "";
+  gs.joinCodeInput = "";
+  gs.joinStatus = "";
+  gs.playerList = [];
+  gs.playerCount = 1;
+  gs.mySlot = 0;
+  gs.isSolo = false;
+  resetGameState();
+}
+
+export function triggerInvalidShake() {
+  gs.invalidShake = gs.invalidShake + 1;
 }
 
 // ---- Networking ----
@@ -568,11 +718,15 @@ function onMessage(data: unknown, fromSlot: number) {
 
 // ---- Lobby / PeerJS ----
 function updatePlayerList() {
-  gs.playerList = HS.playerIds.map((_, i) => ({
-    slot: i,
-    name: HS.playerNames[i] ?? (i === 0 ? "You (Host)" : "Player " + (i + 1)),
-    color: PLAYER_CSS[i] ?? "#ffffff",
-  }));
+  gs.playerList = HS.playerIds.map((_, i) => {
+    const stored = HS.playerNames[i];
+    const display = i === mySlot ? "You" : (stored ?? "Player " + (i + 1));
+    return {
+      slot: i,
+      name: display + (i === 0 ? " (Host)" : ""),
+      color: PLAYER_CSS[i] ?? "#ffffff",
+    };
+  });
   gs.lobbyStatus = HS.playerIds.length + "/" + MAX_PLAYERS + " operators tuned in.";
 }
 
@@ -609,13 +763,15 @@ export function soloGame() {
   gs.isSolo = true;
   HS.playerIds = ["host", "cpu"];
   HS.scores = { 0: 0, 1: 0 };
-  HS.playerNames = { 0: "You", 1: "CPU" };
+  // Host's stored name is "Host"; the local UI renders "You" for mySlot via slotName().
+  HS.playerNames = { 0: "Host", 1: "CPU" };
   HS.N = 2;
   HS.turn = 1;
   HS.started = true;
   conns = [null, null];
   gs.playerNames = HS.playerNames;
   gs.playerCount = 2;
+  resetGameState();
   startGame();
   hostStartRound();
 }
@@ -630,11 +786,13 @@ export function hostGame() {
   gs.isSolo = false;
   HS.playerIds = ["host"];
   HS.scores = { 0: 0 };
-  HS.playerNames = { 0: "You" };
+  // Host's stored name is "Host"; the local UI renders "You" for mySlot via slotName().
+  HS.playerNames = { 0: "Host" };
   HS.N = 1;
   HS.turn = 1;
   HS.started = false;
   conns = [null];
+  resetGameState();
   gs.lobbyPanel = "waiting";
   updatePlayerList();
 
@@ -714,6 +872,7 @@ export function joinGame() {
   gs.isSolo = false;
   gs.lobbyPanel = "joining";
   gs.joinStatus = "Locking onto " + roomCode + "…";
+  resetGameState();
 
   peer = new Peer();
   peer.on("open", function () {
@@ -759,7 +918,8 @@ export function onPickCard() {
   if (gs.locked || gs.selectedCardIdx == null) return;
   const card = gs.myHand[gs.selectedCardIdx];
   if (!card || !validates(gs.selected, card)) {
-    showMsg("Pattern & frequency mismatch — adjust selection.");
+    showMsg("Pattern & frequency mismatch — adjust selection.", "bad");
+    triggerInvalidShake();
     return;
   }
   gs.locked = true;
