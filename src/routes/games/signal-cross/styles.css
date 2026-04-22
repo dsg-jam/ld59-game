@@ -477,6 +477,42 @@
     letter-spacing: 0.5em;
     color: var(--brass);
     opacity: 0.8;
+    white-space: nowrap;
+  }
+  .shift-briefing {
+    position: absolute;
+    bottom: 22px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    max-width: 92%;
+    pointer-events: none;
+    text-align: center;
+  }
+  .shift-briefing-sub {
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    color: var(--brass);
+    text-transform: uppercase;
+    opacity: 0.85;
+    font-style: italic;
+  }
+  .shift-briefing-tips {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    justify-content: center;
+    font-size: 9px;
+    letter-spacing: 0.22em;
+    color: var(--cream);
+    opacity: 0.55;
+    text-transform: uppercase;
+  }
+  .shift-briefing-tips span {
+    white-space: nowrap;
   }
   .panel-screws {
     position: absolute;
@@ -510,19 +546,19 @@
 
   .board {
     display: grid;
-    gap: 14px;
+    gap: 18px;
     height: 100%;
     align-content: center;
     justify-content: center;
   }
   .plug {
-    width: 92px;
-    height: 106px;
+    width: var(--plug-size, 92px);
+    height: calc(var(--plug-size, 92px) * 1.18);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
-    padding: 6px 4px 4px;
+    padding: 8px 4px 6px;
     cursor: pointer;
     background: linear-gradient(180deg, #2a1a0c, #140a04);
     border: 2px solid var(--brass-deep);
@@ -624,13 +660,13 @@
   }
 
   .plug .bulb {
-    width: 12px;
-    height: 12px;
+    width: 14px;
+    height: 14px;
     border-radius: 50%;
     background: #2a1607;
     border: 1px solid #0a0503;
     box-shadow: inset 0 0 3px rgba(0, 0, 0, 0.8);
-    margin-bottom: 2px;
+    margin-bottom: 4px;
   }
   .plug.ringing .bulb {
     background: var(--red);
@@ -639,25 +675,25 @@
       inset 0 0 2px rgba(255, 255, 255, 0.4);
   }
   .plug .jack {
-    width: 20px;
-    height: 20px;
+    width: 24px;
+    height: 24px;
     border-radius: 50%;
-    background: radial-gradient(circle at 30% 30%, #0a0503 0 6px, #1a0e06 7px);
+    background: radial-gradient(circle at 30% 30%, #0a0503 0 7px, #1a0e06 8px);
     border: 2px solid var(--brass-deep);
     box-shadow: inset 0 0 4px rgba(0, 0, 0, 1);
-    margin-bottom: 4px;
+    margin-bottom: 6px;
   }
   .plug .emoji {
-    font-size: 26px;
+    font-size: calc(var(--plug-size, 92px) * 0.38);
     line-height: 1;
-    margin-bottom: 2px;
+    margin-bottom: 4px;
   }
   .plug .name {
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: 0.05em;
     color: var(--cream);
     text-align: center;
-    line-height: 1.1;
+    line-height: 1.15;
     text-transform: uppercase;
   }
 
@@ -1300,6 +1336,32 @@
     padding-top: 6px;
     min-height: 12px;
   }
+  .slip-compare {
+    margin-top: 10px;
+    padding: 8px 10px;
+    background: rgba(40, 20, 0, 0.08);
+    border: 1px dashed #7a5a1e;
+    border-radius: 3px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .slip-compare-head {
+    font-size: 10px;
+    letter-spacing: 0.25em;
+    color: #7a5a1e;
+    text-align: center;
+    padding-bottom: 2px;
+    font-weight: bold;
+  }
+  .slip-row-mismatch {
+    background: rgba(255, 90, 78, 0.14);
+    border-bottom-color: #8a2a1e !important;
+    box-shadow: inset 0 0 0 1px rgba(138, 42, 30, 0.25);
+  }
+  .slip-row-mismatch b {
+    color: #8a2a1e;
+  }
   .slip-actions {
     display: flex;
     gap: 10px;
@@ -1503,6 +1565,90 @@
     opacity: 0.35;
     cursor: not-allowed;
   }
+  .agency-attend {
+    margin-top: 12px;
+    padding: 8px 10px;
+    background: rgba(255, 90, 78, 0.06);
+    border: 1px dashed #ff5a4e;
+    border-radius: 3px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .agency-attend-label {
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    color: #ff8a80;
+    font-weight: bold;
+  }
+  .agency-attend-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .agency-attend-op {
+    display: grid;
+    grid-template-columns: 10px 1fr auto;
+    gap: 8px;
+    align-items: center;
+    padding: 3px 6px;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    border-radius: 2px;
+    background: rgba(0, 0, 0, 0.25);
+    opacity: 0.55;
+  }
+  .agency-attend-op.on {
+    opacity: 1;
+    background: rgba(111, 224, 122, 0.1);
+  }
+  .agency-attend-op .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    box-shadow: 0 0 6px currentColor;
+  }
+  .agency-attend-op .name {
+    color: #fff0ec;
+    font-weight: bold;
+  }
+  .agency-attend-op .state {
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    color: #ff8a80;
+    text-transform: uppercase;
+  }
+  .agency-attend-op.on .state {
+    color: var(--green);
+  }
+  .agency-leave {
+    display: block;
+    margin: 10px auto 0;
+  }
+  .attend-row {
+    display: flex;
+    gap: 3px;
+    justify-content: center;
+    padding: 3px 0 2px;
+  }
+  .attend-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: transparent;
+    border: 1px solid var(--dotColor, #fff);
+    opacity: 0.35;
+    transition:
+      opacity 0.1s,
+      background 0.1s,
+      box-shadow 0.1s;
+  }
+  .attend-dot.on {
+    background: var(--dotColor, #fff);
+    opacity: 1;
+    box-shadow: 0 0 6px var(--dotColor, #fff);
+  }
   .agency-timer {
     margin-top: 14px;
     height: 6px;
@@ -1516,6 +1662,117 @@
     background: linear-gradient(90deg, #ff5a4e, #ffd561);
     width: 100%;
     transition: width 0.1s linear;
+  }
+
+  /* --------- Tutorial overlay --------- */
+  .help-fab {
+    position: fixed;
+    top: 10px;
+    right: 12px;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 2px solid var(--brass-deep);
+    background: linear-gradient(180deg, var(--neon), var(--brass));
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 16px;
+    font-weight: 900;
+    letter-spacing: 0;
+    cursor: pointer;
+    z-index: 250;
+    box-shadow:
+      0 3px 0 var(--brass-deep),
+      0 6px 14px rgba(0, 0, 0, 0.6);
+  }
+  .help-fab:hover {
+    filter: brightness(1.12);
+  }
+  .help-fab:active {
+    transform: translateY(2px);
+    box-shadow:
+      0 1px 0 var(--brass-deep),
+      0 2px 6px rgba(0, 0, 0, 0.6);
+  }
+
+  .tutorial-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.82);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 400;
+    animation: fade-in 0.15s ease-out;
+    padding: 20px;
+  }
+  .tutorial-card {
+    width: min(520px, 94vw);
+    background: linear-gradient(180deg, var(--wood-light), var(--wood));
+    border: 3px solid var(--brass-deep);
+    border-radius: 6px;
+    padding: 22px 26px;
+    color: var(--cream);
+    box-shadow:
+      0 20px 60px rgba(0, 0, 0, 0.85),
+      inset 0 0 40px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .tutorial-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    color: var(--brass);
+    border-bottom: 1px dashed var(--brass-deep);
+    padding-bottom: 6px;
+  }
+  .tutorial-tag {
+    font-weight: bold;
+  }
+  .tutorial-progress {
+    color: var(--neon);
+  }
+  .tutorial-title {
+    font-size: 22px;
+    letter-spacing: 0.12em;
+    color: var(--neon);
+    text-shadow: 0 0 8px rgba(255, 213, 97, 0.35);
+    margin: 4px 0 0;
+  }
+  .tutorial-body {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--cream);
+    opacity: 0.95;
+  }
+  .tutorial-dots {
+    display: flex;
+    gap: 5px;
+    justify-content: center;
+    margin-top: 4px;
+  }
+  .tutorial-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--wood);
+    border: 1px solid var(--brass-deep);
+  }
+  .tutorial-dot.active {
+    background: var(--neon);
+    box-shadow: 0 0 6px var(--neon);
+  }
+  .tutorial-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    align-items: center;
+    margin-top: 4px;
+    flex-wrap: wrap;
   }
 
   /* --------- Responsive --------- */

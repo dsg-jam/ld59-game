@@ -12,6 +12,10 @@ import {
   CHARS,
   CLOSERS,
   CORRECT,
+  CORRECT_FALLBACK_CLOSE,
+  CORRECT_FALLBACK_MID,
+  CORRECT_FALLBACK_OPEN,
+  CORRECT_FALLBACK_REPLY,
   DIRTY_SLIP_CHANCE,
   FORGED_NAME_CHANCE,
   LEVELS,
@@ -397,6 +401,19 @@ export function mount(callbacks: Signal1Callbacks): Signal1Controls {
     else if (msg.type === "verifyDecision") handleVerifyDecision(p, msg.ticketId, msg.decision);
     else if (msg.type === "stamp") handleStamp(p, msg.ticketId, msg.decision);
     else if (msg.type === "agencyAnswer") handleAgencyAnswer(p, msg.ticketId, msg.choiceIdx);
+    else if (msg.type === "agencyAttend") handleAgencyAttend(p, msg.ticketId, msg.attending);
+  }
+
+  function handleAgencyAttend(p: Player, ticketId: number, attending: boolean): void {
+    const ticket = state.tickets.find(
+      (t) => t.id === ticketId && t.status === "ringing" && t.kind === "agency"
+    );
+    if (!ticket) return;
+    const set = new Set(ticket.agencyAttending);
+    if (attending) set.add(p.id);
+    else set.delete(p.id);
+    ticket.agencyAttending = [...set];
+    broadcastState();
   }
 
   function handleSelect(p: Player, plugId: string): void {
@@ -685,6 +702,7 @@ export function mount(callbacks: Signal1Callbacks): Signal1Controls {
       reviewer: null,
       agencyQ: null,
       agencyPickedBy: null,
+      agencyAttending: [],
     });
     broadcastState();
     broadcastEvent({ type: "ring" });
@@ -710,6 +728,7 @@ export function mount(callbacks: Signal1Callbacks): Signal1Controls {
       reviewer: null,
       agencyQ: q,
       agencyPickedBy: null,
+      agencyAttending: [],
     });
     broadcastState();
     broadcastEvent({ type: "agencyRing" });
@@ -735,6 +754,13 @@ export function mount(callbacks: Signal1Callbacks): Signal1Controls {
       "whoRoutedByOp",
       "whoCutEarly",
       "lastCallerTo",
+      "routedCount",
+      "topOperator",
+      "opWithMostChaos",
+      "lastCallerOverall",
+      "everCalled",
+      "opRoutedCount",
+      "timeoutCount",
     ] satisfies readonly string[];
     for (const type of shuffle(eventTypes)) {
       if (type === "whoSpokeTo") {
@@ -827,6 +853,141 @@ export function mount(callbacks: Signal1Callbacks): Signal1Controls {
           correctIdx: choices.findIndex((c) => c.tag === callerId),
         };
       }
+      if (type === "routedCount") {
+        const count = state.correctCount;
+        const opts = new Set([count, Math.max(0, count - 1), count + 1, count + 2]);
+        const arr = shuffle([...opts]).slice(0, 4);
+        while (arr.length < 4) arr.push((arr[arr.length - 1] ?? 0) + 1);
+        const choices = arr.map((n) => ({ label: String(n), tag: n }));
+        return {
+          text: `"Confirm tonight's CLEAN route count for the record."`,
+          choices,
+          correctIdx: choices.findIndex((c) => c.tag === count),
+        };
+      }
+      if (type === "topOperator") {
+        const tally = new Map<string, number>();
+        for (const e of ended) {
+          if (e.result === "routed") tally.set(e.byPlayer, (tally.get(e.byPlayer) ?? 0) + 1);
+        }
+        if (!tally.size) continue;
+        let topId: string | null = null;
+        let topN = -1;
+        for (const [id, n] of tally) {
+          if (n > topN) {
+            topN = n;
+            topId = id;
+          }
+        }
+        if (!topId) continue;
+        const others = state.players.filter((p) => p.id !== topId);
+        if (others.length < 2) continue;
+        shuffle(others);
+        const distractors = others.slice(0, Math.min(3, others.length));
+        const all = shuffle([topId, ...distractors.map((p) => p.id)]);
+        const choices = all.map((id) => {
+          const pl = state.players.find((p) => p.id === id);
+          return { label: pl?.name ?? id, tag: id };
+        });
+        return {
+          text: `"Which operator has the MOST clean routes tonight?"`,
+          choices,
+          correctIdx: choices.findIndex((c) => c.tag === topId),
+        };
+      }
+      if (type === "opWithMostChaos") {
+        const tally = new Map<string, number>();
+        for (const e of ended) {
+          if (e.result === "chaos") tally.set(e.byPlayer, (tally.get(e.byPlayer) ?? 0) + 1);
+        }
+        if (!tally.size) continue;
+        let topId: string | null = null;
+        let topN = -1;
+        for (const [id, n] of tally) {
+          if (n > topN) {
+            topN = n;
+            topId = id;
+          }
+        }
+        if (!topId) continue;
+        const others = state.players.filter((p) => p.id !== topId);
+        if (others.length < 2) continue;
+        shuffle(others);
+        const distractors = others.slice(0, Math.min(3, others.length));
+        const all = shuffle([topId, ...distractors.map((p) => p.id)]);
+        const choices = all.map((id) => {
+          const pl = state.players.find((p) => p.id === id);
+          return { label: pl?.name ?? id, tag: id };
+        });
+        return {
+          text: `"Between you and me — who crossed the MOST wires tonight?"`,
+          choices,
+          correctIdx: choices.findIndex((c) => c.tag === topId),
+        };
+      }
+      if (type === "lastCallerOverall") {
+        const ref = ended[0];
+        if (!ref) continue;
+        const callerId = ref.from;
+        if (!CHARS[callerId]) continue;
+        const distractors = pickChars([callerId], 3);
+        if (distractors.length < 2) continue;
+        const choices = shuffle([callerId, ...distractors]).map((id) => ({
+          label: CHARS[id]?.name ?? id,
+          tag: id,
+        }));
+        return {
+          text: `"Who was the LAST caller to disconnect tonight?"`,
+          choices,
+          correctIdx: choices.findIndex((c) => c.tag === callerId),
+        };
+      }
+      if (type === "everCalled") {
+        const calledSet = new Set<string>();
+        for (const e of ended) calledSet.add(e.from);
+        if (!calledSet.size) continue;
+        const notCalled = lvl.chars.filter((c) => !calledSet.has(c) && c !== "agency");
+        if (notCalled.length < 1) continue;
+        const pickNotCalled = notCalled[Math.floor(Math.random() * notCalled.length)];
+        if (!pickNotCalled) continue;
+        const called = shuffle([...calledSet]).slice(0, 3);
+        if (called.length < 2) continue;
+        const all = shuffle([pickNotCalled, ...called]);
+        const choices = all.map((id) => ({ label: CHARS[id]?.name ?? id, tag: id }));
+        return {
+          text: `"Which of these has NOT called in tonight?"`,
+          choices,
+          correctIdx: choices.findIndex((c) => c.tag === pickNotCalled),
+        };
+      }
+      if (type === "opRoutedCount") {
+        if (state.players.length < 1) continue;
+        const op = state.players[Math.floor(Math.random() * state.players.length)];
+        if (!op) continue;
+        const count = ended.filter((e) => e.byPlayer === op.id && e.result === "routed").length;
+        const opts = new Set([count, Math.max(0, count - 1), count + 1, count + 2]);
+        const arr = shuffle([...opts]).slice(0, 4);
+        while (arr.length < 4) arr.push((arr[arr.length - 1] ?? 0) + 1);
+        const choices = arr.map((n) => ({ label: String(n), tag: n }));
+        return {
+          text: `"${op.name} — how many CLEAN routes is that for you tonight?"`,
+          choices,
+          correctIdx: choices.findIndex((c) => c.tag === count),
+        };
+      }
+      if (type === "timeoutCount") {
+        const count = state.timeoutCount;
+        if (count === 0) continue;
+        const opts = new Set([count, Math.max(0, count - 1), count + 1, count + 2]);
+        const arr = shuffle([...opts]).slice(0, 4);
+        while (arr.length < 4) arr.push((arr[arr.length - 1] ?? 0) + 1);
+        const choices = arr.map((n) => ({ label: String(n), tag: n }));
+        return {
+          text: `"How many callers went UNANSWERED to timeout?"`,
+          choices,
+          correctIdx: choices.findIndex((c) => c.tag === count),
+        };
+      }
     }
     return null;
   }
@@ -869,12 +1030,18 @@ export function mount(callbacks: Signal1Callbacks): Signal1Controls {
     const key = `${fromId}>${actualId}`;
     let base: DialogLine[];
     if (correct) {
-      base = CORRECT[key] ?? [
-        { s: fromId, t: `Hello, ${CHARS[actualId]?.name ?? actualId}?` },
-        { s: actualId, t: "Speaking." },
-        { s: fromId, t: "Just a quick one." },
-        { s: actualId, t: "Understood. Goodbye." },
-      ];
+      const baseCorrect = CORRECT[key];
+      if (baseCorrect && Array.isArray(baseCorrect)) {
+        base = baseCorrect;
+      } else {
+        const actualName = CHARS[actualId]?.name ?? actualId;
+        base = [
+          { s: fromId, t: pick(CORRECT_FALLBACK_OPEN).replace("[ACTUAL]", actualName) },
+          { s: actualId, t: pick(CORRECT_FALLBACK_REPLY).replace("[ACTUAL]", actualName) },
+          { s: fromId, t: pick(CORRECT_FALLBACK_MID) },
+          { s: actualId, t: pick(CORRECT_FALLBACK_CLOSE) },
+        ];
+      }
     } else {
       const wrongLines = WRONG[key];
       if (wrongLines && Array.isArray(wrongLines)) {

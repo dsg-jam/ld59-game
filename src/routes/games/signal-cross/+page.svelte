@@ -79,6 +79,59 @@
   let slipModalTicketId = $state<number | null>(null);
   let slipModalRole = $state<"verify" | "supervisor">("verify");
   let agencyModalTicketId = $state<number | null>(null);
+  let tutorialOpen = $state(false);
+  let tutorialStep = $state(0);
+  const TUTORIAL_FLAG_KEY = "signal-cross:tutorial-seen-v1";
+
+  const TUTORIAL_STEPS: { title: string; body: string }[] = [
+    {
+      title: "THE BOARD",
+      body:
+        "Bell Exchange #47. Callers come in on the left plug, recipients on the right. " +
+        "A red, flashing plug is RINGING. Connect them before it times out.",
+    },
+    {
+      title: "PATCHING A CALL",
+      body:
+        "Click the ringing caller plug, THEN click the plug they want to reach. " +
+        "A cable drops — their conversation plays out in the CALL LOG.",
+    },
+    {
+      title: "DISCONNECT",
+      body:
+        "When you see the *click* line, the call is DONE. Click the live plug (or cable) to pull out. " +
+        "Pull too EARLY and the crew takes a penalty. Leave them too long and new callers stack up.",
+    },
+    {
+      title: "THE AGENCY",
+      body:
+        "A red encrypted ticket will appear in INCOMING. ANY operator can click it to answer. " +
+        "The question is about what JUST happened on the board — watch the Call Log. " +
+        "Wrong answer = big penalty.",
+    },
+    {
+      title: "VERIFY MODE",
+      body:
+        "Every call comes with a paper SLIP. Before patching, OPEN the slip and compare it " +
+        "against the INCOMING ticket (caller + intended recipient). Mismatched names, " +
+        "forged signatures, or ⚠ FLAGGED lines → DENY. Correct slip → APPROVE, then patch.",
+    },
+    {
+      title: "SUPERVISOR MODE",
+      body:
+        "One operator plays SUPERVISOR — no cables, only a stamp. " +
+        "Incoming calls sit in limbo until the supervisor opens the slip, compares it " +
+        "to the OPERATOR'S BOARD panel, and STAMPS approve or deny. " +
+        "Patchers can only route calls the supervisor approved.",
+    },
+    {
+      title: "GOOD SHIFT",
+      body:
+        "Keep correct routes above the goal. Crossed wires give small CHAOS points but no progress. " +
+        "Pulling early, timing out, or answering The Agency wrong hurts the penalty column. " +
+        "Press [?] at any time to see this again.",
+    },
+  ];
 
   let floaterSeq = 0;
   let toastHandle: ReturnType<typeof setTimeout> | null = null;
@@ -317,6 +370,15 @@
     };
     rafId = requestAnimationFrame(step);
 
+    try {
+      if (!localStorage.getItem(TUTORIAL_FLAG_KEY)) {
+        tutorialOpen = true;
+        tutorialStep = 0;
+      }
+    } catch {
+      /* ignore storage errors */
+    }
+
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("contextmenu", onContextMenu);
 
@@ -368,6 +430,25 @@
     const t = agencyTicket;
     if (!t || t.status !== "ringing" || t.agencyPickedBy) {
       agencyModalTicketId = null;
+    }
+  });
+
+  // Broadcast attendance on the agency call whenever the modal opens/closes.
+  let lastAttendedTicketId: number | null = null;
+  $effect(() => {
+    const id = agencyModalTicketId;
+    if (id !== lastAttendedTicketId) {
+      if (lastAttendedTicketId != null) {
+        controls?.sendAction({
+          type: "agencyAttend",
+          ticketId: lastAttendedTicketId,
+          attending: false,
+        });
+      }
+      if (id != null) {
+        controls?.sendAction({ type: "agencyAttend", ticketId: id, attending: true });
+      }
+      lastAttendedTicketId = id;
     }
   });
 
@@ -452,16 +533,10 @@
 
   function ticketRequest(t: Ticket): { name: string; emoji: string } {
     const to = t.to ? CHARS[t.to] : null;
-    const slip = t.slip;
-    const showSlipPreview =
-      snapshot.gameMode === "supervisor" ||
-      (snapshot.gameMode === "verify" && t.approval !== "approved");
-    const name = showSlipPreview && slip ? slip.requestName : (to?.name ?? "?");
-    const emoji =
-      showSlipPreview && slip
-        ? (CHARS[slip.requestId]?.emoji ?? to?.emoji ?? "?")
-        : (to?.emoji ?? "?");
-    return { name, emoji };
+    // Incoming tickets always show the TRUE intended recipient (from the call record).
+    // The slip modal shows what paperwork says, so slip mismatches are visible in the modal
+    // compare panel. Patchers can always trust what's shown on the board.
+    return { name: to?.name ?? "?", emoji: to?.emoji ?? "?" };
   }
 
   function logBadge(entry: LogEntry): { cls: string; text: string } {
@@ -600,7 +675,20 @@
   }
 
   function onKeyDown(e: KeyboardEvent): void {
+    if (e.key === "?" || (e.key === "/" && e.shiftKey)) {
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag !== "INPUT" && tag !== "TEXTAREA" && tag !== "SELECT") {
+        e.preventDefault();
+        openTutorial();
+        return;
+      }
+    }
     if (e.key !== "Escape") return;
+    if (tutorialOpen) {
+      closeTutorial();
+      return;
+    }
     if (slipModalTicketId != null) {
       onSlipCancel();
       return;
@@ -612,6 +700,32 @@
     if (snapshot.phase === "playing" && me?.selected) {
       controls?.sendAction({ type: "deselect" });
     }
+  }
+
+  function openTutorial(): void {
+    tutorialOpen = true;
+    tutorialStep = 0;
+  }
+
+  function closeTutorial(): void {
+    tutorialOpen = false;
+    try {
+      localStorage.setItem(TUTORIAL_FLAG_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function nextTutorial(): void {
+    if (tutorialStep < TUTORIAL_STEPS.length - 1) {
+      tutorialStep++;
+    } else {
+      closeTutorial();
+    }
+  }
+
+  function prevTutorial(): void {
+    if (tutorialStep > 0) tutorialStep--;
   }
 
   function autoFocus(node: HTMLElement): void {
@@ -639,6 +753,16 @@
 
 <div class="signal-cross-page">
   <div class="scanlines"></div>
+
+  <button
+    class="help-fab"
+    type="button"
+    aria-label="Show how to play"
+    title="How to play (?)"
+    onclick={openTutorial}
+  >
+    ?
+  </button>
 
   {#if screen === "title"}
     <div id="title-screen" class="screen active">
@@ -810,10 +934,24 @@
       </header>
 
       <section class="switchboard">
-        <div class="panel-label">EXCHANGE 47</div>
+        <div class="panel-label">EXCHANGE 47 — {snapshot.levelTitle}</div>
+        <div class="shift-briefing">
+          <div class="shift-briefing-sub">{snapshot.levelSubtitle}</div>
+          <div class="shift-briefing-tips">
+            <span>◆ CLICK ringing plug, then recipient</span>
+            <span>◆ CLICK live plug/cable to hang up AFTER *click*</span>
+            <span>◆ PRESS ? for tutorial</span>
+          </div>
+        </div>
         {#if lvl}
-          {@const cols = lvl.chars.length <= 6 ? 3 : 4}
-          <div class="board" style:grid-template-columns="repeat({cols}, 92px)">
+          {@const n = lvl.chars.length}
+          {@const cols = n <= 6 ? 3 : n <= 9 ? 3 : 4}
+          {@const plugSize = n <= 6 ? 140 : n <= 9 ? 118 : 96}
+          <div
+            class="board"
+            style:grid-template-columns="repeat({cols}, {plugSize}px)"
+            style:--plug-size="{plugSize}px"
+          >
             {#each lvl.chars as id (id)}
               {@const status = plugStatus(id)}
               {@const c = CHARS[id]}
@@ -882,6 +1020,17 @@
                 <div class="agency-row">CHECK-IN CALL</div>
                 <div class="row"><span class="emoji">☎</span><b>ENCRYPTED LINE</b></div>
                 <div class="agency-row mono">CLICK TO ANSWER</div>
+                <div class="attend-row">
+                  {#each snapshot.players as p (p.id)}
+                    {@const onLine = t.agencyAttending.includes(p.id)}
+                    <span
+                      class="attend-dot"
+                      class:on={onLine}
+                      style:--dotColor={p.color}
+                      title="{p.name}: {onLine ? 'ON THE LINE' : 'not answering'}"
+                    ></span>
+                  {/each}
+                </div>
                 <div class="ring-bar">
                   <div class="ring-bar-fill" style:width="{ringBarPct(t)}%"></div>
                 </div>
@@ -1070,6 +1219,12 @@
 
       {#if slipTicket && slipTicket.slip}
         {@const slip = slipTicket.slip}
+        {@const trueCallerName = CHARS[slipTicket.from]?.name ?? slipTicket.from}
+        {@const trueRequestName = slipTicket.to
+          ? (CHARS[slipTicket.to]?.name ?? slipTicket.to)
+          : "?"}
+        {@const callerMismatch = slip.callerName !== trueCallerName}
+        {@const requestMismatch = slip.requestId !== slipTicket.to}
         <div
           class="slip-modal"
           role="dialog"
@@ -1083,22 +1238,44 @@
               <span>#{slip.slipNum}</span>
             </div>
             <div class="slip-body">
-              <div class="slip-row">
+              <div class="slip-row" class:slip-row-mismatch={callerMismatch}>
                 <span class="slip-k">CALLER</span><b>{slip.callerName}</b>
               </div>
               <div class="slip-row">
                 <span class="slip-k">LINE</span><b>{slip.line}</b>
               </div>
-              <div class="slip-row">
+              <div class="slip-row" class:slip-row-mismatch={requestMismatch}>
                 <span class="slip-k">REQUESTS</span><b>{slip.requestName}</b>
               </div>
               {#if slip.flagged}
-                <div class="slip-flag">⚠ FLAGGED LINE</div>
+                <div class="slip-flag">⚠ FLAGGED LINE — RESTRICTED PARTY</div>
               {/if}
+              <div class="slip-compare">
+                <div class="slip-compare-head">
+                  {slipModalRole === "supervisor"
+                    ? "OPERATOR'S BOARD SAYS"
+                    : "RINGING IN RIGHT NOW"}
+                </div>
+                <div class="slip-row" class:slip-row-mismatch={callerMismatch}>
+                  <span class="slip-k">CALLER</span>
+                  <b>
+                    {CHARS[slipTicket.from]?.emoji ?? ""}
+                    {trueCallerName}
+                  </b>
+                </div>
+                <div class="slip-row" class:slip-row-mismatch={requestMismatch}>
+                  <span class="slip-k">DIALED FOR</span>
+                  <b>
+                    {slipTicket.to ? (CHARS[slipTicket.to]?.emoji ?? "") : ""}
+                    {trueRequestName}
+                  </b>
+                </div>
+                <div class="slip-row">
+                  <span class="slip-k">NOTE</span><b>{slipTicket.note || "—"}</b>
+                </div>
+              </div>
               <div class="slip-hint">
-                {slipModalRole === "supervisor"
-                  ? "Cross-check against INCOMING. Stamp carefully."
-                  : "Double-check caller's request. Approve or deny."}
+                Slip mismatch OR ⚠ flagged line → DENY. Clean slip → APPROVE.
               </div>
             </div>
             <div class="slip-actions">
@@ -1131,12 +1308,65 @@
                 </button>
               {/each}
             </div>
+            <div class="agency-attend">
+              <span class="agency-attend-label">ON THE LINE</span>
+              <div class="agency-attend-list">
+                {#each snapshot.players as p (p.id)}
+                  {@const onLine = agencyTicket.agencyAttending.includes(p.id)}
+                  <div class="agency-attend-op" class:on={onLine}>
+                    <span class="dot" style:background={p.color} style:color={p.color}></span>
+                    <span class="name">{p.name}</span>
+                    <span class="state">{onLine ? "ANSWERED" : "ringing..."}</span>
+                  </div>
+                {/each}
+              </div>
+            </div>
             <div class="agency-timer">
               <div id="agency-timer-fill" style:width="{agencyTimerPct(agencyTicket)}%"></div>
             </div>
+            <button class="mini-btn agency-leave" onclick={() => (agencyModalTicketId = null)}>
+              HANG UP (ESC)
+            </button>
           </div>
         </div>
       {/if}
+    </div>
+  {/if}
+
+  {#if tutorialOpen}
+    {@const step = TUTORIAL_STEPS[tutorialStep]}
+    <div
+      class="tutorial-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="tutorial-heading"
+      use:autoFocus
+    >
+      <div class="tutorial-card">
+        <div class="tutorial-head">
+          <span class="tutorial-tag">HOW TO RUN THE BOARD</span>
+          <span class="tutorial-progress">
+            {tutorialStep + 1} / {TUTORIAL_STEPS.length}
+          </span>
+        </div>
+        <h3 id="tutorial-heading" class="tutorial-title">{step?.title ?? ""}</h3>
+        <p class="tutorial-body">{step?.body ?? ""}</p>
+        <div class="tutorial-dots">
+          {#each TUTORIAL_STEPS as step, i (i)}
+            <span class="tutorial-dot" class:active={i === tutorialStep} aria-label={step.title}
+            ></span>
+          {/each}
+        </div>
+        <div class="tutorial-actions">
+          <button class="mini-btn" disabled={tutorialStep === 0} onclick={prevTutorial}>
+            BACK
+          </button>
+          <button class="mini-btn" onclick={closeTutorial}>SKIP</button>
+          <button class="big-btn" onclick={nextTutorial}>
+            {tutorialStep === TUTORIAL_STEPS.length - 1 ? "GOT IT ▸" : "NEXT ▸"}
+          </button>
+        </div>
+      </div>
     </div>
   {/if}
 

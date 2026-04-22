@@ -51,6 +51,8 @@ export type Ticket = {
   reviewer: string | null;
   agencyQ: AgencyQuestion | null;
   agencyPickedBy: string | null;
+  /** Players who currently have the agency dossier open (on the line). */
+  agencyAttending: string[];
 };
 
 export type Player = {
@@ -137,7 +139,8 @@ export type ActionMsg =
   | { type: "disconnect"; ticketId: number }
   | { type: "verifyDecision"; ticketId: number; decision: "approve" | "deny" | "cancel" }
   | { type: "stamp"; ticketId: number; decision: "approve" | "deny" }
-  | { type: "agencyAnswer"; ticketId: number; choiceIdx: number };
+  | { type: "agencyAnswer"; ticketId: number; choiceIdx: number }
+  | { type: "agencyAttend"; ticketId: number; attending: boolean };
 
 export interface Signal1Callbacks {
   onSnapshot(snapshot: GameSnapshot): void;
