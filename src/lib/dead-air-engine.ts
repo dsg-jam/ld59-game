@@ -1,62 +1,106 @@
+// ── DEAD AIR ENGINE ──────────────────────────────────────────────────────────
+// Pure logic for the "telephone" audio puzzle. A short melody is generated,
+// then routed through a configurable chain of "relays" that distort it. The
+// player hears only the distorted output and must reconstruct the original.
+//
+// This module is deliberately DOM-free / AudioContext-free so it can be tested
+// in isolation. Audio synthesis & playback live in `src/lib/games/dead-air`.
+
 // ── TYPES ────────────────────────────────────────────────────────────────────
 
-export interface Player {
-  id: string;
-  name: string;
-  color: string;
-  x: number;
-  y: number;
-  alive: boolean;
-  spectator: boolean;
+export type NoteIndex = number; // 0..SCALE.length-1
+
+export interface Melody {
+  /** Sequence of note indices into the current scale (e.g. C major). */
+  notes: NoteIndex[];
+  /** Length in notes — mirrors `notes.length` but kept for ergonomics. */
+  length: number;
 }
 
-export interface Tower {
-  id: string;
-  x: number;
-  y: number;
-  progress: number;
+export type RelayKind = "noise" | "lowpass" | "pitch" | "dropout" | "bitcrush" | "echo";
+
+export interface Relay {
+  kind: RelayKind;
+  /** 0..1 strength. Higher → more destructive. */
+  strength: number;
 }
 
-export type Role = "mimic" | "researcher";
-
-export type Winner = "mimic" | "researchers";
-
-export interface VoteState {
-  active: boolean;
-  endsAt: number;
-  votes: Record<string, string>;
-  caller: string;
+export interface RoundConfig {
+  /** Number of notes in the melody. */
+  melodyLength: number;
+  /** Number of relays in the chain. */
+  relayCount: number;
+  /** Max strength of any individual relay, 0..1. */
+  maxRelayStrength: number;
 }
 
-export interface VoteResult {
-  eliminated: string | null;
-  correct: boolean;
-  tie: boolean;
+export interface ScoreBreakdown {
+  /** 0..1 — exact note match ratio. */
+  accuracy: number;
+  /** How many notes the player got exactly right. */
+  correct: number;
+  /** Total notes. */
+  total: number;
+  /** Per-note correctness, same order as `guess`. */
+  perNote: boolean[];
 }
 
 // ── CONSTANTS ────────────────────────────────────────────────────────────────
 
-export const WORLD_W = 1400;
-export const WORLD_H = 900;
-export const PLAYER_SPEED = 150;
-export const PLAYER_COLORS = ["#ffb800", "#66d9ff", "#ff66cc", "#95ff66", "#ff8a66", "#b19dff"];
-export const MAX_PLAYERS = 6;
-export const TOWER_REQUIRED = 30;
-export const REPAIR_RADIUS = 40;
-export const WARM_X = WORLD_W * 0.5;
-export const WARM_Y = WORLD_H * 0.5;
-export const WARM_R = 170;
-export const DARK_CHECK_RADIUS = 300;
-export const VOTE_DURATION_MS = 30_000;
-export const ELIM_COOLDOWN_MS = 20_000;
-export const PLAYBACK_COOLDOWN_MS = 8_000;
-export const SNIPPET_DURATION_MS = 3_000;
+/** One octave of C-major (MIDI-ish semitone offsets from C4). */
+export const SCALE: readonly number[] = [0, 2, 4, 5, 7, 9, 11, 12];
 
-export const DEFAULT_TOWERS: readonly Readonly<Tower>[] = [
-  { id: "A", x: WORLD_W * 0.5, y: 140, progress: 0 },
-  { id: "B", x: 250, y: WORLD_H - 200, progress: 0 },
-  { id: "C", x: WORLD_W - 250, y: WORLD_H - 200, progress: 0 },
+/** Note names for UI (aligned with SCALE). */
+export const SCALE_LABELS: readonly string[] = ["C", "D", "E", "F", "G", "A", "B", "C↑"];
+
+/** Base frequency for the lowest scale degree. */
+export const BASE_FREQ_HZ = 261.63; // C4
+
+export const DEFAULT_ROUND: RoundConfig = {
+  melodyLength: 4,
+  relayCount: 2,
+  maxRelayStrength: 0.45,
+};
+
+/** Ordered difficulty ramp. Round N clamps to the last entry. */
+export const DIFFICULTY_LADDER: readonly RoundConfig[] = [
+  { melodyLength: 4, relayCount: 1, maxRelayStrength: 0.3 },
+  { melodyLength: 4, relayCount: 2, maxRelayStrength: 0.4 },
+  { melodyLength: 5, relayCount: 2, maxRelayStrength: 0.5 },
+  { melodyLength: 5, relayCount: 3, maxRelayStrength: 0.55 },
+  { melodyLength: 6, relayCount: 3, maxRelayStrength: 0.65 },
+  { melodyLength: 6, relayCount: 4, maxRelayStrength: 0.7 },
+  { melodyLength: 7, relayCount: 4, maxRelayStrength: 0.8 },
+  { melodyLength: 7, relayCount: 5, maxRelayStrength: 0.85 },
 ];
+
+export const RELAY_KINDS: readonly RelayKind[] = [
+  "noise",
+  "lowpass",
+  "pitch",
+  "dropout",
+  "bitcrush",
+  "echo",
+];
+
+export const RELAY_LABELS: Record<RelayKind, string> = {
+  noise: "NOISE",
+  lowpass: "LO-PASS",
+  pitch: "DETUNE",
+  dropout: "DROPOUT",
+  bitcrush: "BITCRUSH",
+  echo: "ECHO",
+};
+
+export function relayLabel(kind: RelayKind): string {
+  return RELAY_LABELS[kind];
+}
+
+/** For UI — "Relay 1 · NOISE 45%". */
+export function describeRelay(index: number, relay: Relay): string {
+  const pct = Math.round(relay.strength * 100);
+  return `Relay ${index + 1} · ${relayLabel(relay.kind)} ${pct}%`;
+}
 
 // ── UTILITIES ────────────────────────────────────────────────────────────────
 
@@ -64,198 +108,104 @@ export function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
 }
 
-export function dist(ax: number, ay: number, bx: number, by: number): number {
-  return Math.hypot(ax - bx, ay - by);
+export function getConfigForRound(round: number): RoundConfig {
+  const idx = clamp(round, 0, DIFFICULTY_LADDER.length - 1);
+  return DIFFICULTY_LADDER[idx] ?? DEFAULT_ROUND;
 }
 
-// ── FACTORIES ────────────────────────────────────────────────────────────────
-
-export function createDefaultTowers(): Tower[] {
-  return DEFAULT_TOWERS.map((t) => ({ ...t }));
+/** Convert a scale-degree note index to Hertz. */
+export function noteToFreq(note: NoteIndex): number {
+  const semis = SCALE[clamp(note, 0, SCALE.length - 1)] ?? 0;
+  return BASE_FREQ_HZ * Math.pow(2, semis / 12);
 }
 
-export function createPlayer(id: string, name: string, index: number): Player {
+// ── GENERATION ───────────────────────────────────────────────────────────────
+
+/**
+ * Generate a random melody of `length` notes over `SCALE`. Avoids immediate
+ * repetitions (feels less musical) and keeps jumps small for a sing-able feel.
+ */
+export function generateMelody(length: number, rng: () => number = Math.random): Melody {
+  const n = Math.max(1, Math.floor(length));
+  const notes: NoteIndex[] = [];
+  let prev = Math.floor(rng() * SCALE.length);
+  notes.push(prev);
+  for (let i = 1; i < n; i++) {
+    // Random walk of ±1-3 degrees, clamped to scale, avoiding repeats.
+    const step = Math.floor(rng() * 5) - 2 || 1; // -2..2, never 0
+    let next = clamp(prev + step, 0, SCALE.length - 1);
+    if (next === prev) next = clamp(prev + (step > 0 ? -1 : 1), 0, SCALE.length - 1);
+    notes.push(next);
+    prev = next;
+  }
+  return { notes, length: n };
+}
+
+/**
+ * Build a chain of distortion relays. Strengths ramp up along the chain so
+ * later relays hit harder (matches the "telephone" fatigue metaphor).
+ */
+export function generateRelayChain(
+  count: number,
+  maxStrength: number,
+  rng: () => number = Math.random
+): Relay[] {
+  const n = Math.max(0, Math.floor(count));
+  const result: Relay[] = [];
+  let lastKind: RelayKind | null = null;
+  for (let i = 0; i < n; i++) {
+    // Pick a kind; avoid back-to-back duplicates when possible.
+    let kind = RELAY_KINDS[Math.floor(rng() * RELAY_KINDS.length)] ?? "noise";
+    if (kind === lastKind && RELAY_KINDS.length > 1) {
+      kind = RELAY_KINDS[(RELAY_KINDS.indexOf(kind) + 1) % RELAY_KINDS.length] ?? kind;
+    }
+    lastKind = kind;
+    // Ramp strength from ~40% to 100% of max along the chain.
+    const t = n === 1 ? 1 : i / (n - 1);
+    const base = 0.4 + 0.6 * t;
+    const jitter = 0.8 + rng() * 0.4; // 0.8..1.2
+    result.push({ kind, strength: clamp(base * jitter * maxStrength, 0, 1) });
+  }
+  return result;
+}
+
+// ── SCORING ──────────────────────────────────────────────────────────────────
+
+/**
+ * Compare a guess against the original melody. Missing or extra guesses are
+ * treated as wrong — the guess array is compared index-by-index against the
+ * original length.
+ */
+export function scoreGuess(original: Melody, guess: readonly NoteIndex[]): ScoreBreakdown {
+  const total = original.notes.length;
+  const perNote: boolean[] = [];
+  let correct = 0;
+  for (let i = 0; i < total; i++) {
+    const ok = guess[i] === original.notes[i];
+    perNote.push(ok);
+    if (ok) correct += 1;
+  }
   return {
-    id,
-    name,
-    color: PLAYER_COLORS[index % PLAYER_COLORS.length] ?? "#ffffff",
-    x: WARM_X + Math.cos(index * 1.7) * 30,
-    y: WARM_Y + Math.sin(index * 1.7) * 30,
-    alive: true,
-    spectator: false,
+    accuracy: total === 0 ? 0 : correct / total,
+    correct,
+    total,
+    perNote,
   };
 }
 
-// ── ROLE ASSIGNMENT ──────────────────────────────────────────────────────────
+// ── DETERMINISTIC RNG ────────────────────────────────────────────────────────
 
 /**
- * Assign one random player as the mimic; all others are researchers.
- * Accepts an optional `rng` (returns [0,1)) for deterministic tests.
+ * Deterministic PRNG (mulberry32) so hosts and guests can generate the same
+ * melody/relay chain from a shared seed.
  */
-export function assignRoles(
-  playerIds: readonly string[],
-  rng: () => number = Math.random
-): Map<string, Role> {
-  if (playerIds.length === 0) {
-    return new Map();
-  }
-  const shuffled = [...playerIds];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = (rng() * (i + 1)) | 0;
-    const tmp = shuffled[i] ?? "";
-    shuffled[i] = shuffled[j] ?? "";
-    shuffled[j] = tmp;
-  }
-  const mimicId = shuffled[0] ?? playerIds[0];
-  if (mimicId === undefined) return new Map();
-  const roles = new Map<string, Role>();
-  for (const id of playerIds) {
-    roles.set(id, id === mimicId ? "mimic" : "researcher");
-  }
-  return roles;
-}
-
-// ── WIN CONDITIONS ───────────────────────────────────────────────────────────
-
-/**
- * Check if the game has a winner.
- *
- * - **researchers** win when all 3 towers are fully repaired, or the mimic
- *   is no longer alive (voted out).
- * - **mimic** wins when **all** researchers have been eliminated.
- *
- * Returns `null` when the game is still in progress.
- */
-export function checkWinConditions(
-  players: ReadonlyMap<string, Player>,
-  roles: ReadonlyMap<string, Role>,
-  towers: readonly Tower[]
-): Winner | null {
-  const towersDone = towers.every((t) => t.progress >= TOWER_REQUIRED);
-  if (towersDone) return "researchers";
-
-  const mimicAlive = [...players.values()].some((p) => p.alive && roles.get(p.id) === "mimic");
-  if (!mimicAlive) return "researchers";
-
-  const researchersAlive = [...players.values()].filter(
-    (p) => p.alive && roles.get(p.id) === "researcher"
-  ).length;
-  if (researchersAlive === 0) return "mimic";
-
-  return null;
-}
-
-// ── TOWER REPAIR ─────────────────────────────────────────────────────────────
-
-/**
- * Advance tower repair progress for every tower that has an alive researcher
- * within `REPAIR_RADIUS`.  Mutates `towers` in-place and returns the count
- * of towers that were being repaired this tick.
- */
-export function updateTowers(
-  towers: Tower[],
-  players: ReadonlyMap<string, Player>,
-  roles: ReadonlyMap<string, Role>,
-  dt: number
-): number {
-  let repairing = 0;
-  for (const tower of towers) {
-    if (tower.progress >= TOWER_REQUIRED) continue;
-    const hasRepairer = [...players.values()].some((p) => {
-      if (!p.alive) return false;
-      if (roles.get(p.id) !== "researcher") return false;
-      return dist(p.x, p.y, tower.x, tower.y) <= REPAIR_RADIUS;
-    });
-    if (hasRepairer) {
-      tower.progress = Math.min(TOWER_REQUIRED, tower.progress + dt);
-      repairing++;
-    }
-  }
-  return repairing;
-}
-
-// ── ISOLATION CHECK ──────────────────────────────────────────────────────────
-
-/**
- * A player is "isolated in dark" when they are far from every tower AND
- * far from every other alive non-mimic player.  The mimic can only eliminate
- * targets that satisfy this condition.
- */
-export function isIsolatedInDark(
-  targetId: string,
-  players: ReadonlyMap<string, Player>,
-  roles: ReadonlyMap<string, Role>,
-  towers: readonly Tower[]
-): boolean {
-  const target = players.get(targetId);
-  if (!target || !target.alive) return false;
-  for (const t of towers) {
-    if (dist(target.x, target.y, t.x, t.y) <= DARK_CHECK_RADIUS) return false;
-  }
-  const others = [...players.values()].filter(
-    (p) => p.id !== targetId && p.alive && roles.get(p.id) !== "mimic"
-  );
-  for (const p of others) {
-    if (dist(target.x, target.y, p.x, p.y) <= DARK_CHECK_RADIUS) return false;
-  }
-  return true;
-}
-
-// ── VOTE RESOLUTION ──────────────────────────────────────────────────────────
-
-/**
- * Tally votes and return the result.  Does NOT mutate game state — the
- * caller decides what to do with the result (eliminate, announce, etc.).
- */
-export function resolveVote(
-  vote: VoteState,
-  players: ReadonlyMap<string, Player>,
-  roles: ReadonlyMap<string, Role>
-): VoteResult {
-  const tally = new Map<string, number>();
-  for (const target of Object.values(vote.votes)) {
-    tally.set(target, (tally.get(target) ?? 0) + 1);
-  }
-
-  let winnerId: string | null = null;
-  let top = -1;
-  let tie = false;
-  for (const [id, count] of tally) {
-    if (count > top) {
-      top = count;
-      winnerId = id;
-      tie = false;
-    } else if (count === top) {
-      tie = true;
-    }
-  }
-
-  if (tie || !winnerId || !players.has(winnerId)) {
-    return { eliminated: null, correct: false, tie: true };
-  }
-
-  const isMimic = roles.get(winnerId) === "mimic";
-  return { eliminated: winnerId, correct: isMimic, tie: false };
-}
-
-// ── MOVEMENT ─────────────────────────────────────────────────────────────────
-
-/**
- * Apply directional input to a player.  Returns the new position (clamped
- * to world bounds).  Does NOT mutate the player — the caller writes back.
- */
-export function applyMovement(
-  x: number,
-  y: number,
-  dx: number,
-  dy: number,
-  dt: number,
-  speed: number = PLAYER_SPEED
-): { x: number; y: number } {
-  if (dx === 0 && dy === 0) return { x, y };
-  const len = Math.hypot(dx, dy) || 1;
-  return {
-    x: clamp(x + (dx / len) * speed * dt, 0, WORLD_W),
-    y: clamp(y + (dy / len) * speed * dt, 0, WORLD_H),
+export function createSeededRng(seed: number): () => number {
+  let a = seed >>> 0;
+  return function rng(): number {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
