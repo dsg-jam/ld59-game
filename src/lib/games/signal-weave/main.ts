@@ -2,6 +2,7 @@ import Peer from "peerjs";
 import type { DataConnection } from "peerjs";
 import { createGameLoop } from "$lib/game-loop";
 import { describePeerError, makeCode } from "$lib/peer";
+import { Audio } from "./audio";
 
 // ── Tuning ─────────────────────────────────────────────────────────────────────
 
@@ -247,6 +248,7 @@ export function mount(
   function announceMilestone(text: string) {
     callbacks.onMilestone(text);
     log(text, "good");
+    Audio.milestone();
   }
 
   // ── Math ───────────────────────────────────────────────────────────────────
@@ -301,13 +303,18 @@ export function mount(
     // Mode announcements when target movement changes
     const m = modeAt(state.t);
     if (m !== lastModeAnnounced) {
+      const isFirstAnnouncement = lastModeAnnounced === null;
       lastModeAnnounced = m;
       callbacks.onMode(MODE_LABEL[m], MODE_PALETTE[m]);
       log(MODE_LABEL[m]);
+      // Don't whoosh on the very first announcement at round start — the
+      // roundStart fanfare covers that moment already.
+      if (!isFirstAnnouncement) Audio.modeChange();
     }
 
     if (state.timeLeft <= 0) {
       state.running = false;
+      const victorious = state.bestCombo >= 5 || state.harmony > 200;
       const top =
         state.bestCombo >= 8
           ? "Constellation forged."
@@ -319,6 +326,8 @@ export function mount(
       broadcast({ t: "end", harmony: state.harmony.toFixed(1), topMessage: top });
       log(`Weave complete. Harmony ${state.harmony.toFixed(1)} • Best combo ${state.bestCombo}.`);
       announceMilestone(top);
+      if (victorious) Audio.win();
+      else Audio.lose();
     }
   }
 
@@ -378,6 +387,7 @@ export function mount(
       state.pulses.push({ owner: slot, t: now, good: true });
       broadcast({ t: "burst", good: true, tier, sync: synced });
       callbacks.onFlash(tier === "constellation" ? "perfect" : "good");
+      playBurstSfx(true, tier);
       const msg =
         tier === "constellation"
           ? `Full constellation (${synced}/${state.players}) — +${baseGain + comboBonus} harmony.`
@@ -390,8 +400,19 @@ export function mount(
       state.harmony = Math.max(0, state.harmony - 6);
       broadcast({ t: "burst", good: false, tier: "spark", sync: synced });
       callbacks.onFlash("bad");
+      playBurstSfx(false, "spark");
       log(`Pulse out of phase (${synced} synced).`, "bad");
     }
+  }
+
+  function playBurstSfx(good: boolean, tier: BurstTier) {
+    if (!good) {
+      Audio.pulseBad();
+      return;
+    }
+    if (tier === "constellation") Audio.pulseConstellation();
+    else if (tier === "team") Audio.pulseTeam();
+    else Audio.pulsePair();
   }
 
   function startRound() {
@@ -409,6 +430,7 @@ export function mount(
     broadcast({ t: "start" });
     callbacks.onGameStart();
     log("Carrier locked. Weave active.");
+    Audio.roundStart();
   }
 
   function resetNet() {
@@ -442,6 +464,7 @@ export function mount(
       );
       log(`Operator ${slot + 1} tuned in.`, "good");
       pushRoster();
+      Audio.operatorJoin();
     });
     c.on("data", (d: unknown) => {
       if (isHostMsg(d)) onHostMessage(d, slot);
@@ -459,6 +482,7 @@ export function mount(
       callbacks.onLobbyStatus(`Operator ${slot + 1} disconnected.`);
       log(`Operator ${slot + 1} dropped.`, "bad");
       pushRoster();
+      Audio.operatorLeave();
     });
   }
 
@@ -535,6 +559,8 @@ export function mount(
     }
   }
 
+  let lastGuestMode: TargetMode | null = null;
+
   function onGuestMessage(d: GuestMsg) {
     if (d.t === "hello") {
       mySlot = d.slot;
@@ -543,18 +569,28 @@ export function mount(
       callbacks.onLobbyStatus("Linked as operator " + (mySlot + 1) + ".");
       pushRoster();
     } else if (d.t === "roster") {
+      const before = state.players;
       state.players = d.players;
       pushRoster();
+      if (d.players > before) Audio.operatorJoin();
+      else if (d.players < before) Audio.operatorLeave();
     } else if (d.t === "start") {
       callbacks.onGameStart();
       log("Host started the weave.");
+      Audio.roundStart();
+      lastGuestMode = null;
     } else if (d.t === "state") {
       localSnapshot = d.s;
       // mirror what the host knows so we draw consistently
       state.players = d.s.players;
       callbacks.onMode(MODE_LABEL[d.s.mode], MODE_PALETTE[d.s.mode]);
+      if (lastGuestMode !== null && d.s.mode !== lastGuestMode) {
+        Audio.modeChange();
+      }
+      lastGuestMode = d.s.mode;
     } else if (d.t === "burst") {
       callbacks.onFlash(d.good ? (d.tier === "constellation" ? "perfect" : "good") : "bad");
+      playBurstSfx(d.good, d.tier);
       log(
         d.good ? `Burst (${d.sync} synced).` : `Pulse out of phase (${d.sync} synced).`,
         d.good ? "good" : "bad"
@@ -562,6 +598,9 @@ export function mount(
     } else if (d.t === "end") {
       log(`Weave complete. Harmony ${d.harmony}.`, "good");
       callbacks.onMilestone(d.topMessage);
+      const harmonyNum = parseFloat(d.harmony);
+      if (!Number.isNaN(harmonyNum) && harmonyNum > 200) Audio.win();
+      else Audio.lose();
     } else if (d.t === "reject") {
       callbacks.onLobbyStatus(d.reason ?? "Unable to join room.");
     }
@@ -581,6 +620,7 @@ export function mount(
   }
 
   function doPulse() {
+    Audio.pulseSend(currentOffsetRaw);
     if (isHost) onPing(0);
     else if (conn && conn.open) conn.send({ t: "ping" });
   }
