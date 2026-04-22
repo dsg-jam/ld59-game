@@ -6,6 +6,7 @@ import { describePeerError, makeCode } from "$lib/peer";
 import { gs, pushLog, resetState } from "./gameState.svelte.js";
 import type {
   GameSnapshot,
+  LaserBeam,
   Obstacle,
   ObstacleKind,
   PlayerSnap,
@@ -21,12 +22,18 @@ import {
   LANE_COUNT,
   BASE_SPEED,
   NOISE_SLOW,
-  NOISE_DURATION,
   AMP_BOOST_SPEED,
   AMP_DURATION,
   BURST_SPEED,
   BURST_DURATION,
   BURST_CHARGES,
+  LASER_COOLDOWN_BASE,
+  LASER_COOLDOWN_TAIL,
+  LASER_RANGE,
+  LASER_SLOW_DURATION,
+  LASER_SHOW_DURATION,
+  WALL_BUST_PENALTY_DURATION,
+  WALL_BUST_PENALTY_SPEED,
   NETWORK_TICK_RATE,
   ROOM_CODE_LENGTH,
   COUNTDOWN_SECONDS,
@@ -44,6 +51,7 @@ interface IntentMsg {
   t: "intent";
   lane?: number;
   burst?: boolean;
+  laser?: boolean;
 }
 interface HelloJoinMsg {
   t: "helloJoin";
@@ -108,9 +116,12 @@ interface HostPlayer {
   boostUntil: number;
   burstUntil: number;
   burstsLeft: number;
+  /** Penalty after smashing through a wall; a short-lived partial slow. */
+  wallBustUntil: number;
+  /** Current laser charge 0..1, 1 == ready to fire. */
+  laserCharge: number;
   finished: boolean;
   finishTime: number | null;
-  consumed: Set<number>;
 }
 
 function createRng(seed: number): () => number {
@@ -134,7 +145,7 @@ function buildObstacles(seed: number, variant: TrackVariant): Obstacle[] {
     }
     for (const lane of lanes) {
       const kind: ObstacleKind = rng() < variant.ampRatio ? "amp" : "noise";
-      obstacles.push({ id: id++, kind, lane, z: z + (rng() - 0.5) * 1.4 });
+      obstacles.push({ id: id++, kind, lane, z: z + (rng() - 0.5) * 1.4, alive: true });
     }
   }
   return obstacles;
@@ -156,6 +167,7 @@ let hostWinnerSlot: number | null = null;
 let hostFinishOrder: number[] = [];
 let hostGraceTimer = 0;
 let hostObstacles: Obstacle[] = [];
+let hostBeams: LaserBeam[] = [];
 let hostTrackVariant: TrackVariant = getTrackVariant(null);
 const hostCupStandings = new Map<number, CupStanding>();
 let hostCupOrder: TrackVariant[] = [];
@@ -202,16 +214,24 @@ function buildSnapshot(): GameSnapshot {
       boostUntil: p.boostUntil,
       burstUntil: p.burstUntil,
       burstsLeft: p.burstsLeft,
+      laserCharge: p.laserCharge,
       finished: p.finished,
       finishTime: p.finishTime,
     }));
+  // Only broadcast still-alive obstacles; clients should not render destroyed walls.
+  // Amps stay alive once consumed too, but we purge consumed amps via their absence is
+  // not an issue: amps are single-use but we keep them in the world so everyone sees
+  // them. Walls become !alive when destroyed. Skip dead walls here.
+  const liveObstacles = hostObstacles.filter((o) => o.alive);
+  const visibleBeams = hostBeams.filter((b) => hostTime - b.firedAt <= LASER_SHOW_DURATION);
   return {
     t: hostTime,
     running: hostRunning,
     finished: hostFinished,
     countdown: hostCountdown,
     players,
-    obstacles: hostObstacles,
+    obstacles: liveObstacles,
+    beams: visibleBeams,
     trackLength: hostTrackVariant.trackLength,
     laneCount: LANE_COUNT,
     trackId: hostTrackVariant.id,
@@ -232,6 +252,7 @@ function publishSnapshot(s: GameSnapshot): void {
   if (me) {
     gs.hudProgress = ((me.z / s.trackLength) * 100).toFixed(1);
     gs.hudBursts = me.burstsLeft;
+    gs.hudLaser = Math.max(0, Math.min(1, me.laserCharge));
     const sorted = [...s.players].sort((a, b) => b.z - a.z);
     const place = sorted.findIndex((p) => p.slot === gs.mySlot) + 1;
     gs.hudPlace = String(place);
@@ -257,7 +278,71 @@ function speedFor(p: HostPlayer): number {
   if (hostTime < p.boostUntil) return AMP_BOOST_SPEED;
   let speed = BASE_SPEED;
   if (hostTime < p.slowUntil) speed *= NOISE_SLOW;
+  if (hostTime < p.wallBustUntil) speed *= WALL_BUST_PENALTY_SPEED;
   return speed;
+}
+
+/**
+ * Laser recharge rate scales with trailing position: last place recharges fastest
+ * (catch-up), leader slowest. Returns units of charge per second.
+ */
+function laserRechargeRate(p: HostPlayer): number {
+  if (p.finished) return 0;
+  const players = [...hostPlayers.values()];
+  if (players.length <= 1) return 1 / LASER_COOLDOWN_BASE;
+  const sorted = [...players].sort((a, b) => b.z - a.z);
+  const placeIdx = sorted.findIndex((q) => q.slot === p.slot); // 0 = leader
+  const frac = placeIdx / Math.max(1, sorted.length - 1); // 0 leader .. 1 last
+  const cooldown = LASER_COOLDOWN_BASE + (LASER_COOLDOWN_TAIL - LASER_COOLDOWN_BASE) * frac;
+  return 1 / cooldown;
+}
+
+function fireLaser(p: HostPlayer): boolean {
+  if (p.finished) return false;
+  if (p.laserCharge < 1) return false;
+  if (hostTime < (hostCountdown > 0 ? Infinity : 0)) return false;
+  // Find the nearest target in the same lane and ahead, within range.
+  let beamToZ = p.z + LASER_RANGE;
+  // Walls along the beam path: destroy every alive wall in the lane up to first player hit.
+  let firstPlayerHitZ = Infinity;
+  for (const other of hostPlayers.values()) {
+    if (other.slot === p.slot) continue;
+    if (other.finished) continue;
+    if (other.lane !== p.lane) continue;
+    if (other.z <= p.z) continue;
+    if (other.z - p.z > LASER_RANGE) continue;
+    if (other.z < firstPlayerHitZ) firstPlayerHitZ = other.z;
+  }
+  const cutoff = Math.min(beamToZ, firstPlayerHitZ);
+  // Destroy alive walls before the cutoff point (amps are unaffected).
+  for (const obs of hostObstacles) {
+    if (!obs.alive) continue;
+    if (obs.kind !== "noise") continue;
+    if (obs.lane !== p.lane) continue;
+    if (obs.z <= p.z) continue;
+    if (obs.z > cutoff) continue;
+    obs.alive = false;
+  }
+  // Apply slow to the first player in the beam's path.
+  if (firstPlayerHitZ !== Infinity) {
+    for (const other of hostPlayers.values()) {
+      if (other.lane === p.lane && other.z === firstPlayerHitZ && !other.finished) {
+        other.slowUntil = Math.max(other.slowUntil, hostTime + LASER_SLOW_DURATION);
+        pushLog(`${p.name} lased ${other.name}.`, "good");
+        break;
+      }
+    }
+    beamToZ = firstPlayerHitZ;
+  }
+  p.laserCharge = 0;
+  hostBeams.push({
+    slot: p.slot,
+    fromZ: p.z,
+    toZ: beamToZ,
+    lane: p.lane,
+    firedAt: hostTime,
+  });
+  return true;
 }
 
 function hostTick(dt: number): void {
@@ -268,6 +353,11 @@ function hostTick(dt: number): void {
     return;
   }
 
+  // Prune expired beams (anything older than the show duration).
+  if (hostBeams.length > 0) {
+    hostBeams = hostBeams.filter((b) => hostTime - b.firedAt <= LASER_SHOW_DURATION);
+  }
+
   for (const p of hostPlayers.values()) {
     if (p.finished) continue;
     if (p.lane !== p.targetLane) p.lane = clampLane(p.lane + Math.sign(p.targetLane - p.lane));
@@ -275,15 +365,23 @@ function hostTick(dt: number): void {
     p.z = Math.min(hostTrackVariant.trackLength, p.z + speedFor(p) * dt);
 
     for (const obs of hostObstacles) {
-      if (p.consumed.has(obs.id)) continue;
+      if (!obs.alive) continue;
       if (obs.lane !== p.lane) continue;
       if (obs.z < prevZ - 0.4 || obs.z > p.z + 0.4) continue;
-      p.consumed.add(obs.id);
       if (obs.kind === "amp") {
+        // Amps are first-come-first-served; once picked up they're gone for everyone.
+        obs.alive = false;
         p.boostUntil = Math.max(p.boostUntil, hostTime + AMP_DURATION);
       } else {
-        p.slowUntil = Math.max(p.slowUntil, hostTime + NOISE_DURATION);
+        // Wall: player smashes through, wall destroyed globally, speed penalty applied.
+        obs.alive = false;
+        p.wallBustUntil = Math.max(p.wallBustUntil, hostTime + WALL_BUST_PENALTY_DURATION);
       }
+    }
+
+    // Laser recharge.
+    if (p.laserCharge < 1) {
+      p.laserCharge = Math.min(1, p.laserCharge + laserRechargeRate(p) * dt);
     }
 
     if (!p.finished && p.z >= hostTrackVariant.trackLength) {
@@ -419,6 +517,7 @@ function resetRoundState(variant: TrackVariant): void {
   gs.activeTrackId = hostTrackVariant.id;
   const seed = (Math.random() * 0xffffffff) >>> 0;
   hostObstacles = buildObstacles(seed, hostTrackVariant);
+  hostBeams = [];
   hostTime = 0;
   hostCountdown = COUNTDOWN_SECONDS;
   hostRunning = true;
@@ -439,9 +538,10 @@ function resetRoundState(variant: TrackVariant): void {
     p.boostUntil = 0;
     p.burstUntil = 0;
     p.burstsLeft = BURST_CHARGES;
+    p.wallBustUntil = 0;
+    p.laserCharge = 0;
     p.finished = false;
     p.finishTime = null;
-    p.consumed = new Set();
   });
 }
 
@@ -503,9 +603,10 @@ function handleHostMessage(msg: HostMsg, fromId: string): void {
       boostUntil: 0,
       burstUntil: 0,
       burstsLeft: BURST_CHARGES,
+      wallBustUntil: 0,
+      laserCharge: 0,
       finished: false,
       finishTime: null,
-      consumed: new Set(),
     });
     if (c && c.open) c.send({ t: "hello", slot });
     gs.lobbyPlayers = lobbyPlayersList();
@@ -520,6 +621,9 @@ function handleHostMessage(msg: HostMsg, fromId: string): void {
     if (msg.burst && p.burstsLeft > 0 && hostTime >= p.burstUntil) {
       p.burstsLeft -= 1;
       p.burstUntil = hostTime + BURST_DURATION;
+    }
+    if (msg.laser && hostCountdown <= 0 && hostRunning) {
+      fireLaser(p);
     }
   }
 }
@@ -588,6 +692,7 @@ function resetNet(): void {
   isHost = false;
   myId = null;
   hostObstacles = [];
+  hostBeams = [];
   hostTrackVariant = getTrackVariant(null);
   hostCupStandings.clear();
   hostCupOrder = [];
@@ -634,9 +739,10 @@ export function hostGame(name: string): void {
       boostUntil: 0,
       burstUntil: 0,
       burstsLeft: BURST_CHARGES,
+      wallBustUntil: 0,
+      laserCharge: 0,
       finished: false,
       finishTime: null,
-      consumed: new Set(),
     });
     gs.slotLabel = "P1";
     gs.pendingLane = Math.floor(LANE_COUNT / 2);
@@ -702,17 +808,27 @@ function triggerBurst(): void {
   sendToHost({ t: "intent", burst: true });
 }
 
+function triggerLaser(): void {
+  sendToHost({ t: "intent", laser: true });
+}
+
 function handleKeyDown(e: KeyboardEvent): void {
   if (!gs.snapshot?.running) return;
   if (e.code === "ArrowLeft" || e.code === "KeyA") {
     e.preventDefault();
-    setLane(gs.pendingLane - 1);
+    // Chase camera looks from -Z toward +Z, which flips world X on screen:
+    // world +X appears on screen LEFT, world -X on screen RIGHT. Lanes increase with +X.
+    // So "screen left" must correspond to increasing lane index.
+    setLane(gs.pendingLane + 1);
   } else if (e.code === "ArrowRight" || e.code === "KeyD") {
     e.preventDefault();
-    setLane(gs.pendingLane + 1);
+    setLane(gs.pendingLane - 1);
   } else if (e.code === "Space") {
     e.preventDefault();
     triggerBurst();
+  } else if (e.code === "KeyF" || e.code === "ShiftLeft" || e.code === "ShiftRight") {
+    e.preventDefault();
+    triggerLaser();
   }
 }
 

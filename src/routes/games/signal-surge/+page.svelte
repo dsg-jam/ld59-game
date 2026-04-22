@@ -235,6 +235,12 @@
       <div class="chip">PLACE <b>{gs.hudPlace}/{gs.hudTotal}</b></div>
       <div class="chip">PROGRESS <b>{gs.hudProgress}%</b></div>
       <div class="chip">BURSTS <b>{gs.hudBursts}</b></div>
+      <div class="chip laser" class:ready={gs.hudLaser >= 1}>
+        LASER
+        <span class="bar" aria-hidden="true">
+          <span class="fill" style:width={`${Math.round(gs.hudLaser * 100)}%`}></span>
+        </span>
+      </div>
       {#if gs.cupTotalTracks > 0}
         <div class="chip">
           TRACK <b>{gs.cupTrackIndex + 1}/{gs.cupTotalTracks}</b>
@@ -249,6 +255,7 @@
       <span><kbd>←</kbd>/<kbd>A</kbd></span>
       <span><kbd>→</kbd>/<kbd>D</kbd></span>
       <span><kbd>SPACE</kbd> burst</span>
+      <span><kbd>F</kbd>/<kbd>SHIFT</kbd> laser</span>
     </div>
 
     <div class="log-panel" role="log" aria-live="polite">

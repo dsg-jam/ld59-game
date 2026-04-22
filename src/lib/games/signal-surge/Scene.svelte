@@ -7,6 +7,7 @@
   import {
     LANE_COUNT,
     LANE_WIDTH,
+    LASER_SHOW_DURATION,
     centerlineSlope,
     centerlineX,
     getTrackVariant,
@@ -35,6 +36,10 @@
   let lookY = 0.8;
   let lookZ = 6;
   let cameraRef = $state<THREE.PerspectiveCamera>(new THREE.PerspectiveCamera());
+  // Lingering boost "kick" — drives brief screen shake when boost/burst begins.
+  // These are local tick state, not reactive.
+  let boostShake = 0;
+  let prevBoosted = false;
 
   interface Smoothed {
     z: number;
@@ -124,6 +129,14 @@
       smoothed.clear();
     }
 
+    // Screen-shake decay; triggers on boost/burst rising edge.
+    const me = renderedPlayers.find((p) => p.slot === gs.mySlot);
+    const nowT = snap?.t ?? 0;
+    const meBoosted = me ? nowT < me.boostUntil || nowT < me.burstUntil : false;
+    if (meBoosted && !prevBoosted) boostShake = 1;
+    prevBoosted = meBoosted;
+    boostShake = Math.max(0, boostShake - dt * 4);
+
     // Camera: follow curve tangent for a proper chase cam on bends.
     let targetCamX: number;
     let targetCamY: number;
@@ -131,13 +144,14 @@
     let targetLookX: number;
     let targetLookY: number;
     let targetLookZ: number;
-    const me = renderedPlayers.find((p) => p.slot === gs.mySlot);
     if (me) {
       const behind = worldPosForLane(me.renderZ - 7.5, me.renderLaneX, variant);
       const ahead = worldPosForLane(me.renderZ + 6, me.renderLaneX, variant);
+      // Pull camera slightly back & higher during boost for FOV-ish feel.
+      const boostPush = meBoosted ? 1.3 : 0;
       targetCamX = behind.x;
-      targetCamY = 5.2;
-      targetCamZ = behind.z;
+      targetCamY = 5.2 + (meBoosted ? 0.2 : 0);
+      targetCamZ = behind.z - boostPush;
       targetLookX = ahead.x;
       targetLookY = 0.8;
       targetLookZ = ahead.z;
@@ -161,7 +175,11 @@
     lookZ += (targetLookZ - lookZ) * easeLook;
 
     if (cameraRef) {
-      cameraRef.position.set(camX, camY, camZ);
+      // Apply short-lived shake on top of eased cam.
+      const shakeAmp = boostShake * 0.18;
+      const shakeX = Math.sin(pulseT * 80) * shakeAmp;
+      const shakeY = Math.cos(pulseT * 73) * shakeAmp;
+      cameraRef.position.set(camX + shakeX, camY + shakeY, camZ);
       cameraRef.lookAt(lookX, lookY, lookZ);
     }
   });
@@ -310,13 +328,87 @@
     return out;
   }
 
+  interface SkylineItem {
+    id: number;
+    x: number;
+    z: number;
+    height: number;
+    width: number;
+  }
+  function buildSkyline(v: TrackVariant): SkylineItem[] {
+    // Distant silhouette elements so each theme reads distinctly in the background.
+    const out: SkylineItem[] = [];
+    const rng = (() => {
+      let s = 0x9e3779b1;
+      // Mix in the variant id for stable per-theme skyline layout.
+      for (let i = 0; i < v.id.length; i += 1) s = Math.imul(s ^ v.id.charCodeAt(i), 0x85ebca6b);
+      return () => {
+        s = Math.imul(s ^ (s >>> 13), 0xc2b2ae35);
+        s = (s + 0x165667b1) | 0;
+        return ((s >>> 0) % 10000) / 10000;
+      };
+    })();
+    const offsetBase = TRACK_HALF_WIDTH + 14;
+    let id = 0;
+    for (let z = -20; z < v.trackLength + 20; z += 6 + rng() * 4) {
+      for (const side of [-1, 1]) {
+        const jitter = rng() * 6;
+        const pos = worldPosForLane(z, side * (offsetBase + jitter), v);
+        out.push({
+          id: id++,
+          x: pos.x,
+          z: pos.z,
+          height: 4 + rng() * 18,
+          width: 1.4 + rng() * 2.2,
+        });
+      }
+    }
+    return out;
+  }
+
   const trackGeos = $derived(getTrackGeos(activeVariant));
   const railSegments = $derived(buildRailSegments(activeVariant));
   const markerSegments = $derived(buildMarkers(activeVariant));
   const trackProps = $derived(buildProps(activeVariant));
   const trackArches = $derived(buildArches(activeVariant));
+  const skyline = $derived(buildSkyline(activeVariant));
   const startPos = $derived(worldPosForLane(0, 0, activeVariant));
   const finishPos = $derived(worldPosForLane(activeVariant.trackLength, 0, activeVariant));
+
+  interface RenderedBeam {
+    key: string;
+    slot: number;
+    fromZ: number;
+    toZ: number;
+    lane: number;
+    firedAt: number;
+    alpha: number;
+  }
+  const renderedBeams = $derived.by(() => {
+    const snap = gs.snapshot;
+    if (!snap) return [] as RenderedBeam[];
+    return snap.beams
+      .map((b, idx) => {
+        const age = snap.t - b.firedAt;
+        const alpha = Math.max(0, 1 - age / LASER_SHOW_DURATION);
+        return {
+          key: `${b.slot}-${b.firedAt}-${idx}`,
+          slot: b.slot,
+          fromZ: b.fromZ,
+          toZ: b.toZ,
+          lane: b.lane,
+          firedAt: b.firedAt,
+          alpha,
+        };
+      })
+      .filter((b) => b.alpha > 0.01);
+  });
+
+  function colorForSlot(slot: number): number {
+    const snap = gs.snapshot;
+    const p = snap?.players.find((q) => q.slot === slot);
+    return p ? colorToHex(p.color) : 0xffffff;
+  }
 </script>
 
 <T.PerspectiveCamera bind:ref={cameraRef} makeDefault fov={62} near={0.1} far={500} />
@@ -337,6 +429,46 @@
   shadow.camera.bottom={-30}
 />
 <T.HemisphereLight args={[0x3344aa, 0x050510, 0.4]} />
+
+<!-- Theme-specific ambient accent (tints the scene subtly per variant) -->
+<T.PointLight
+  color={activeVariant.glowColor}
+  intensity={0.6}
+  distance={180}
+  decay={1.6}
+  position={[0, 30, activeVariant.trackLength / 2]}
+/>
+
+<!-- Distant skyline silhouettes — a simple backdrop that differs per theme -->
+{#each skyline as s (s.id)}
+  <T.Mesh position={[s.x, s.height / 2, s.z]}>
+    <T.BoxGeometry args={[s.width, s.height, s.width]} />
+    {#if activeVariant.theme === "solar-flare" || activeVariant.theme === "volcanic"}
+      <T.MeshStandardMaterial
+        color={activeVariant.accentColor}
+        emissive={activeVariant.glowColor}
+        emissiveIntensity={0.25}
+        roughness={0.9}
+      />
+    {:else if activeVariant.theme === "emerald-grid"}
+      <T.MeshBasicMaterial color={activeVariant.accentColor} transparent opacity={0.8} />
+    {:else if activeVariant.theme === "deep-ocean"}
+      <T.MeshStandardMaterial
+        color={activeVariant.accentColor}
+        emissive={activeVariant.glowColor}
+        emissiveIntensity={0.18}
+        roughness={0.85}
+      />
+    {:else}
+      <T.MeshStandardMaterial
+        color={activeVariant.accentColor}
+        emissive={activeVariant.railColor}
+        emissiveIntensity={0.12}
+        roughness={0.75}
+      />
+    {/if}
+  </T.Mesh>
+{/each}
 
 <!-- Continuous curved track surface -->
 <T.Mesh receiveShadow geometry={trackGeos.track}>
@@ -469,6 +601,34 @@
         <T.CylinderGeometry args={[0.05, 0.07, 1.6, 8]} />
         <T.MeshStandardMaterial color={activeVariant.accentColor} roughness={0.6} />
       </T.Mesh>
+    {:else if activeVariant.propStyle === "monolith"}
+      <T.Mesh position={[0, 1.8, 0]}>
+        <T.BoxGeometry args={[0.6, 3.6, 0.35]} />
+        <T.MeshStandardMaterial
+          color={activeVariant.accentColor}
+          emissive={activeVariant.propColor}
+          emissiveIntensity={0.28 + Math.abs(Math.sin(pulseT * 1.3 + prop.id * 0.4)) * 0.25}
+          roughness={0.4}
+        />
+      </T.Mesh>
+      <T.Mesh position={[0, 0.15, 0]}>
+        <T.BoxGeometry args={[0.9, 0.12, 0.6]} />
+        <T.MeshStandardMaterial color={activeVariant.accentColor} roughness={0.6} />
+      </T.Mesh>
+    {:else if activeVariant.propStyle === "spire"}
+      <T.Mesh position={[0, 1.8, 0]} rotation.z={Math.sin(prop.id * 0.3) * 0.08}>
+        <T.ConeGeometry args={[0.18, 3.6, 6]} />
+        <T.MeshStandardMaterial
+          color={activeVariant.propColor}
+          emissive={activeVariant.propColor}
+          emissiveIntensity={0.7 + Math.sin(pulseT * 2 + prop.id) * 0.35}
+          roughness={0.35}
+        />
+      </T.Mesh>
+      <T.Mesh position={[0, 0.25, 0]}>
+        <T.ConeGeometry args={[0.55, 0.5, 6]} />
+        <T.MeshStandardMaterial color={activeVariant.accentColor} roughness={0.7} />
+      </T.Mesh>
     {:else}
       <T.Mesh position={[0, 2.2, 0]}>
         <T.BoxGeometry args={[0.45, 4.4, 0.45]} />
@@ -529,7 +689,7 @@
 
 {#if currentSnapshot}
   {@const snap = currentSnapshot}
-  <!-- Obstacles -->
+  <!-- Obstacles (only alive ones are sent over the wire) -->
   {#each snap.obstacles as obs (obs.id)}
     {@const ox = laneToX(obs.lane)}
     {@const wp = worldPosForLane(obs.z, ox, activeVariant)}
@@ -580,10 +740,46 @@
     {/if}
   {/each}
 
+  <!-- Laser beams -->
+  {#each renderedBeams as beam (beam.key)}
+    {@const laneX = laneToX(beam.lane)}
+    {@const mid = (beam.fromZ + beam.toZ) / 2}
+    {@const midPos = worldPosForLane(mid, laneX, activeVariant)}
+    {@const beamColor = colorForSlot(beam.slot)}
+    {@const beamLength = Math.max(0.1, beam.toZ - beam.fromZ)}
+    <T.Group position={[midPos.x, 0.85, midPos.z]} rotation.y={midPos.angleY}>
+      <T.Mesh>
+        <T.BoxGeometry args={[0.18, 0.18, beamLength]} />
+        <T.MeshBasicMaterial
+          color={beamColor}
+          transparent
+          opacity={0.85 * beam.alpha}
+          depthWrite={false}
+        />
+      </T.Mesh>
+      <T.Mesh>
+        <T.BoxGeometry args={[0.55, 0.55, beamLength]} />
+        <T.MeshBasicMaterial
+          color={beamColor}
+          transparent
+          opacity={0.25 * beam.alpha}
+          depthWrite={false}
+        />
+      </T.Mesh>
+      <T.PointLight
+        color={beamColor}
+        intensity={2.4 * beam.alpha}
+        distance={Math.min(18, beamLength * 0.8)}
+        decay={2}
+      />
+    </T.Group>
+  {/each}
+
   <!-- Players -->
   {#each renderedPlayers as player (player.slot)}
     {@const color = colorToHex(player.color)}
     {@const boosted = snap.t < player.boostUntil || snap.t < player.burstUntil}
+    {@const bursting = snap.t < player.burstUntil}
     {@const slowed = snap.t < player.slowUntil}
     {@const hover = 0.75 + Math.sin(pulseT * 6 + player.slot) * 0.08}
     <T.Group position={[player.worldX, hover, player.worldZ]} rotation.y={player.angleY}>
@@ -592,7 +788,7 @@
         <T.MeshStandardMaterial
           {color}
           emissive={color}
-          emissiveIntensity={boosted ? 1.4 : 0.55}
+          emissiveIntensity={boosted ? 1.8 + Math.sin(pulseT * 18 + player.slot) * 0.4 : 0.55}
           roughness={0.25}
           metalness={0.3}
         />
@@ -602,16 +798,38 @@
         <T.MeshStandardMaterial
           {color}
           emissive={color}
-          emissiveIntensity={boosted ? 1.9 : 0.9}
+          emissiveIntensity={boosted ? 2.2 : 0.9}
           transparent
           opacity={0.8}
         />
       </T.Mesh>
       {#if boosted}
+        <!-- Big glowing exhaust cone during boost -->
         <T.Mesh position={[0, 0, -1.2]} rotation.x={Math.PI / 2}>
-          <T.ConeGeometry args={[0.24, 1.3, 12]} />
-          <T.MeshBasicMaterial {color} transparent opacity={0.55} depthWrite={false} />
+          <T.ConeGeometry args={[bursting ? 0.32 : 0.24, bursting ? 1.9 : 1.3, 12]} />
+          <T.MeshBasicMaterial {color} transparent opacity={0.65} depthWrite={false} />
         </T.Mesh>
+        <!-- Particle trail: evenly spaced puffs behind the craft -->
+        {#each [1, 2, 3, 4, 5] as i (i)}
+          {@const fade = 1 - i / 6}
+          {@const wob = Math.sin(pulseT * 14 + player.slot + i) * 0.08}
+          <T.Mesh position={[wob, -0.1 - wob * 0.4, -1.2 - i * 0.55]}>
+            <T.SphereGeometry args={[0.15 + fade * 0.15, 8, 8]} />
+            <T.MeshBasicMaterial
+              {color}
+              transparent
+              opacity={fade * (bursting ? 0.75 : 0.55)}
+              depthWrite={false}
+            />
+          </T.Mesh>
+        {/each}
+        <!-- Streaks / speed lines -->
+        {#each [-1, 1] as s (s)}
+          <T.Mesh position={[s * 0.45, 0, -0.9]} rotation.x={Math.PI / 2}>
+            <T.BoxGeometry args={[0.04, 0.04, bursting ? 2.6 : 1.8]} />
+            <T.MeshBasicMaterial {color} transparent opacity={0.75} depthWrite={false} />
+          </T.Mesh>
+        {/each}
       {/if}
       {#if slowed}
         <T.Mesh position={[0, 0, 0]}>
@@ -625,7 +843,7 @@
           <T.MeshBasicMaterial {color} transparent opacity={0.8} depthWrite={false} />
         </T.Mesh>
       {/if}
-      <T.PointLight {color} intensity={boosted ? 2.6 : 1.3} distance={7} decay={2} />
+      <T.PointLight {color} intensity={boosted ? 3.6 : 1.3} distance={boosted ? 10 : 7} decay={2} />
     </T.Group>
   {/each}
 {/if}

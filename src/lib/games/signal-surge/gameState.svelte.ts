@@ -23,6 +23,7 @@ type GameStateType = {
   pendingLane: number;
   hudProgress: string;
   hudBursts: number;
+  hudLaser: number;
   hudPlace: string;
   hudTotal: number;
   selectedTrackId: string;
@@ -55,6 +56,7 @@ export const gs: GameStateType = $state({
   pendingLane: 2,
   hudProgress: "0.0",
   hudBursts: 0,
+  hudLaser: 0,
   hudPlace: "-",
   hudTotal: 0,
   selectedTrackId: DEFAULT_TRACK_ID,
@@ -93,6 +95,7 @@ export function resetState(): void {
   gs.pendingLane = 2;
   gs.hudProgress = "0.0";
   gs.hudBursts = 0;
+  gs.hudLaser = 0;
   gs.hudPlace = "-";
   gs.hudTotal = 0;
   gs.activeTrackId = DEFAULT_TRACK_ID;
