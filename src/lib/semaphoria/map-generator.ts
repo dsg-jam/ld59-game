@@ -1,5 +1,11 @@
-import { GRID_COLS, GRID_ROWS, DIFFICULTY_CONFIG } from "./constants";
-import type { Difficulty } from "./constants";
+import {
+  GRID_COLS,
+  GRID_ROWS,
+  DIFFICULTY_CONFIG,
+  RESCUE_VARIANTS,
+  WRECKS_PER_DIFFICULTY,
+} from "./constants";
+import type { Difficulty, RescueVariant } from "./constants";
 
 // ── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -13,6 +19,20 @@ export interface Tile {
   onPath: boolean;
 }
 
+/**
+ * A single shipwreck placed along the route.  The captain must sail within
+ * {@link WRECK_RESCUE_DIST} to rescue the survivor aboard.
+ *
+ * The keeper sees the {@link variant} in the map panel so they can tell the
+ * captain *who* they're saving (flavour + coordination).
+ */
+export interface Shipwreck {
+  id: number;
+  x: number;
+  y: number;
+  variant: RescueVariant;
+}
+
 export interface GameMap {
   cols: number;
   rows: number;
@@ -24,6 +44,8 @@ export interface GameMap {
   harborY: number;
   /** Ordered sequence of tile coordinates forming the safe path, start → harbor. */
   path: readonly { x: number; y: number }[];
+  /** Shipwrecks the captain must reach — ordered start → harbor along the path. */
+  wrecks: readonly Shipwreck[];
 }
 
 // ── SEEDED RNG ────────────────────────────────────────────────────────────────
@@ -168,5 +190,57 @@ export function generateMap(seed: number, difficulty: Difficulty): GameMap {
   const harborTile = tiles[harborY]?.[harborX];
   if (harborTile) harborTile.type = "harbor";
 
-  return { cols, rows, tiles, startX, startY, harborX, harborY, path };
+  // Place shipwrecks along the path, evenly spaced, skipping the first/last tiles
+  // (safer to spawn away from start/harbor so rescue and harbor checks don't alias).
+  const wrecks = generateWrecks(path, difficulty, rng);
+
+  return { cols, rows, tiles, startX, startY, harborX, harborY, path, wrecks };
+}
+
+/**
+ * Pick roughly-evenly-spaced tiles along the path and assign each a unique
+ * rescue variant drawn from {@link RESCUE_VARIANTS}.  The first and last
+ * path tiles (start and harbor) are never used.
+ */
+function generateWrecks(
+  path: readonly { x: number; y: number }[],
+  difficulty: Difficulty,
+  rng: () => number
+): Shipwreck[] {
+  const count = WRECKS_PER_DIFFICULTY[difficulty];
+  // Need at least 3 path tiles to fit any wreck (start + 1 middle + harbor)
+  if (path.length < 3 || count <= 0) return [];
+
+  // Sample indices strictly between 1 and path.length - 2, evenly spaced,
+  // with a small deterministic jitter so two seeds at the same difficulty
+  // don't always pick identical path-indices.
+  const wrecks: Shipwreck[] = [];
+  const taken = new Set<string>();
+  const variants = shuffle([...RESCUE_VARIANTS], rng);
+  for (let i = 0; i < count; i += 1) {
+    const baseFraction = (i + 1) / (count + 1);
+    const jitter = (rng() - 0.5) * (1 / (count + 1)) * 0.5;
+    const frac = Math.min(0.95, Math.max(0.05, baseFraction + jitter));
+    const idx = Math.max(1, Math.min(path.length - 2, Math.round(frac * (path.length - 1))));
+    const pt = path[idx];
+    if (!pt) continue;
+    const key = `${pt.x},${pt.y}`;
+    if (taken.has(key)) continue;
+    taken.add(key);
+    const variant = variants[i % variants.length] ?? "sailor";
+    wrecks.push({ id: i, x: pt.x, y: pt.y, variant });
+  }
+  return wrecks;
+}
+
+function shuffle<T>(arr: T[], rng: () => number): T[] {
+  for (let i = arr.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(rng() * (i + 1));
+    const a = arr[i];
+    const b = arr[j];
+    if (a === undefined || b === undefined) continue;
+    arr[i] = b;
+    arr[j] = a;
+  }
+  return arr;
 }

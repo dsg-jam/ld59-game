@@ -16,6 +16,7 @@ import {
   moveShip,
   checkCollision,
   checkHarborReached,
+  findRescueableWreck,
   isNearReef,
   getRevealedTileKeys,
 } from "./navigation";
@@ -48,6 +49,8 @@ export interface GameStats {
   timeTaken: number;
   signalsSent: number;
   nearMisses: number;
+  wrecksRescued: number;
+  wrecksTotal: number;
   result: "success" | "failure";
 }
 
@@ -71,6 +74,10 @@ export interface GameState {
   nearMisses: number;
   /** Whether the ship was near a reef last tick (for tracking near-misses). */
   wasNearReef: boolean;
+  /** IDs of shipwrecks the captain has sailed close enough to rescue. */
+  rescuedWreckIds: ReadonlySet<number>;
+  /** ID of the most recently rescued wreck (for UI / audio cues). */
+  lastRescuedWreckId: number | null;
   seed: number;
   difficulty: Difficulty;
 }
@@ -92,6 +99,8 @@ export function createInitialState(seed: number, difficulty: Difficulty): GameSt
     signalsSent: 0,
     nearMisses: 0,
     wasNearReef: false,
+    rescuedWreckIds: new Set<number>(),
+    lastRescuedWreckId: null,
     seed,
     difficulty,
   };
@@ -198,9 +207,33 @@ function tickPlaying(state: GameState, dt: number, input: CaptainInput): GameSta
     return { ...state, ship, timeRemaining, phase: "failure" };
   }
 
-  // Harbor reached → success
+  // Rescue any wreck we drifted near — do this before harbor check so a wreck
+  // placed one tile short of the harbor still counts.
+  let rescuedWreckIds = state.rescuedWreckIds;
+  let lastRescuedWreckId = state.lastRescuedWreckId;
+  const newWreck = findRescueableWreck(ship, state.map.wrecks, rescuedWreckIds);
+  if (newWreck) {
+    const next = new Set(rescuedWreckIds);
+    next.add(newWreck.id);
+    rescuedWreckIds = next;
+    lastRescuedWreckId = newWreck.id;
+  }
+
+  // Harbor reached → success only if every wreck has been rescued.
+  // Otherwise the harbour is "closed" until the ship finishes the rescue sweep;
+  // the captain can still drift over it but the round doesn't end.
   if (checkHarborReached(ship, state.map)) {
-    return { ...state, ship, timeRemaining, phase: "success" };
+    if (rescuedWreckIds.size >= state.map.wrecks.length) {
+      return {
+        ...state,
+        ship,
+        timeRemaining,
+        phase: "success",
+        rescuedWreckIds,
+        lastRescuedWreckId,
+      };
+    }
+    // Fall through: rescue sweep incomplete, keep sailing.
   }
 
   // Track near-misses (entering danger zone for the first time counts as one)
@@ -221,6 +254,8 @@ function tickPlaying(state: GameState, dt: number, input: CaptainInput): GameSta
     nearMisses,
     wasNearReef: nearReef,
     revealedTileKeys,
+    rescuedWreckIds,
+    lastRescuedWreckId,
   };
 }
 
@@ -301,6 +336,8 @@ export function deriveStats(state: GameState): GameStats {
     timeTaken: config.timerS - state.timeRemaining,
     signalsSent: state.signalsSent,
     nearMisses: state.nearMisses,
+    wrecksRescued: state.rescuedWreckIds.size,
+    wrecksTotal: state.map.wrecks.length,
     result: state.phase === "success" ? "success" : "failure",
   };
 }
@@ -308,6 +345,20 @@ export function deriveStats(state: GameState): GameStats {
 /** Get the current flash signal colour, or null when dark. */
 export function getCurrentFlashColor(state: GameState): SigColor | null {
   return state.activeFlash?.flash?.color ?? null;
+}
+
+/**
+ * Mark a wreck as rescued on a replica state (keeper side).  No-op if the
+ * wreck is unknown or already rescued; returns the original state reference
+ * in that case so effects / reactive updates don't re-fire needlessly.
+ */
+export function markWreckRescued(state: GameState, wreckId: number): GameState {
+  if (state.rescuedWreckIds.has(wreckId)) return state;
+  const known = state.map.wrecks.some((w) => w.id === wreckId);
+  if (!known) return state;
+  const next = new Set(state.rescuedWreckIds);
+  next.add(wreckId);
+  return { ...state, rescuedWreckIds: next, lastRescuedWreckId: wreckId };
 }
 
 export { encodeSignal };

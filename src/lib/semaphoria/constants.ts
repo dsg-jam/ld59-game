@@ -52,6 +52,32 @@ export const SIG_COOLDOWN = 2.5;
 /** Distance in tiles to the nearest reef that triggers audio proximity warning. */
 export const PROXIMITY_WARN_DIST = 2.0;
 
+// ── SHIPWRECKS ────────────────────────────────────────────────────────────────
+
+/** Distance in tiles at which the captain can rescue survivors from a wreck. */
+export const WRECK_RESCUE_DIST = 1.2;
+
+/** Number of shipwrecks scattered along the route per difficulty. */
+export const WRECKS_PER_DIFFICULTY: readonly [number, number, number] = [2, 3, 4];
+
+/**
+ * Rescue-variant identifiers.  Each wreck is assigned one; the keeper sees
+ * the variant in the map panel so they can tell the captain *who* to rescue.
+ */
+export const RESCUE_VARIANTS = ["sailor", "child", "doctor", "merchant", "cat", "scholar"] as const;
+
+export type RescueVariant = (typeof RESCUE_VARIANTS)[number];
+
+/** Label shown to the keeper for each variant. */
+export const RESCUE_VARIANT_LABEL: Record<RescueVariant, string> = {
+  sailor: "Stranded sailor",
+  child: "Lost child",
+  doctor: "Ship's doctor",
+  merchant: "Merchant with cargo",
+  cat: "Ship's cat",
+  scholar: "Wandering scholar",
+};
+
 // ── SIGNAL COLORS ─────────────────────────────────────────────────────────────
 
 /** Hex color values for lighthouse beam signal colours. */
