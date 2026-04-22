@@ -69,6 +69,19 @@ interface Hold {
   untilTick: number;
 }
 
+interface Ghost {
+  // Visual-only signal used to animate a pulse reaching a sink or fading at
+  // a dead-end. Born at wall-clock ms `bornAt`; removed after `lifespanMs`.
+  x: number;
+  y: number;
+  prevX: number;
+  prevY: number;
+  value: number;
+  bornAt: number; // Date.now() when created
+  lifespanMs: number; // total ms to live
+  fade: boolean;
+}
+
 interface Cell {
   x: number;
   y: number;
@@ -91,7 +104,9 @@ interface GameState {
   results: Record<string, number[]>;
   status: string;
   holds: Hold[];
+  ghosts: Ghost[];
   lastTickAt: number;
+  lastSolveDialog: number; // last level idx we popped the dialog for
 }
 
 // ---------------- Constants ----------------
@@ -161,7 +176,9 @@ const state: GameState = {
   results: {}, // sinkKey -> received[]
   status: "IDLE",
   holds: [],
+  ghosts: [],
   lastTickAt: 0,
+  lastSolveDialog: -1,
 };
 
 // Load progress
@@ -326,6 +343,8 @@ function loadLevel(idx: number) {
   state.selected = null;
   state.results = {};
   state.status = "IDLE";
+  state.ghosts = [];
+  state.lastSolveDialog = -1;
   resetSinks();
 
   $("hud-level").textContent = String(idx + 1).padStart(2, "0");
@@ -408,9 +427,13 @@ function renderPalette() {
   wrap.innerHTML = "";
   PALETTE_DEFS.forEach((p) => {
     const count = state.bin[p.key] ?? 0;
+    const allowed = canPlayerUseTool(mp.me?.id, p.key);
     const div = document.createElement("div");
     div.className =
-      "part" + (state.tool === p.key ? " active" : "") + (count <= 0 ? " depleted" : "");
+      "part" +
+      (state.tool === p.key ? " active" : "") +
+      (count <= 0 ? " depleted" : "") +
+      (!allowed ? " locked" : "");
     let icon = p.icon;
     let label = p.label;
     if (p.key === "pipe") {
@@ -418,9 +441,14 @@ function renderPalette() {
       icon = sh.glyph;
       label = `WIRE · ${sh.name}`;
     }
-    div.innerHTML = `<span class="icon">${icon}</span>${label}<span class="count">${count}</span>`;
+    const lock = allowed ? "" : '<span class="lock" title="Assigned to another operator">🔒</span>';
+    div.innerHTML = `<span class="icon">${icon}</span>${label}<span class="count">${count}</span>${lock}`;
     div.onclick = () => {
       if (count <= 0) return;
+      if (!allowed) {
+        Audio.hit();
+        return;
+      }
       Audio.click();
       if (state.tool === p.key && p.key === "pipe") {
         state.toolPipeShape = (state.toolPipeShape + 1) % PIPE_SHAPES.length;
@@ -457,6 +485,56 @@ function renderPalette() {
 }
 
 // ---------------- Inspector ----------------
+function renderStationInspector(sel: Cell, t: Tile): string {
+  if (!state.level) return "";
+  // Find the level definition for this tile.
+  if (t.type === "source") {
+    const src = state.level.fixed.find(
+      (f): f is Source => f.kind === "source" && f.x === sel.x && f.y === sel.y
+    );
+    if (!src) return "";
+    const emittedIdx = t._emittedIdx ?? 0;
+    const pills = src.seq
+      .map((v, i) => {
+        const cls = i < emittedIdx ? "sent" : "pending";
+        return `<span class="seq-pill ${cls}">${v}</span>`;
+      })
+      .join("");
+    return `
+      <div class="insp-title">TX @ (${sel.x}, ${sel.y})</div>
+      <div class="insp-row"><label>DIR</label><span>${DIR_NAMES[src.dir] ?? "?"}</span></div>
+      <div class="insp-row"><label>PERIOD</label><span>${src.period} tick${src.period === 1 ? "" : "s"}</span></div>
+      <div class="insp-row"><label>OFFSET</label><span>${src.offset}</span></div>
+      <div class="insp-row"><label>LOOP</label><span>${src.loop ? "YES" : "NO"}</span></div>
+      <div class="insp-row insp-seq-row"><label>EMITS</label><div class="seq">${pills}</div></div>
+      <div class="hint">Amber pill = already sent. Dim = still queued.</div>
+    `;
+  }
+  if (t.type === "sink") {
+    const snk = state.level.fixed.find(
+      (f): f is Sink => f.kind === "sink" && f.x === sel.x && f.y === sel.y
+    );
+    if (!snk) return "";
+    const got = state.results[sel.x + "," + sel.y] ?? [];
+    const pills = snk.expected
+      .map((v, i) => {
+        const recv = got[i];
+        let cls = "pending";
+        if (recv !== undefined) cls = recv === v ? "ok" : "bad";
+        return `<span class="seq-pill ${cls}">${v}</span>`;
+      })
+      .join("");
+    return `
+      <div class="insp-title">RX @ (${sel.x}, ${sel.y})</div>
+      <div class="insp-row"><label>EXPECTS</label><span>${snk.expected.length} pulse${snk.expected.length === 1 ? "" : "s"}</span></div>
+      <div class="insp-row"><label>RECEIVED</label><span>${got.length} / ${snk.expected.length}</span></div>
+      <div class="insp-row insp-seq-row"><label>SEQUENCE</label><div class="seq">${pills}</div></div>
+      <div class="hint">Green = received correctly. Red = mismatch.</div>
+    `;
+  }
+  return "";
+}
+
 function renderInspector() {
   const insp = $("inspector");
   if (!state.selected) {
@@ -465,7 +543,16 @@ function renderInspector() {
   }
   const sel = state.selected;
   const t = state.grid[sel.y]?.[sel.x];
-  if (!t || t.fixed) {
+  if (!t) {
+    insp.innerHTML = '<div class="hint">Click a placed gate to program it.</div>';
+    return;
+  }
+  // Surface TX emission schedule / RX expected values for fixed endpoints.
+  if (t.fixed && (t.type === "source" || t.type === "sink")) {
+    insp.innerHTML = renderStationInspector(sel, t);
+    return;
+  }
+  if (t.fixed) {
     insp.innerHTML = '<div class="hint">This tile cannot be programmed.</div>';
     return;
   }
@@ -547,6 +634,15 @@ function cellFromMouse(ev: MouseEvent): Cell | null {
 }
 
 board.addEventListener("contextmenu", (e) => e.preventDefault());
+
+// Hover cell (for TX/RX tooltips and highlight). Updated on mousemove.
+let hoverCell: Cell | null = null;
+board.addEventListener("mousemove", (ev) => {
+  hoverCell = cellFromMouse(ev);
+});
+board.addEventListener("mouseleave", () => {
+  hoverCell = null;
+});
 
 // Find the pipe shape whose connection set exactly matches a dir-list.
 function findPipeShape(dirs: number[]): number {
@@ -754,6 +850,26 @@ function spawnId() {
   return Math.random().toString(36).slice(2, 8);
 }
 
+function pushDeadGhost(sig: Signal, nx: number, ny: number) {
+  state.ghosts.push({
+    x: nx,
+    y: ny,
+    prevX: sig.x,
+    prevY: sig.y,
+    value: sig.value,
+    bornAt: Date.now(),
+    lifespanMs: Math.max(160, state.speedMs * 2),
+    fade: true,
+  });
+}
+
+// Prune ghost animations whose wall-clock lifespan has expired.
+function ageGhosts() {
+  if (!state.ghosts.length) return;
+  const now = Date.now();
+  state.ghosts = state.ghosts.filter((g) => now - g.bornAt < g.lifespanMs);
+}
+
 function startRun() {
   if (state.running) return;
   resetSimState();
@@ -768,6 +884,7 @@ function resetSimState() {
   state.tick = 0;
   state.signals = [];
   state.holds = []; // delayed signals { x, y, dir, value, untilTick }
+  state.ghosts = [];
   resetSinks();
   // Clear emitted state on sources
   if (!state.level) return;
@@ -804,6 +921,7 @@ function step() {
   if (!state.level) return;
   state.tick++;
   state.lastTickAt = Date.now();
+  ageGhosts();
   $("hud-tick").textContent = String(state.tick).padStart(3, "0");
 
   // 1. Sources emit
@@ -864,12 +982,17 @@ function step() {
     if (nx < 0 || ny < 0 || nx >= GRID_W || ny >= GRID_H) {
       log(`✗ signal ${sig.value} fell off the grid at (${sig.x},${sig.y})`, "bad");
       Audio.hit();
+      // Ghost the fall: clamp target to edge so it animates toward the wall.
+      const gx = Math.max(0, Math.min(GRID_W - 1, nx));
+      const gy = Math.max(0, Math.min(GRID_H - 1, ny));
+      pushDeadGhost(sig, gx, gy);
       continue;
     }
     const tile = state.grid[ny]?.[nx];
     if (!tile) {
       log(`✗ signal ${sig.value} dissipated at (${nx},${ny})`, "bad");
       Audio.hit();
+      pushDeadGhost(sig, nx, ny);
       continue;
     }
     handleEnter(tile, sig, nx, ny, sig.dir, newSignals);
@@ -903,19 +1026,32 @@ function handleEnter(
   travelDir: number,
   outArr: Signal[]
 ) {
-  // Sink: absorb
+  // Sink: absorb. Spawn a visual-only ghost so the pulse animates INTO the
+  // sink cell (the signal is removed from the simulation immediately, but
+  // the ghost renders the final hop from (sig.x, sig.y) → (nx, ny)).
   if (tile.type === "sink") {
     const k = nx + "," + ny;
     if (!state.results[k]) state.results[k] = [];
     state.results[k].push(sig.value);
     log(`★ RX (${nx},${ny}) ← ${sig.value}`, "good");
     Audio.pulse(sig.value);
+    state.ghosts.push({
+      x: nx,
+      y: ny,
+      prevX: sig.x,
+      prevY: sig.y,
+      value: sig.value,
+      bornAt: Date.now(),
+      lifespanMs: Math.max(240, state.speedMs * 3),
+      fade: false,
+    });
     return;
   }
   // Source on entry: ignore (signals from other paths just get absorbed)
   if (tile.type === "source" || tile.type === "wall") {
     log(`✗ signal ${sig.value} blocked at ${tile.type} (${nx},${ny})`, "bad");
     Audio.hit();
+    pushDeadGhost(sig, nx, ny);
     return;
   }
   // Filter
@@ -950,6 +1086,7 @@ function handleEnter(
   if (exits.length === 0) {
     log(`✗ signal ${val} stuck at ${tile.type} (${nx},${ny})`, "bad");
     Audio.hit();
+    pushDeadGhost({ ...sig, value: val }, nx, ny);
     return;
   }
   exits.forEach((d) => {
@@ -1032,6 +1169,7 @@ function checkComplete() {
       state.solved.add(state.level.id);
       saveProgress();
       Audio.win();
+      state.lastSolveDialog = state.levelIdx;
       showDialog("SIGNAL LOCKED ✓", state.level.win || "Level complete.");
     }
     renderLevelList();
@@ -1112,8 +1250,18 @@ function draw() {
   // Held (delayed) signals rendered on the delay tile
   (state.holds || []).forEach((h) => drawHeldSignal(h));
 
+  // Ghost signals (arriving at sinks or fading at dead-ends)
+  (state.ghosts || []).forEach((g) => drawGhost(g));
+
   // Signals
   state.signals.forEach((s) => drawSignal(s));
+
+  // Persistent badges above TX/RX nodes. Draw last so they sit on top of
+  // every signal/hover element.
+  drawStationBadges();
+
+  // Hover tooltips (TX inspection)
+  drawHoverOverlay();
 }
 
 function drawOwnerBadge(px: number, py: number, t: Tile) {
@@ -1394,9 +1542,156 @@ function drawSignal(s: Signal) {
   drawCenterText(px, py - 14, String(s.value), "#fff700", 11);
 }
 
+function drawGhost(g: Ghost) {
+  const now = Date.now();
+  const elapsed = Math.max(0, now - g.bornAt);
+  // Progress 0..1 across the arrival hop (first half of lifespan).
+  const hopMs = Math.max(1, Math.min(state.speedMs, g.lifespanMs / 2));
+  const hopT = Math.max(0, Math.min(1, elapsed / hopMs));
+  const ix = g.prevX + (g.x - g.prevX) * hopT;
+  const iy = g.prevY + (g.y - g.prevY) * hopT;
+  const px = PADDING + ix * CELL + CELL / 2;
+  const py = PADDING + iy * CELL + CELL / 2;
+  const lifeT = Math.max(0, Math.min(1, elapsed / g.lifespanMs));
+  const alpha = g.fade ? Math.max(0, 1 - lifeT) : Math.max(0, 0.95 - lifeT);
+  const color = g.fade ? "#ff3a64" : "#fff700";
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.shadowBlur = 14;
+  ctx.shadowColor = color;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(px, py, 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  drawCenterText(px, py - 14, String(g.value), color, 11);
+  ctx.restore();
+}
+
+function drawStationBadges() {
+  if (!state.level) return;
+  const lvl = state.level;
+  lvl.fixed.forEach((f) => {
+    if (f.kind === "source") {
+      const px = PADDING + f.x * CELL;
+      const py = PADDING + f.y * CELL;
+      const cx = px + CELL / 2;
+      const tile = state.grid[f.y]?.[f.x];
+      const emitted = tile?._emittedIdx ?? 0;
+      // If the station is on the top row the badge would clip — render below.
+      const above = f.y > 0;
+      drawStationLabel(cx, py, "TX", f.seq, emitted, "#ffb347", f.loop, above);
+    } else if (f.kind === "sink") {
+      const px = PADDING + f.x * CELL;
+      const py = PADDING + f.y * CELL;
+      const cx = px + CELL / 2;
+      const k = f.x + "," + f.y;
+      const got = state.results[k] ?? [];
+      const above = f.y > 0;
+      drawStationLabel(cx, py, "RX", f.expected, got.length, "#5cffa1", false, above);
+    }
+  });
+}
+
+function drawStationLabel(
+  cx: number,
+  tileTop: number,
+  label: string,
+  seq: number[],
+  cursor: number,
+  color: string,
+  loop: boolean,
+  above: boolean
+) {
+  const parts = seq.map((v, i) => {
+    const done = i < cursor;
+    return { v, done };
+  });
+  // Render a label tag + sequence pills either above or below the tile.
+  const maxShown = Math.min(parts.length, 12);
+  const renderParts = parts.slice(0, maxShown);
+  const gap = 2;
+  const pillW = 14;
+  const pillH = 11;
+  const totalW = renderParts.length * pillW + (renderParts.length - 1) * gap;
+  const startX = cx - totalW / 2;
+  const pillY = above ? tileTop - pillH - 12 : tileTop + CELL + 4;
+  const labelY = above ? pillY - 1 : pillY + pillH + 9;
+
+  ctx.save();
+  // Label tag
+  ctx.fillStyle = color;
+  ctx.font = "bold 8px Consolas, monospace";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.shadowBlur = 4;
+  ctx.shadowColor = color;
+  ctx.fillText(label + (loop ? " ⟳" : ""), cx, labelY);
+  ctx.shadowBlur = 0;
+
+  // Pills
+  renderParts.forEach((p, i) => {
+    const x = startX + i * (pillW + gap);
+    ctx.globalAlpha = p.done ? 1 : 0.6;
+    ctx.fillStyle = p.done ? color : "rgba(0,0,0,0.65)";
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    roundRect(ctx, x, pillY, pillW, pillH, 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = p.done ? "#04090f" : color;
+    ctx.font = "bold 8px Consolas, monospace";
+    ctx.textBaseline = "middle";
+    ctx.fillText(String(p.v), x + pillW / 2, pillY + pillH / 2 + 0.5);
+  });
+  if (parts.length > maxShown) {
+    ctx.globalAlpha = 0.8;
+    ctx.fillStyle = color;
+    ctx.fillText("…", startX + totalW + 4, pillY + pillH / 2);
+  }
+  ctx.restore();
+}
+
+function roundRect(
+  c: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number
+) {
+  c.beginPath();
+  c.moveTo(x + r, y);
+  c.arcTo(x + w, y, x + w, y + h, r);
+  c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r);
+  c.arcTo(x, y, x + w, y, r);
+  c.closePath();
+}
+
+function drawHoverOverlay() {
+  const h = hoverCell;
+  if (!h) return;
+  const tile = state.grid[h.y]?.[h.x];
+  if (!tile) return;
+  if (tile.type !== "source" && tile.type !== "sink") return;
+  const px = PADDING + h.x * CELL;
+  const py = PADDING + h.y * CELL;
+  ctx.save();
+  ctx.strokeStyle = tile.type === "source" ? "#ffb347" : "#5cffa1";
+  ctx.lineWidth = 2;
+  ctx.setLineDash([3, 3]);
+  ctx.strokeRect(px + 2, py + 2, CELL - 4, CELL - 4);
+  ctx.restore();
+}
+
 // Animate signals smoothly
 let _rafHandle = 0;
 function rafLoop() {
+  ageGhosts();
   draw();
   _rafHandle = requestAnimationFrame(rafLoop);
 }
@@ -1479,14 +1774,67 @@ document.addEventListener("keydown", (e) => {
 interface MpSelfState {
   me: PlayerInfo | null;
   roster: Map<string, PlayerInfo>;
+  // Stable seat order — roles are assigned by index into this list so every
+  // client derives the same mapping from the same roster broadcast.
+  order: string[];
 }
-const mp: MpSelfState = { me: null, roster: new Map() };
+const mp: MpSelfState = { me: null, roster: new Map(), order: [] };
+
+// Role assignments (by seat index). Seat 0 = host. A role owns a subset of
+// part types. WIRE is universal. "*" means "everything" (solo or fallback).
+const MP_SEAT_ROLES: { label: string; tools: string[] }[] = [
+  { label: "LEAD · WIRE/AMP", tools: ["pipe", "amp"] },
+  { label: "MUL", tools: ["mul"] },
+  { label: "FILTER", tools: ["filt"] },
+  { label: "DELAY", tools: ["delay"] },
+  { label: "ROUTER", tools: ["router"] },
+  { label: "RELIEF · WIRE", tools: ["pipe"] },
+  { label: "RELIEF · WIRE", tools: ["pipe"] },
+  { label: "RELIEF · WIRE", tools: ["pipe"] },
+];
+
+function seatOf(playerId: string | undefined): number {
+  if (!playerId) return -1;
+  return mp.order.indexOf(playerId);
+}
+
+function roleFor(playerId: string | undefined): { label: string; tools: string[] } | null {
+  const seat = seatOf(playerId);
+  if (seat < 0) return null;
+  return MP_SEAT_ROLES[seat] ?? MP_SEAT_ROLES[MP_SEAT_ROLES.length - 1] ?? null;
+}
+
+function canPlayerUseTool(playerId: string | undefined, tool: string): boolean {
+  if (!isMultiplayer()) return true;
+  // WIRE is always available so nobody gets locked out of basic routing.
+  if (tool === "pipe") return true;
+  const role = roleFor(playerId);
+  if (!role) return true; // unknown seat — don't block, just soft-fallback.
+  if (role.tools.includes(tool)) return true;
+  // Fallback: if nobody else on the roster owns this tool, allow.
+  const anyOwner = mp.order.some((id) => {
+    const r = MP_SEAT_ROLES[mp.order.indexOf(id)];
+    return r && r.tools.includes(tool);
+  });
+  return !anyOwner;
+}
 
 function rosterRefresh(players: PlayerInfo[]): void {
   mp.roster.clear();
   for (const p of players) mp.roster.set(p.id, p);
+  // Maintain stable seat ordering: host first (if present), then join order.
+  const next: string[] = [];
+  if (mp.me && mp.roster.has(mp.me.id) && isHost()) next.push(mp.me.id);
+  for (const id of mp.order) {
+    if (mp.roster.has(id) && !next.includes(id)) next.push(id);
+  }
+  for (const p of players) {
+    if (!next.includes(p.id)) next.push(p.id);
+  }
+  mp.order = next;
   renderMpGameRoster();
   renderMpLobbyRoster();
+  renderPalette();
   draw();
 }
 
@@ -1501,11 +1849,13 @@ interface SnapshotShape {
   bin: Record<string, number>;
   signals: Signal[];
   holds: Hold[];
+  ghosts: Ghost[];
   results: Record<string, number[]>;
   tick: number;
   running: boolean;
   status: string;
   speedMs: number;
+  lastTickAt: number;
 }
 
 function buildSnapshot(): SnapshotShape {
@@ -1515,11 +1865,13 @@ function buildSnapshot(): SnapshotShape {
     bin: state.bin,
     signals: state.signals,
     holds: state.holds,
+    ghosts: state.ghosts,
     results: state.results,
     tick: state.tick,
     running: state.running,
     status: state.status,
     speedMs: state.speedMs,
+    lastTickAt: state.lastTickAt,
   };
 }
 
@@ -1546,6 +1898,7 @@ function isSnapshot(value: unknown): value is SnapshotShape {
     typeof value.status === "string" &&
     "speedMs" in value &&
     typeof value.speedMs === "number"
+    // ghosts + lastTickAt are optional for backwards-compatible snapshots.
   );
 }
 
@@ -1557,11 +1910,16 @@ function applySnapshot(snap: SnapshotShape): void {
   state.bin = snap.bin;
   state.signals = snap.signals;
   state.holds = snap.holds;
+  state.ghosts = Array.isArray(snap.ghosts) ? snap.ghosts : [];
   state.results = snap.results;
   state.tick = snap.tick;
   state.running = snap.running;
   state.status = snap.status;
   state.speedMs = snap.speedMs;
+  // Use our own wall clock for interpolation (host clock would be skewed).
+  // Assume the host sent this snapshot right after its latest tick, so start
+  // the interpolation window now.
+  if (snap.running) state.lastTickAt = Date.now();
 
   $("hud-level").textContent = String(snap.levelIdx + 1).padStart(2, "0");
   $("hud-tick").textContent = String(snap.tick).padStart(3, "0");
@@ -1570,10 +1928,29 @@ function applySnapshot(snap: SnapshotShape): void {
     $("brief-title").textContent = lvl.title;
     $("brief-text").textContent = lvl.brief;
   }
+  // Keep speed slider in sync across operators.
+  const speedEl = document.getElementById("speed");
+  if (speedEl instanceof HTMLInputElement) {
+    const sliderVal = Math.round((550 - snap.speedMs) / 25);
+    if (sliderVal !== parseInt(speedEl.value, 10)) {
+      speedEl.value = String(sliderVal);
+    }
+  }
   renderGoals();
   renderPalette();
   renderInspector();
   renderLevelList();
+  // Mirror the host's level-complete dialog so every operator sees the win.
+  if (lvl && snap.status === "SOLVED" && state.lastSolveDialog !== snap.levelIdx) {
+    state.lastSolveDialog = snap.levelIdx;
+    showDialog("SIGNAL LOCKED ✓", lvl.win || "Level complete.");
+  }
+  if (snap.status !== "SOLVED") {
+    // Allow the dialog to be re-shown if we reset and re-solve.
+    if (state.lastSolveDialog === snap.levelIdx && snap.tick === 0) {
+      state.lastSolveDialog = -1;
+    }
+  }
   draw();
 }
 
@@ -1591,6 +1968,9 @@ function dispatchPlace(
   shape: number,
   fromDir: number | null
 ): boolean {
+  // Local role check — prevents sending a doomed intent across the wire and
+  // keeps the palette feel consistent in solo+host+client.
+  if (!canPlayerUseTool(mp.me?.id, tool)) return false;
   if (isClient()) {
     clientSendIntent({ t: "place", x, y, tool, shape, fromDir });
     return true; // optimistic — host snapshot will correct if rejected
@@ -1725,6 +2105,7 @@ function applyInspectUpdate(x: number, y: number, field: string, value: number |
 function applyHostIntent(from: PlayerInfo, intent: ClientIntent): void {
   switch (intent.t) {
     case "place":
+      if (!canPlayerUseTool(from.id, intent.tool)) return;
       placeToolAt(intent.x, intent.y, intent.fromDir, intent.tool, intent.shape, from.id);
       break;
     case "remove":
@@ -1806,11 +2187,15 @@ function renderMpGameRoster(): void {
     wrap.innerHTML = '<span style="opacity:0.6">solo</span>';
     return;
   }
-  for (const p of mp.roster.values()) {
+  for (const id of mp.order) {
+    const p = mp.roster.get(id);
+    if (!p) continue;
+    const role = roleFor(id);
     const chip = document.createElement("div");
     chip.className = "mp-chip";
     chip.style.color = p.color;
-    chip.innerHTML = `<span class="mp-dot"></span><span style="color:var(--ink)">${escapeHtml(p.name)}${p.id === mp.me?.id ? " (you)" : ""}</span>`;
+    const roleLabel = role ? `<span class="mp-role">${escapeHtml(role.label)}</span>` : "";
+    chip.innerHTML = `<span class="mp-dot"></span><span style="color:var(--ink)">${escapeHtml(p.name)}${p.id === mp.me?.id ? " (you)" : ""}</span>${roleLabel}`;
     wrap.appendChild(chip);
   }
 }

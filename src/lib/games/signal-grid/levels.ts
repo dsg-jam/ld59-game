@@ -71,7 +71,7 @@ export const LEVELS: Level[] = [
     name: "HELLO, WORLD",
     title: "DAY 1: HELLO, WORLD",
     brief:
-      "Your first day at SIGNAL. Just route the pulse from the transmitter (▲) to the receiver (▼). Place pipes by selecting WIRE in the parts bin.",
+      "Your first day at SIGNAL. Route the pulse from the amber TX (transmitter, arrow points the way it fires) to the green RX (receiver, concentric rings). Click WIRE in the parts bin, then click cells on the grid.",
     fixed: [SRC(2, 2, 2 /*S*/, [7], 4, 1), SNK(2, 7, 0 /*N*/, [7])],
     walls: [],
     bin: { pipe: 8 },
@@ -220,5 +220,60 @@ export const LEVELS: Level[] = [
     bin: { pipe: 26, amp: 1, mul: 1, router: 1, delay: 1 },
     tickLimit: 200,
     win: "You have decoded the SIGNAL. Severance package mailed. The coffee machine will miss you.",
+  },
+
+  {
+    id: 11,
+    name: "OVERTIME: COLLATE",
+    title: "DAY 11: OVERTIME — COLLATE",
+    brief: "Two sources. One sink. Inspect the wires. The rest is your problem.",
+    fixed: [
+      SRC(0, 1, 1, [10, 20, 30], 4, 1),
+      SRC(0, 8, 1, [5, 15, 25], 4, 3),
+      SNK(9, 4, 3, [10, 5, 20, 15, 30, 25]),
+    ],
+    walls: [
+      { x: 5, y: 0 },
+      { x: 5, y: 1 },
+      { x: 5, y: 8 },
+      { x: 5, y: 9 },
+    ],
+    bin: { pipe: 26, delay: 2 },
+    tickLimit: 200,
+    win: "Interleaved. Legal filed a complaint about packet order. Filed in the wrong bin.",
+  },
+
+  {
+    id: 12,
+    name: "OVERTIME: DIFF MACHINE",
+    title: "DAY 12: OVERTIME — DIFF MACHINE",
+    brief: "Source: 2, 4, 6, 8. Sink: 1, 3, 5, 7. You have the tools. Use them.",
+    fixed: [SRC(1, 4, 1, [2, 4, 6, 8], 3, 1), SNK(8, 4, 3, [1, 3, 5, 7])],
+    walls: [
+      { x: 4, y: 2 },
+      { x: 4, y: 3 },
+      { x: 4, y: 6 },
+      { x: 4, y: 7 },
+    ],
+    bin: { pipe: 18, amp: 2, mul: 1 },
+    tickLimit: 120,
+    win: "Subtraction via addition. Math is a choice.",
+  },
+
+  {
+    id: 13,
+    name: "OVERTIME: GATEKEEPER",
+    title: "DAY 13: OVERTIME — GATEKEEPER",
+    brief:
+      "Source emits 0..9. Top sink takes the highs, bottom sink takes the lows. The threshold is not advertised.",
+    fixed: [
+      SRC(0, 4, 1, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], 2, 1),
+      SNK(9, 1, 3, [5, 6, 7, 8, 9]),
+      SNK(9, 7, 3, [0, 1, 2, 3, 4]),
+    ],
+    walls: [],
+    bin: { pipe: 22, router: 1 },
+    tickLimit: 200,
+    win: "The classifier has been taught a harsh lesson about middle values.",
   },
 ];
