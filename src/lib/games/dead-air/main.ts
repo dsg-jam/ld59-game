@@ -1,209 +1,749 @@
 import Peer from "peerjs";
-import type { DataConnection, MediaConnection } from "peerjs";
+import type { DataConnection } from "peerjs";
+import { describePeerError, makeCode } from "$lib/peer";
 import {
-  describePeerError as sharedDescribePeerError,
-  makeCode as sharedMakeCode,
-} from "$lib/peer";
-import {
-  buildRoomShareUrl,
-  clearRoomCodeFromUrl,
-  copyToClipboard,
-  readRoomCodeFromUrl,
-} from "$lib/room-url";
-import { endState as endStateStore } from "$lib/games/dead-air/endState";
-import { isGameMessage } from "$lib/validators";
-import {
-  type Player,
-  type Tower,
-  type Role,
-  type VoteState,
-  WORLD_W,
-  WORLD_H,
-  PLAYER_SPEED,
-  PLAYER_COLORS,
-  MAX_PLAYERS,
-  TOWER_REQUIRED,
-  WARM_X,
-  WARM_Y,
-  WARM_R,
-  VOTE_DURATION_MS,
-  ELIM_COOLDOWN_MS,
-  PLAYBACK_COOLDOWN_MS,
-  SNIPPET_DURATION_MS,
-  createDefaultTowers,
-  assignRoles as engineAssignRoles,
-  checkWinConditions as engineCheckWin,
-  updateTowers as engineUpdateTowers,
-  isIsolatedInDark as engineIsIsolated,
-  resolveVote as engineResolveVote,
+  type Melody,
+  type NoteIndex,
+  type Relay,
+  type RoundConfig,
+  type ScoreBreakdown,
+  SCALE,
   clamp,
-  dist,
+  createSeededRng,
+  generateMelody,
+  generateRelayChain,
+  getConfigForRound,
+  noteToFreq,
+  scoreGuess,
 } from "$lib/dead-air-engine";
 
-// Module-level lifecycle state – populated when the IIFE runs on first import.
-let _raf = 0;
-let _cleanupListeners: (() => void) | null = null;
+// ── TUNING ────────────────────────────────────────────────────────────────────
 
-/** Stop the game loop and release global event listeners / peer connection. */
-export function destroy(): void {
-  cancelAnimationFrame(_raf);
-  _raf = 0;
-  if (_cleanupListeners) {
-    _cleanupListeners();
-    _cleanupListeners = null;
-  }
+const PEER_PREFIX = "dead-air-";
+const ROOM_CODE_LENGTH = 5;
+const MAX_PLAYERS = 6;
+const MIN_PLAYERS = 1; // solo is allowed
+
+const NOTE_DUR_S = 0.35; // length of each note in a melody
+const NOTE_GAP_S = 0.05; // gap between notes
+const MELODY_LEAD_IN_S = 0.1;
+
+const CLEAN_PREVIEW_LIMIT = 2; // host may reveal clean original this many times
+
+// ── PUBLIC TYPES ──────────────────────────────────────────────────────────────
+
+export type Phase = "lobby" | "round" | "reveal";
+
+export interface PlayerInfo {
+  id: string;
+  name: string;
+  isYou: boolean;
+  isHost: boolean;
+  locked: boolean;
+  score: number;
+  lastRoundAccuracy: number | null;
 }
 
-(() => {
-  interface PlayerSnap {
-    id: string;
-    name?: string;
-    color?: string;
-    x: number;
-    y: number;
-    alive: boolean;
-    spectator: boolean;
-  }
-  interface GameMsg {
-    t: string;
-    id?: string;
-    name?: string;
-    hostId?: string;
-    roomCode?: string;
-    players?: PlayerSnap[];
-    role?: Role;
-    towers?: Tower[];
-    vote?: VoteState;
-    votes?: Record<string, string>;
-    text?: string;
-    winner?: string;
-    roles?: Array<{ id: string; name: string; role?: string }>;
-    x?: number;
-    y?: number;
-    target?: string;
-    buffer?: ArrayBuffer;
-    from?: string;
-    by?: string;
-    caller?: string;
-  }
-  type VoicePipeline = {
-    filter: BiquadFilterNode;
-    gain: GainNode;
-    noiseGain: GainNode;
-    wobblePhase: number;
-  };
-  type Snippet = { fromId: string; name: string; buffer: ArrayBuffer };
+export interface RoundInfo {
+  round: number;
+  melodyLength: number;
+  relays: Relay[];
+}
 
-  // ── CONSTANTS ────────────────────────────────────────────────────────────────
-  const PEER_PREFIX = "dead-air-";
-  const ROOM_CODE_LENGTH = 5;
-  const VOICE_FREQ_NEAR = 3500;
-  const VOICE_FREQ_MID = 800;
-  const VOICE_FREQ_FAR = 200;
-  const MIME_OPUS_WEBM = "audio/webm;codecs=opus";
-  const MIME_WEBM = "audio/webm";
-  const DEFAULT_OPERATIVE_RANGE = MAX_PLAYERS;
+export interface RevealInfo {
+  original: NoteIndex[];
+  results: Array<{ id: string; name: string; guess: NoteIndex[]; accuracy: number }>;
+}
 
-  function $<T extends HTMLElement>(id: string, type?: new (...args: never[]) => T): T;
-  function $(id: string): HTMLElement;
-  function $<T extends HTMLElement>(
-    id: string,
-    type?: new (...args: never[]) => T
-  ): T | HTMLElement {
-    const el = document.getElementById(id);
-    if (!el) throw new Error(`#${id} not found`);
-    if (type && !(el instanceof type)) throw new Error(`#${id} is not ${type.name}`);
-    return el;
-  }
-  const $input = (id: string): HTMLInputElement => $(id, HTMLInputElement);
-  const $btn = (id: string): HTMLButtonElement => $(id, HTMLButtonElement);
-  const canvas = $("map", HTMLCanvasElement);
-  const ctxRaw = canvas.getContext("2d");
-  if (!ctxRaw) throw new Error("no ctx");
-  const ctx = ctxRaw;
+export interface DeadAirCallbacks {
+  onPhase(phase: Phase): void;
+  onLobbyStatus(text: string): void;
+  onRoomCode(code: string): void;
+  onRoomWrapVisible(visible: boolean): void;
+  onRoster(players: PlayerInfo[]): void;
+  onStartEnabled(enabled: boolean): void;
+  onRound(info: RoundInfo): void;
+  onGuess(guess: NoteIndex[]): void;
+  onLockState(locked: boolean): void;
+  onPreviewRemaining(remaining: number): void;
+  onReveal(info: RevealInfo): void;
+  onLog(text: string, kind?: "info" | "good" | "bad"): void;
+  onBusy(busy: boolean): void;
+}
 
-  // ── NETWORK + GAME STATE ─────────────────────────────────────────────────────
-  let peer: InstanceType<typeof Peer> | null = null;
+export interface DeadAirControls {
+  hostGame(): void;
+  joinGame(code: string): void;
+  setName(name: string): void;
+  startRound(): void;
+  playDistorted(): void;
+  playCleanPreview(): void;
+  previewNote(noteIdx: NoteIndex): void;
+  setGuessNote(slot: number, noteIdx: NoteIndex | null): void;
+  lockAnswer(): void;
+  unlockAnswer(): void;
+  nextRound(): void;
+  destroy(): void;
+}
+
+// ── WIRE PROTOCOL ─────────────────────────────────────────────────────────────
+
+type RoundStartMsg = {
+  t: "roundStart";
+  round: number;
+  seed: number;
+  melodyLength: number;
+  relayCount: number;
+  maxRelayStrength: number;
+};
+type HelloJoinMsg = { t: "helloJoin"; name: string };
+type HelloHostMsg = { t: "helloHost"; id: string; players: PlayerSnap[] };
+type RosterMsg = { t: "roster"; players: PlayerSnap[] };
+type GuessMsg = { t: "guess"; guess: NoteIndex[]; locked: boolean };
+type RevealMsg = { t: "reveal"; info: RevealInfo; scores: Array<{ id: string; score: number }> };
+type RenameMsg = { t: "rename"; name: string };
+type NetMsg =
+  | RoundStartMsg
+  | HelloJoinMsg
+  | HelloHostMsg
+  | RosterMsg
+  | GuessMsg
+  | RevealMsg
+  | RenameMsg;
+
+interface PlayerSnap {
+  id: string;
+  name: string;
+  score: number;
+  lastRoundAccuracy: number | null;
+  locked: boolean;
+}
+
+function isNetMsg(value: unknown): value is NetMsg {
+  if (typeof value !== "object" || value === null) return false;
+  if (!("t" in value)) return false;
+  const tag: unknown = value["t"];
+  return typeof tag === "string";
+}
+
+// ── MOUNT ─────────────────────────────────────────────────────────────────────
+
+export function mount(callbacks: DeadAirCallbacks): DeadAirControls {
+  // ── Network ────────────────────────────────────────────────────────────────
+  let peer: Peer | null = null;
   let isHost = false;
   let hostId: string | null = null;
-  let roomCode = "";
   let myId: string | null = null;
-  let gameStarted = false;
-  let localRole: Role | null = null;
-  let pendingRole: Role | null = null;
-  let myColor: string = PLAYER_COLORS[0] ?? "#ffb800";
+  let roomCode = "";
 
-  const players = new Map<string, Player>();
+  /** Host-only: connections keyed by peer id. */
   const conns = new Map<string, DataConnection>();
-  const rolesById = new Map<string, Role>();
-  const incomingRawStreams = new Map<string, MediaStream>();
+  /** Guest-only: the single connection to the host. */
+  let hostConn: DataConnection | null = null;
 
-  let towers = createDefaultTowers();
-  let voteState: VoteState | null = null;
-  let endState: { winner: string } | null = null;
+  // ── State ──────────────────────────────────────────────────────────────────
+  const players = new Map<string, PlayerSnap>();
+  let phase: Phase = "lobby";
+  let myName = defaultName();
 
-  let lastTowerBroadcast = 0;
-  let lastHostSimTime = performance.now();
-  let lastPositionSend = 0;
-  let lastStateBroadcast = 0;
-  let lastElimAt = -99999;
-  let lastPlaybackAt = -99999;
+  // Current round (host-authoritative; mirrored on guests).
+  let currentRound = 0;
+  let currentMelody: Melody | null = null;
+  let currentRelays: Relay[] = [];
+  let guess: (NoteIndex | null)[] = [];
+  let locked = false;
+  let previewRemaining = CLEAN_PREVIEW_LIMIT;
 
-  // ── INPUT + MOVEMENT ─────────────────────────────────────────────────────────
-  const keys = new Set();
-
-  // ── AUDIO PIPELINE ────────────────────────────────────────────────────────────
+  // ── Audio ──────────────────────────────────────────────────────────────────
   let audioCtx: AudioContext | null = null;
-  let micStream: MediaStream | null = null;
-  let outgoingStream: MediaStream | null = null;
-  let micDenied = false;
-  const mediaCalls = new Map<string, MediaConnection>();
-  const voicePipelines = new Map<string, VoicePipeline>();
-  let pinkNoiseBuffer: AudioBuffer | null = null;
-
-  // ── MIMIC CAPTURE ─────────────────────────────────────────────────────────────
-  const capturedSnippets: Snippet[] = [];
-  let activeCapture: MediaRecorder | null = null;
-
-  function setWarn(msg = "") {
-    $("warn").textContent = msg;
-  }
-  function setLobbyStatus(msg = "") {
-    $("lobby-status").textContent = msg;
+  function getAudioCtx(): AudioContext | null {
+    if (typeof window === "undefined") return null;
+    if (!audioCtx) {
+      try {
+        audioCtx = new AudioContext();
+      } catch {
+        return null;
+      }
+    }
+    if (audioCtx.state === "suspended") void audioCtx.resume();
+    return audioCtx;
   }
 
-  function makeCode() {
-    return sharedMakeCode(ROOM_CODE_LENGTH);
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  function defaultName(): string {
+    return `OPERATIVE-${1 + Math.floor(Math.random() * MAX_PLAYERS)}`;
   }
 
-  function defaultName() {
-    return `OPERATIVE-${1 + Math.floor(Math.random() * DEFAULT_OPERATIVE_RANGE)}`;
+  function log(text: string, kind: "info" | "good" | "bad" = "info"): void {
+    callbacks.onLog(text, kind);
   }
 
-  $input("name").value = defaultName();
+  function sortedRoster(): PlayerInfo[] {
+    const list: PlayerInfo[] = [];
+    for (const p of players.values()) {
+      list.push({
+        id: p.id,
+        name: p.name,
+        isYou: p.id === myId,
+        isHost: p.id === hostId,
+        locked: p.locked,
+        score: p.score,
+        lastRoundAccuracy: p.lastRoundAccuracy,
+      });
+    }
+    list.sort((a, b) => {
+      if (a.isHost !== b.isHost) return a.isHost ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+    return list;
+  }
 
-  function describePeerError(err: unknown): string {
-    if (typeof err !== "object" || err === null) return sharedDescribePeerError(undefined);
-    if (!("type" in err) && !("message" in err)) return sharedDescribePeerError(undefined);
-    const type = "type" in err && typeof err.type === "string" ? err.type : undefined;
-    const message = "message" in err && typeof err.message === "string" ? err.message : undefined;
-    const mapped = {
-      ...(type ? { type } : {}),
-      ...(message ? { message } : {}),
+  function pushRoster(): void {
+    callbacks.onRoster(sortedRoster());
+  }
+
+  function snapPlayers(): PlayerSnap[] {
+    return [...players.values()].map((p) => ({ ...p }));
+  }
+
+  function send(target: DataConnection | null | undefined, msg: NetMsg): void {
+    if (target && target.open) target.send(msg);
+  }
+
+  function broadcast(msg: NetMsg): void {
+    for (const c of conns.values()) send(c, msg);
+  }
+
+  // ── Round state helpers ────────────────────────────────────────────────────
+  function resetRoundState(): void {
+    guess = currentMelody ? new Array(currentMelody.length).fill(null) : [];
+    locked = false;
+    callbacks.onGuess(guess.map((n) => n ?? -1));
+    callbacks.onLockState(false);
+  }
+
+  function applyRoundSeed(
+    round: number,
+    seed: number,
+    config: RoundConfig
+  ): { melody: Melody; relays: Relay[] } {
+    const rng = createSeededRng(seed);
+    const melody = generateMelody(config.melodyLength, rng);
+    const relays = generateRelayChain(config.relayCount, config.maxRelayStrength, rng);
+    currentRound = round;
+    currentMelody = melody;
+    currentRelays = relays;
+    previewRemaining = CLEAN_PREVIEW_LIMIT;
+    callbacks.onPreviewRemaining(previewRemaining);
+    resetRoundState();
+    callbacks.onRound({ round, melodyLength: melody.length, relays: relays.slice() });
+    return { melody, relays };
+  }
+
+  // ── Audio synthesis ────────────────────────────────────────────────────────
+  /**
+   * Render the melody through the relay chain into an AudioBuffer.
+   * Using offline rendering lets us apply sample-level destructive operations
+   * (dropout, bitcrush) cleanly without fighting live scheduling.
+   */
+  async function renderMelody(
+    melody: Melody,
+    relays: Relay[],
+    clean: boolean
+  ): Promise<AudioBuffer | null> {
+    if (typeof OfflineAudioContext === "undefined") return null;
+    const sampleRate = 44100;
+    const totalDur = MELODY_LEAD_IN_S + melody.notes.length * (NOTE_DUR_S + NOTE_GAP_S) + 0.3;
+    const oac = new OfflineAudioContext(1, Math.ceil(totalDur * sampleRate), sampleRate);
+
+    const master = oac.createGain();
+    master.gain.value = 0.8;
+    master.connect(oac.destination);
+
+    // Pre-build a shared pitch detune in cents, summed from all "pitch" relays.
+    let pitchCents = 0;
+    if (!clean) {
+      for (const r of relays) {
+        if (r.kind === "pitch") pitchCents += (Math.random() * 2 - 1) * 120 * r.strength;
+      }
+    }
+
+    // Build each note as a two-oscillator voice routed through filter + gain.
+    let startAt = MELODY_LEAD_IN_S;
+    for (let i = 0; i < melody.notes.length; i++) {
+      const note = melody.notes[i] ?? 0;
+      const freq = noteToFreq(note);
+
+      // Per-note dropout: skip entirely if any dropout relay fires.
+      let skip = false;
+      if (!clean) {
+        for (const r of relays) {
+          if (r.kind === "dropout" && Math.random() < r.strength * 0.65) skip = true;
+        }
+      }
+
+      if (!skip) {
+        const osc = oac.createOscillator();
+        const osc2 = oac.createOscillator();
+        const gain = oac.createGain();
+        osc.type = "triangle";
+        osc2.type = "sine";
+        osc.frequency.value = freq;
+        osc2.frequency.value = freq * 2;
+        osc.detune.value = pitchCents;
+        osc2.detune.value = pitchCents;
+
+        const noteEnd = startAt + NOTE_DUR_S;
+        gain.gain.setValueAtTime(0, startAt);
+        gain.gain.linearRampToValueAtTime(0.35, startAt + 0.02);
+        gain.gain.setValueAtTime(0.35, noteEnd - 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.001, noteEnd);
+
+        osc.connect(gain);
+        osc2.connect(gain);
+        gain.connect(master);
+        osc.start(startAt);
+        osc2.start(startAt);
+        osc.stop(noteEnd + 0.02);
+        osc2.stop(noteEnd + 0.02);
+      }
+      startAt += NOTE_DUR_S + NOTE_GAP_S;
+    }
+
+    // Noise bed (summed strengths from noise relays).
+    let noiseStrength = 0;
+    let lowpassHz = 0;
+    let bitcrushAmount = 0;
+    let echoAmount = 0;
+    if (!clean) {
+      for (const r of relays) {
+        if (r.kind === "noise") noiseStrength += r.strength;
+        if (r.kind === "lowpass") lowpassHz = Math.max(lowpassHz, r.strength);
+        if (r.kind === "bitcrush") bitcrushAmount = Math.max(bitcrushAmount, r.strength);
+        if (r.kind === "echo") echoAmount = Math.max(echoAmount, r.strength);
+      }
+    }
+
+    if (noiseStrength > 0) {
+      const len = oac.length;
+      const noiseBuf = oac.createBuffer(1, len, sampleRate);
+      const data = noiseBuf.getChannelData(0);
+      for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * 0.55;
+      const noiseSrc = oac.createBufferSource();
+      noiseSrc.buffer = noiseBuf;
+      const noiseGain = oac.createGain();
+      noiseGain.gain.value = clamp(noiseStrength * 0.45, 0, 0.6);
+      noiseSrc.connect(noiseGain);
+      noiseGain.connect(master);
+      noiseSrc.start(0);
+    }
+
+    // Lowpass filter on master if requested.
+    if (lowpassHz > 0) {
+      const filter = oac.createBiquadFilter();
+      filter.type = "lowpass";
+      // Higher strength → lower cutoff (more muffled).
+      filter.frequency.value = clamp(3200 - lowpassHz * 2600, 320, 3200);
+      filter.Q.value = 0.7;
+      master.disconnect();
+      master.connect(filter);
+      filter.connect(oac.destination);
+    }
+
+    // Echo via a simple delay + feedback loop.
+    if (echoAmount > 0) {
+      const delay = oac.createDelay();
+      delay.delayTime.value = 0.18 + echoAmount * 0.12;
+      const feedback = oac.createGain();
+      feedback.gain.value = clamp(echoAmount * 0.55, 0, 0.75);
+      const wet = oac.createGain();
+      wet.gain.value = clamp(echoAmount * 0.6, 0, 0.7);
+      master.connect(delay);
+      delay.connect(feedback);
+      feedback.connect(delay);
+      delay.connect(wet);
+      wet.connect(oac.destination);
+    }
+
+    const rendered = await oac.startRendering();
+
+    // Apply post-render bitcrush directly on the PCM data.
+    if (bitcrushAmount > 0) {
+      const bits = Math.max(2, Math.round(12 - bitcrushAmount * 9));
+      const step = Math.pow(2, 16 - bits);
+      const data = rendered.getChannelData(0);
+      for (let i = 0; i < data.length; i++) {
+        const v = data[i] ?? 0;
+        const scaled = Math.round((v * 32768) / step) * step;
+        data[i] = scaled / 32768;
+      }
+    }
+
+    return rendered;
+  }
+
+  let cachedRender: { clean: boolean; buffer: AudioBuffer } | null = null;
+  let renderInFlight: Promise<void> | null = null;
+
+  async function ensureRender(clean: boolean): Promise<AudioBuffer | null> {
+    if (!currentMelody) return null;
+    if (cachedRender && cachedRender.clean === clean) return cachedRender.buffer;
+    callbacks.onBusy(true);
+    try {
+      const buf = await renderMelody(currentMelody, currentRelays, clean);
+      if (!buf) return null;
+      cachedRender = { clean, buffer: buf };
+      return buf;
+    } finally {
+      callbacks.onBusy(false);
+    }
+  }
+
+  async function playBuffer(buffer: AudioBuffer): Promise<void> {
+    const ctx = getAudioCtx();
+    if (!ctx) return;
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    src.connect(ctx.destination);
+    src.start();
+  }
+
+  function playDistorted(): void {
+    if (!currentMelody || phase === "lobby") return;
+    if (renderInFlight) return;
+    const melody = currentMelody;
+    renderInFlight = (async () => {
+      try {
+        // Distorted audio varies each render (non-deterministic dropouts / noise)
+        // so we always re-render to give the player fresh listens.
+        const ctx = getAudioCtx();
+        if (!ctx) return;
+        callbacks.onBusy(true);
+        const buf = await renderMelody(melody, currentRelays, false);
+        if (!buf) return;
+        await playBuffer(buf);
+      } finally {
+        callbacks.onBusy(false);
+        renderInFlight = null;
+      }
+    })();
+  }
+
+  function playCleanPreview(): void {
+    if (!currentMelody || phase !== "round") return;
+    if (previewRemaining <= 0) {
+      log("No clean previews left.", "bad");
+      return;
+    }
+    previewRemaining -= 1;
+    callbacks.onPreviewRemaining(previewRemaining);
+    log("Clean preview spent.", "info");
+    void (async () => {
+      const buf = await ensureRender(true);
+      if (buf) await playBuffer(buf);
+    })();
+  }
+
+  function previewNote(noteIdx: NoteIndex): void {
+    const ctx = getAudioCtx();
+    if (!ctx) return;
+    const idx = clamp(noteIdx, 0, SCALE.length - 1);
+    const freq = noteToFreq(idx);
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "triangle";
+    osc.frequency.value = freq;
+    const now = ctx.currentTime;
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.18, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.36);
+  }
+
+  // ── Guess handling ─────────────────────────────────────────────────────────
+  function setGuessNote(slot: number, noteIdx: NoteIndex | null): void {
+    if (locked) return;
+    if (!currentMelody) return;
+    if (slot < 0 || slot >= currentMelody.length) return;
+    guess[slot] = noteIdx;
+    callbacks.onGuess(guess.map((n) => n ?? -1));
+    // Preview the note when set.
+    if (noteIdx !== null) previewNote(noteIdx);
+  }
+
+  function currentGuessResolved(): NoteIndex[] {
+    return guess.map((n) => (n === null ? 0 : n));
+  }
+
+  function sendGuessUpdate(): void {
+    if (isHost) {
+      // Host updates own snap and broadcasts roster.
+      if (myId) {
+        const p = players.get(myId);
+        if (p) {
+          p.locked = locked;
+          pushRoster();
+        }
+      }
+      broadcast({ t: "roster", players: snapPlayers() });
+      maybeResolveReveal();
+    } else {
+      send(hostConn, {
+        t: "guess",
+        guess: currentGuessResolved(),
+        locked,
+      });
+    }
+  }
+
+  function lockAnswer(): void {
+    if (!currentMelody) return;
+    if (locked) return;
+    locked = true;
+    callbacks.onLockState(true);
+    if (isHost && myId) {
+      hostGuesses.set(myId, currentGuessResolved());
+    }
+    sendGuessUpdate();
+    log("Answer locked.", "good");
+  }
+
+  function unlockAnswer(): void {
+    if (!locked) return;
+    if (phase !== "round") return;
+    locked = false;
+    callbacks.onLockState(false);
+    if (isHost && myId) hostGuesses.delete(myId);
+    sendGuessUpdate();
+  }
+
+  // ── Host round orchestration ───────────────────────────────────────────────
+  /** Host-only map of locked guesses so we know when to reveal. */
+  const hostGuesses = new Map<string, NoteIndex[]>();
+
+  function startRound(): void {
+    if (!isHost) return;
+    if (phase === "round") return;
+    const round = phase === "reveal" ? currentRound + 1 : 0;
+    const seed = (Math.random() * 0xffffffff) >>> 0;
+    const config = getConfigForRound(round);
+    const msg: RoundStartMsg = {
+      t: "roundStart",
+      round,
+      seed,
+      melodyLength: config.melodyLength,
+      relayCount: config.relayCount,
+      maxRelayStrength: config.maxRelayStrength,
     };
-    return sharedDescribePeerError(mapped);
+    broadcast(msg);
+    hostGuesses.clear();
+    for (const p of players.values()) {
+      p.locked = false;
+      p.lastRoundAccuracy = null;
+    }
+    applyRoundSeed(round, seed, config);
+    phase = "round";
+    callbacks.onPhase("round");
+    pushRoster();
+    broadcast({ t: "roster", players: snapPlayers() });
+    log(
+      `Round ${round + 1} — ${config.melodyLength} notes through ${config.relayCount} relays.`,
+      "info"
+    );
   }
 
-  function updateNetDot(ok: boolean): void {
-    $("net-dot").classList.toggle("ok", !!ok);
+  function nextRound(): void {
+    if (!isHost) return;
+    startRound();
   }
 
-  function myPlayer(): Player | undefined {
-    return myId ? players.get(myId) : undefined;
+  function maybeResolveReveal(): void {
+    if (!isHost || phase !== "round") return;
+    if (!currentMelody) return;
+    const alive = [...players.values()];
+    if (!alive.length) return;
+    const allLocked = alive.every((p) => p.locked);
+    if (!allLocked) return;
+    resolveReveal();
   }
 
-  // ── PEER DATA CONNECTIONS ─────────────────────────────────────────────────────
-  function resetNet() {
+  function resolveReveal(): void {
+    if (!isHost || !currentMelody) return;
+    const original = currentMelody.notes.slice();
+    const results: RevealInfo["results"] = [];
+    const scoreMsg: Array<{ id: string; score: number }> = [];
+    for (const p of players.values()) {
+      const g = hostGuesses.get(p.id) ?? new Array(original.length).fill(-1);
+      const score = scoreGuess(currentMelody, g);
+      p.lastRoundAccuracy = score.accuracy;
+      p.score += roundScore(score);
+      p.locked = false;
+      results.push({ id: p.id, name: p.name, guess: g, accuracy: score.accuracy });
+      scoreMsg.push({ id: p.id, score: p.score });
+    }
+    const info: RevealInfo = { original, results };
+    broadcast({ t: "reveal", info, scores: scoreMsg });
+    applyReveal(info, scoreMsg);
+  }
+
+  function roundScore(breakdown: ScoreBreakdown): number {
+    // 10 points per note with a perfect-match bonus of +15.
+    const base = breakdown.correct * 10;
+    const perfect = breakdown.accuracy === 1 ? 15 : 0;
+    return base + perfect;
+  }
+
+  function applyReveal(info: RevealInfo, scores: Array<{ id: string; score: number }>): void {
+    phase = "reveal";
+    callbacks.onPhase("reveal");
+    callbacks.onReveal(info);
+    for (const s of scores) {
+      const p = players.get(s.id);
+      if (p) p.score = s.score;
+    }
+    for (const r of info.results) {
+      const p = players.get(r.id);
+      if (p) p.lastRoundAccuracy = r.accuracy;
+    }
+    pushRoster();
+    const me = myId ? info.results.find((r) => r.id === myId) : null;
+    if (me) {
+      const pct = Math.round(me.accuracy * 100);
+      if (me.accuracy === 1) log(`PERFECT ${pct}% — signal restored.`, "good");
+      else if (me.accuracy >= 0.6) log(`Close. ${pct}% match.`, "info");
+      else log(`Faint signal. ${pct}% match.`, "bad");
+    }
+  }
+
+  // ── Networking ─────────────────────────────────────────────────────────────
+  function updateStartEnabled(): void {
+    if (!isHost) return;
+    callbacks.onStartEnabled(players.size >= MIN_PLAYERS && phase !== "round");
+  }
+
+  function handleHostMessage(msg: NetMsg, fromId: string): void {
+    switch (msg.t) {
+      case "helloJoin": {
+        if (players.has(fromId)) return;
+        if (players.size >= MAX_PLAYERS) {
+          const c = conns.get(fromId);
+          if (c) {
+            try {
+              c.close();
+            } catch {
+              /* ignore */
+            }
+          }
+          return;
+        }
+        const name = (msg.name || "OPERATIVE").slice(0, 16);
+        players.set(fromId, {
+          id: fromId,
+          name,
+          score: 0,
+          lastRoundAccuracy: null,
+          locked: false,
+        });
+        send(conns.get(fromId), {
+          t: "helloHost",
+          id: hostId ?? "",
+          players: snapPlayers(),
+        });
+        broadcast({ t: "roster", players: snapPlayers() });
+        pushRoster();
+        updateStartEnabled();
+        log(`${name} tuned in.`, "good");
+        break;
+      }
+      case "rename": {
+        const p = players.get(fromId);
+        if (!p) return;
+        p.name = (msg.name || p.name).slice(0, 16);
+        broadcast({ t: "roster", players: snapPlayers() });
+        pushRoster();
+        break;
+      }
+      case "guess": {
+        const p = players.get(fromId);
+        if (!p) return;
+        if (phase !== "round") return;
+        if (msg.locked) {
+          hostGuesses.set(fromId, msg.guess.slice());
+          p.locked = true;
+        } else {
+          hostGuesses.delete(fromId);
+          p.locked = false;
+        }
+        broadcast({ t: "roster", players: snapPlayers() });
+        pushRoster();
+        maybeResolveReveal();
+        break;
+      }
+    }
+  }
+
+  function handleGuestMessage(msg: NetMsg): void {
+    switch (msg.t) {
+      case "helloHost": {
+        hostId = msg.id;
+        players.clear();
+        for (const p of msg.players) players.set(p.id, { ...p });
+        pushRoster();
+        callbacks.onLobbyStatus(`Connected. Awaiting round start.`);
+        break;
+      }
+      case "roster": {
+        players.clear();
+        for (const p of msg.players) players.set(p.id, { ...p });
+        pushRoster();
+        break;
+      }
+      case "roundStart": {
+        const config: RoundConfig = {
+          melodyLength: msg.melodyLength,
+          relayCount: msg.relayCount,
+          maxRelayStrength: msg.maxRelayStrength,
+        };
+        applyRoundSeed(msg.round, msg.seed, config);
+        phase = "round";
+        callbacks.onPhase("round");
+        log(
+          `Round ${msg.round + 1} — ${msg.melodyLength} notes through ${msg.relayCount} relays.`,
+          "info"
+        );
+        break;
+      }
+      case "reveal": {
+        applyReveal(msg.info, msg.scores);
+        break;
+      }
+    }
+  }
+
+  function attachGuestConn(c: DataConnection): void {
+    const pid = c.peer;
+    conns.set(pid, c);
+    c.on("data", (d: unknown) => {
+      if (isNetMsg(d)) handleHostMessage(d, pid);
+    });
+    c.on("close", () => {
+      conns.delete(pid);
+      const p = players.get(pid);
+      if (p) {
+        players.delete(pid);
+        hostGuesses.delete(pid);
+        broadcast({ t: "roster", players: snapPlayers() });
+        pushRoster();
+        updateStartEnabled();
+        log(`${p.name} disconnected.`, "bad");
+      }
+    });
+  }
+
+  function resetNet(): void {
     for (const c of conns.values()) {
       try {
         c.close();
@@ -212,1247 +752,128 @@ export function destroy(): void {
       }
     }
     conns.clear();
-    for (const call of mediaCalls.values()) {
+    if (hostConn) {
       try {
-        call.close();
+        hostConn.close();
       } catch {
         /* ignore */
       }
     }
-    mediaCalls.clear();
-    incomingRawStreams.clear();
-    voicePipelines.clear();
+    hostConn = null;
     if (peer) {
       try {
         peer.destroy();
       } catch {
         /* ignore */
       }
-      peer = null;
     }
-    updateNetDot(false);
+    peer = null;
   }
 
-  function addConn(conn: DataConnection): void {
-    const pid = conn.peer;
-    if (!pid || pid === myId) return;
-    if (conns.has(pid)) return;
-    conns.set(pid, conn);
-
-    conn.on("open", () => {
-      updateNetDot(true);
-      if (gameStarted && players.has(pid)) {
-        if (myId)
-          send(conn, {
-            t: "helloMesh",
-            id: myId,
-            name: $input("name").value.slice(0, 16) || "OPERATIVE",
-          });
-      }
-    });
-
-    conn.on("data", (data: unknown) => {
-      handleData(data, pid);
-    });
-
-    conn.on("close", () => {
-      conns.delete(pid);
-      const p = players.get(pid);
-      if (p) {
-        p.alive = false;
-        p.spectator = true;
-      }
-      renderSidebar();
-    });
-  }
-
-  function send(conn: DataConnection | undefined, msg: unknown): void {
-    if (conn && conn.open) conn.send(msg);
-  }
-
-  function sendTo(id: string | null, msg: unknown): void {
-    if (!id) return;
-    send(conns.get(id), msg);
-  }
-
-  function broadcast(msg: unknown): void {
-    for (const c of conns.values()) send(c, msg);
-  }
-
-  function sendToHost(msg: unknown): void {
-    if (isHost) {
-      if (!myId) return;
-      if (isGameMessage(msg)) {
-        handleHostMessage(msg, myId);
-      }
-      return;
-    }
-    sendTo(hostId, msg);
-  }
-
-  function ensureMesh(): void {
-    if (!peer || !gameStarted) return;
-    if (!myId) return;
-    const ids = [...players.keys()];
-    for (const id of ids) {
-      if (id === myId) continue;
-      if (conns.has(id)) continue;
-      if (myId < id) {
-        const c = peer.connect(id, { reliable: true });
-        addConn(c);
-      }
-    }
-  }
-
-  function setupPeerEvents(p: InstanceType<typeof Peer>): void {
-    p.on("connection", (conn: DataConnection) => {
-      addConn(conn);
-    });
-
-    p.on("call", (call: MediaConnection) => {
-      call.answer(outgoingStream ?? undefined);
-      attachCall(call, call.peer);
-    });
-
-    p.on("error", (err: Error) => {
-      setLobbyStatus("Peer error: " + describePeerError(err));
-      setWarn("Network issue: " + describePeerError(err));
-    });
-  }
-
-  // ── LOBBY FLOW ────────────────────────────────────────────────────────────────
-  function lobbySnapshot() {
-    return [...players.values()].map((p) => ({
-      id: p.id,
-      name: p.name,
-      alive: p.alive !== false,
-    }));
-  }
-
-  function renderLobbyPlayers(): void {
-    const wrap = $("lobby-players");
-    wrap.innerHTML = "";
-    const list = lobbySnapshot();
-    if (!list.length) {
-      wrap.innerHTML = '<div class="lp">No operators connected.</div>';
-      return;
-    }
-    for (const p of list) {
-      const d = document.createElement("div");
-      d.className = "lp";
-      d.textContent = `${p.name}${p.id === myId ? " (you)" : ""}`;
-      wrap.appendChild(d);
-    }
-    if (isHost) {
-      $btn("start-btn").disabled = list.length < 2 || list.length > MAX_PLAYERS;
-    }
-  }
-
-  function syncLobby() {
-    if (!isHost) return;
-    const payload = { t: "lobby", roomCode, hostId, players: lobbySnapshot() };
-    broadcast(payload);
-    renderLobbyPlayers();
-  }
-
-  function hostRoom() {
+  function hostGame(): void {
     resetNet();
     isHost = true;
-    gameStarted = false;
-    localRole = null;
-    pendingRole = null;
-    roomCode = makeCode();
+    phase = "lobby";
+    callbacks.onPhase("lobby");
+    players.clear();
+    hostGuesses.clear();
+    roomCode = makeCode(ROOM_CODE_LENGTH);
     hostId = PEER_PREFIX + roomCode;
-    setLobbyStatus("Opening room...");
-    $("room-wrap").style.display = "flex";
-    $("room-code").textContent = roomCode;
+    callbacks.onRoomCode(roomCode);
+    callbacks.onRoomWrapVisible(true);
+    callbacks.onLobbyStatus("Opening relay station...");
 
     peer = new Peer(hostId);
-    setupPeerEvents(peer);
-
     peer.on("open", (id) => {
       myId = id;
-      const name = ($input("name").value || "OPERATIVE").slice(0, 16);
-      players.clear();
-      rolesById.clear();
-      towers = createDefaultTowers();
-      players.set(myId, {
-        id: myId,
-        name,
-        color: PLAYER_COLORS[0] ?? "#ffb800",
-        x: WARM_X,
-        y: WARM_Y,
-        alive: true,
-        spectator: false,
-      });
-      setLobbyStatus("Room live. Share code and wait for operators.");
-      renderLobbyPlayers();
-      syncLobby();
+      players.set(id, { id, name: myName, score: 0, lastRoundAccuracy: null, locked: false });
+      pushRoster();
+      updateStartEnabled();
+      callbacks.onLobbyStatus("Station live. Share code — solo play supported.");
     });
+    peer.on("connection", (c) => {
+      attachGuestConn(c);
+    });
+    peer.on("error", (e) => callbacks.onLobbyStatus("Host error: " + describePeerError(e)));
   }
 
-  function joinRoom() {
+  function joinGame(code: string): void {
+    if (!code) {
+      callbacks.onLobbyStatus("Enter room code.");
+      return;
+    }
     resetNet();
     isHost = false;
-    gameStarted = false;
-    localRole = null;
-    pendingRole = null;
-    const code = $input("join-code").value.trim().toUpperCase();
-    if (!code) return setLobbyStatus("Enter room code.");
-    roomCode = code;
-    hostId = PEER_PREFIX + code;
-    setLobbyStatus("Connecting to room...");
+    phase = "lobby";
+    callbacks.onPhase("lobby");
+    players.clear();
+    roomCode = code.trim().toUpperCase();
+    callbacks.onLobbyStatus(`Connecting to ${roomCode}...`);
 
     peer = new Peer();
-    setupPeerEvents(peer);
-
     peer.on("open", (id) => {
       myId = id;
-      const currentPeer = peer;
-      const currentHostId = hostId;
-      if (!currentPeer || !currentHostId) return;
-      const c = currentPeer.connect(currentHostId, { reliable: true });
-      addConn(c);
-      c.on("open", () => {
-        send(c, { t: "helloJoin", name: ($input("name").value || "OPERATIVE").slice(0, 16) });
-        setLobbyStatus("Connected. Waiting for host.");
+      const p = peer;
+      if (!p) return;
+      hostConn = p.connect(PEER_PREFIX + roomCode, { reliable: true });
+      hostConn.on("open", () => {
+        send(hostConn, { t: "helloJoin", name: myName });
+        callbacks.onLobbyStatus("Linked. Awaiting round start.");
+      });
+      hostConn.on("data", (d: unknown) => {
+        if (isNetMsg(d)) handleGuestMessage(d);
+      });
+      hostConn.on("close", () => {
+        callbacks.onLobbyStatus("Disconnected from host.");
       });
     });
+    peer.on("error", (e) => callbacks.onLobbyStatus("Join error: " + describePeerError(e)));
   }
 
-  function assignRoles() {
-    const ids = [...players.keys()];
-    const roles = engineAssignRoles(ids);
-    rolesById.clear();
-    for (const [id, role] of roles) {
-      rolesById.set(id, role);
+  function setName(name: string): void {
+    const trimmed = (name || "OPERATIVE").slice(0, 16);
+    myName = trimmed;
+    if (myId) {
+      const me = players.get(myId);
+      if (me) me.name = trimmed;
+      pushRoster();
+    }
+    if (!isHost && hostConn && hostConn.open) {
+      send(hostConn, { t: "rename", name: trimmed });
+    } else if (isHost) {
+      broadcast({ t: "roster", players: snapPlayers() });
     }
   }
 
-  function beginGame() {
-    if (!isHost) return;
-    if (players.size < 2 || players.size > MAX_PLAYERS) return;
-
-    assignRoles();
-    gameStarted = true;
-    voteState = null;
-    endState = null;
-    towers = createDefaultTowers();
-
-    let idx = 0;
-    for (const p of players.values()) {
-      p.color = PLAYER_COLORS[idx % PLAYER_COLORS.length] ?? "#ffb800";
-      p.x = WARM_X + Math.cos(idx * 1.7) * 30;
-      p.y = WARM_Y + Math.sin(idx * 1.7) * 30;
-      p.alive = true;
-      p.spectator = false;
-      idx++;
-    }
-
-    localRole = myId ? (rolesById.get(myId) ?? null) : null;
-    myColor = (myId ? players.get(myId)?.color : undefined) ?? myColor;
-
-    for (const [id] of players) {
-      if (id === myId) continue;
-      sendTo(id, { t: "rolePrivate", role: rolesById.get(id) });
-    }
-
-    const payloadPlayers = [...players.values()].map((p) => ({
-      id: p.id,
-      name: p.name,
-      color: p.color,
-      x: p.x,
-      y: p.y,
-      alive: p.alive,
-      spectator: p.spectator,
-    }));
-
-    broadcast({ t: "start", hostId, players: payloadPlayers, towers });
-    startLocalGame(payloadPlayers, towers);
-  }
-
-  function startLocalGame(seedPlayers: PlayerSnap[], seedTowers: Tower[]): void {
-    $("lobby").style.display = "none";
-    $("game").style.display = "block";
-    towers = seedTowers.map((t: Tower) => ({ ...t }));
-    players.clear();
-    for (const p of seedPlayers)
-      players.set(p.id, {
-        id: p.id,
-        name: p.name ?? "OPERATIVE",
-        color: p.color ?? "#888",
-        x: p.x,
-        y: p.y,
-        alive: p.alive,
-        spectator: p.spectator,
-      });
-    if (myId && !players.has(myId)) {
-      players.set(myId, {
-        id: myId,
-        name: ($input("name").value || "OPERATIVE").slice(0, 16),
-        color: myColor,
-        x: WARM_X,
-        y: WARM_Y,
-        alive: true,
-        spectator: false,
-      });
-    }
-    if (pendingRole) {
-      localRole = pendingRole;
-      pendingRole = null;
-    }
-    $("role-pill").textContent = `ROLE: ${localRole ? localRole.toUpperCase() : "UNKNOWN"}`;
-    $("role-pill").classList.toggle("bad", localRole === "mimic");
-    $("mimic-panel").style.display = localRole === "mimic" ? "block" : "none";
-    $btn("call-vote").disabled = false;
-    $("status-pill").textContent = "TRANSMISSION LIVE";
-
-    ensureMesh();
-    initMicrophone().then(() => beginVoiceCalls());
-
-    renderSidebar();
-    setWarn(micDenied ? "Microphone denied. You can still play without outgoing voice." : "");
-  }
-
-  function handleData(data: unknown, fromId: string): void {
-    if (!isGameMessage(data)) return;
-
-    if (isHost) {
-      handleHostMessage(data, fromId);
-      return;
-    }
-
-    const msg: GameMsg = data;
-
-    switch (msg.t) {
-      case "lobby":
-        {
-          hostId = msg.hostId ?? null;
-          roomCode = msg.roomCode ?? "";
-          players.clear();
-          for (const p of msg.players ?? []) {
-            players.set(p.id, {
-              id: p.id,
-              name: p.name ?? "OPERATIVE",
-              color: "#888",
-              x: WARM_X,
-              y: WARM_Y,
-              alive: p.alive,
-              spectator: false,
-            });
-          }
-          renderLobbyPlayers();
-          setLobbyStatus(`Joined ${roomCode}. Awaiting host start.`);
-        }
-        break;
-      case "rolePrivate":
-        {
-          pendingRole = msg.role ?? null;
-          if (gameStarted) {
-            localRole = pendingRole;
-            pendingRole = null;
-            $("role-pill").textContent = `ROLE: ${localRole ? localRole.toUpperCase() : "UNKNOWN"}`;
-            $("role-pill").classList.toggle("bad", localRole === "mimic");
-            $("mimic-panel").style.display = localRole === "mimic" ? "block" : "none";
-            renderSidebar();
-          }
-        }
-        break;
-      case "start":
-        {
-          gameStarted = true;
-          startLocalGame(msg.players ?? [], msg.towers ?? towers);
-        }
-        break;
-      case "helloMesh":
-        {
-          if (!players.has(fromId)) {
-            players.set(fromId, {
-              id: fromId,
-              name: msg.name ?? "OPERATIVE",
-              color: "#888",
-              x: WARM_X,
-              y: WARM_Y,
-              alive: true,
-              spectator: false,
-            });
-          }
-        }
-        break;
-      case "state":
-        {
-          applyAuthoritativeState(msg);
-        }
-        break;
-      case "towerSync":
-        {
-          towers = (msg.towers ?? []).map((t: Tower) => ({ ...t }));
-          renderSidebar();
-        }
-        break;
-      case "voteStarted":
-        {
-          if (msg.vote) voteState = { ...msg.vote, votes: msg.vote.votes ?? {} };
-          renderVotePanel();
-        }
-        break;
-      case "voteUpdate":
-        {
-          if (!voteState)
-            voteState = { active: true, endsAt: Date.now() + 15000, votes: {}, caller: "" };
-          voteState.votes = msg.votes ?? {};
-          renderVotePanel();
-        }
-        break;
-      case "playerEliminated":
-        {
-          const p = players.get(msg.id ?? "");
-          if (p) {
-            p.alive = false;
-            p.spectator = true;
-            if (msg.id === myId && outgoingStream) {
-              for (const tr of outgoingStream.getAudioTracks()) tr.enabled = false;
-            }
-            renderSidebar();
-          }
-        }
-        break;
-      case "mimicPlayback":
-        {
-          handleMimicPlayback(msg);
-        }
-        break;
-      case "warn":
-        {
-          setWarn(msg.text ?? "");
-        }
-        break;
-      case "gameOver":
-        {
-          showEnd(msg.winner ?? "", msg.roles ?? []);
-        }
-        break;
-    }
-  }
-
-  function handleHostMessage(msg: GameMsg, fromId: string): void {
-    switch (msg.t) {
-      case "helloJoin":
-        {
-          if (gameStarted) {
-            sendTo(fromId, { t: "warn", text: "Match already started." });
-            return;
-          }
-          if (players.size >= MAX_PLAYERS) {
-            sendTo(fromId, { t: "warn", text: "Room is full (max 6)." });
-            return;
-          }
-          const name = (msg.name || "OPERATIVE").slice(0, 16);
-          const idx = players.size;
-          players.set(fromId, {
-            id: fromId,
-            name,
-            color: PLAYER_COLORS[idx % PLAYER_COLORS.length] ?? "#ffb800",
-            x: WARM_X,
-            y: WARM_Y,
-            alive: true,
-            spectator: false,
-          });
-          syncLobby();
-        }
-        break;
-
-      case "updateName":
-        {
-          const p = players.get(fromId);
-          if (p) p.name = (msg.name || p.name).slice(0, 16);
-          syncLobby();
-        }
-        break;
-
-      case "pos":
-        {
-          if (!gameStarted) return;
-          const p = players.get(fromId);
-          if (!p || !p.alive) return;
-          p.x = clamp(msg.x ?? 0, 0, WORLD_W);
-          p.y = clamp(msg.y ?? 0, 0, WORLD_H);
-        }
-        break;
-
-      case "requestVote":
-        {
-          if (!gameStarted || (voteState && voteState.active)) return;
-          const caller = players.get(fromId);
-          if (!caller || !caller.alive) return;
-          if (rolesById.get(fromId) === "mimic") return;
-          voteState = {
-            active: true,
-            endsAt: Date.now() + VOTE_DURATION_MS,
-            votes: {},
-            caller: fromId,
-          };
-          broadcast({ t: "voteStarted", vote: voteState });
-          renderVotePanel();
-        }
-        break;
-
-      case "castVote":
-        {
-          if (!voteState || !voteState.active) return;
-          const voter = players.get(fromId);
-          if (!voter || !voter.alive) return;
-          if (rolesById.get(fromId) === "mimic") return;
-          if (!msg.target || !players.has(msg.target)) return;
-          voteState.votes[fromId] = msg.target;
-          broadcast({ t: "voteUpdate", votes: voteState.votes });
-        }
-        break;
-
-      case "mimicElim":
-        {
-          if (!gameStarted) return;
-          if (rolesById.get(fromId) !== "mimic") return;
-          const now = Date.now();
-          if (now - lastElimAt < ELIM_COOLDOWN_MS) return;
-          const targetId = msg.target;
-          if (!targetId || !players.has(targetId)) return;
-          const target = players.get(targetId);
-          if (!target || !target.alive || rolesById.get(targetId) === "mimic") return;
-          if (!isIsolatedInDark(targetId)) return;
-
-          target.alive = false;
-          target.spectator = true;
-          lastElimAt = now;
-          broadcast({ t: "playerEliminated", id: targetId, reason: "mimic" });
-          checkWinConditions();
-        }
-        break;
-
-      case "mimicPlaybackRequest":
-        {
-          if (!gameStarted) return;
-          if (rolesById.get(fromId) !== "mimic") return;
-          if (!msg.buffer || typeof msg.buffer.byteLength !== "number") return;
-          const now = Date.now();
-          if (now - lastPlaybackAt < PLAYBACK_COOLDOWN_MS) return;
-          const mimic = players.get(fromId);
-          if (!mimic || !mimic.alive) return;
-          lastPlaybackAt = now;
-          const payload: GameMsg = {
-            t: "mimicPlayback",
-            by: fromId,
-            x: mimic.x,
-            y: mimic.y,
-            buffer: msg.buffer,
-          };
-          if (typeof msg.from === "string") payload.from = msg.from;
-          broadcast(payload);
-          handleMimicPlayback(payload);
-        }
-        break;
-    }
-  }
-
-  function applyAuthoritativeState(msg: GameMsg): void {
-    const snapshot = msg.players ?? [];
-    for (const p of snapshot) {
-      if (!players.has(p.id)) {
-        players.set(p.id, {
-          id: p.id,
-          name: p.name ?? "OPERATIVE",
-          color: p.color ?? "#999",
-          x: p.x,
-          y: p.y,
-          alive: p.alive,
-          spectator: p.spectator,
-        });
-      }
-      const local = players.get(p.id);
-      if (!local) continue;
-      if (p.id !== myId) {
-        local.x = p.x;
-        local.y = p.y;
-      }
-      local.alive = p.alive;
-      local.spectator = p.spectator;
-      if (p.name) local.name = p.name;
-      if (p.color) local.color = p.color;
-    }
-    towers = (msg.towers ?? towers).map((t: Tower) => ({ ...t }));
-    if (msg.vote) voteState = msg.vote.active ? msg.vote : null;
-    renderSidebar();
-  }
-
-  // ── AUDIO HELPERS ────────────────────────────────────────────────────────────
-  function ensureAudioContext(): void {
-    if (!audioCtx) {
-      try {
-        audioCtx = new window.AudioContext();
-      } catch {
-        throw new Error("AudioContext not available");
-      }
-      pinkNoiseBuffer = createPinkNoiseBuffer(audioCtx, 2.0);
-    }
-    if (!audioCtx) throw new Error("AudioContext not available");
-    if (audioCtx.state === "suspended") void audioCtx.resume();
-  }
-
-  async function initMicrophone() {
-    ensureAudioContext();
-    micDenied = false;
-    try {
-      micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      outgoingStream = micStream;
-    } catch {
-      micDenied = true;
-      outgoingStream = null;
-      return;
-    }
-    if (localRole === "mimic" && outgoingStream) {
-      for (const tr of outgoingStream.getAudioTracks()) tr.enabled = false;
-    }
-  }
-
-  function createPinkNoiseBuffer(ac: AudioContext, seconds: number): AudioBuffer {
-    const len = Math.floor(ac.sampleRate * seconds);
-    const buffer = ac.createBuffer(1, len, ac.sampleRate);
-    const out = buffer.getChannelData(0);
-    let b0 = 0,
-      b1 = 0,
-      b2 = 0,
-      b3 = 0,
-      b4 = 0,
-      b5 = 0,
-      b6 = 0;
-    for (let i = 0; i < len; i++) {
-      const white = Math.random() * 2 - 1;
-      b0 = 0.99886 * b0 + white * 0.0555179;
-      b1 = 0.99332 * b1 + white * 0.0750759;
-      b2 = 0.969 * b2 + white * 0.153852;
-      b3 = 0.8665 * b3 + white * 0.3104856;
-      b4 = 0.55 * b4 + white * 0.5329522;
-      b5 = -0.7616 * b5 - white * 0.016898;
-      const pink = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
-      b6 = white * 0.115926;
-      out[i] = pink * 0.11;
-    }
-    return buffer;
-  }
-
-  function attachCall(call: MediaConnection, sourceId: string): void {
-    mediaCalls.set(sourceId, call);
-    call.on("stream", (stream: MediaStream) => {
-      incomingRawStreams.set(sourceId, stream);
-      attachVoicePipeline(sourceId, stream);
-      renderMimicPanel();
-    });
-    call.on("close", () => {
-      mediaCalls.delete(sourceId);
-      incomingRawStreams.delete(sourceId);
-      voicePipelines.delete(sourceId);
-      renderMimicPanel();
-    });
-  }
-
-  function beginVoiceCalls(): void {
-    if (!peer || !myId) return;
-    for (const id of players.keys()) {
-      if (id === myId) continue;
-      if (myId < id) {
-        const call = peer.call(id, outgoingStream ?? new MediaStream());
-        if (call) attachCall(call, id);
-      }
-    }
-  }
-
-  function attachVoicePipeline(sourceId: string, stream: MediaStream): void {
-    if (!audioCtx) ensureAudioContext();
-    const ac = audioCtx;
-    if (!ac) return;
-    const source = ac.createMediaStreamSource(stream);
-    const filter = ac.createBiquadFilter();
-    filter.type = "lowpass";
-    filter.frequency.value = VOICE_FREQ_NEAR;
-    const gain = ac.createGain();
-    gain.gain.value = 1.0;
-
-    const noiseSrc = ac.createBufferSource();
-    noiseSrc.buffer = pinkNoiseBuffer;
-    noiseSrc.loop = true;
-    const noiseGain = ac.createGain();
-    noiseGain.gain.value = 0;
-
-    source.connect(filter);
-    filter.connect(gain);
-    gain.connect(ac.destination);
-    noiseSrc.connect(noiseGain);
-    noiseGain.connect(ac.destination);
-    noiseSrc.start();
-
-    voicePipelines.set(sourceId, {
-      filter,
-      gain,
-      noiseGain,
-      wobblePhase: Math.random() * Math.PI * 2,
-    });
-  }
-
-  function applyDistanceNodes(
-    filter: BiquadFilterNode,
-    gain: GainNode,
-    noiseGain: GainNode,
-    d: number,
-    wobbleT: number
-  ): void {
-    let f = VOICE_FREQ_NEAR;
-    let g = 1;
-    let n = 0.01;
-    if (d > 350) {
-      f = VOICE_FREQ_FAR;
-      g = 0.1;
-      n = 0.24;
-      filter.detune.value = 0;
-    } else if (d > 150) {
-      const t = (d - 150) / 200;
-      f = VOICE_FREQ_NEAR + (VOICE_FREQ_MID - VOICE_FREQ_NEAR) * t;
-      g = 1 + (0.5 - 1) * t;
-      n = 0.05 + 0.12 * t;
-      filter.detune.value = Math.sin(wobbleT * 8) * 35;
-    } else {
-      filter.detune.value = 0;
-    }
-    if (!audioCtx) return;
-    filter.frequency.setTargetAtTime(Math.max(120, f), audioCtx.currentTime, 0.08);
-    gain.gain.setTargetAtTime(g, audioCtx.currentTime, 0.08);
-    noiseGain.gain.setTargetAtTime(n, audioCtx.currentTime, 0.1);
-  }
-
-  async function playDecodedBuffer(
-    arrayBuffer: ArrayBuffer,
-    sourcePos: { x: number; y: number }
-  ): Promise<void> {
-    if (!audioCtx) ensureAudioContext();
-    const ac = audioCtx;
-    if (!ac) return;
-    try {
-      const decoded = await ac.decodeAudioData(arrayBuffer.slice(0));
-      const src = ac.createBufferSource();
-      src.buffer = decoded;
-      const filter = ac.createBiquadFilter();
-      filter.type = "lowpass";
-      filter.frequency.value = VOICE_FREQ_NEAR;
-      const gain = ac.createGain();
-      gain.gain.value = 1;
-      const noiseSrc = ac.createBufferSource();
-      noiseSrc.buffer = pinkNoiseBuffer;
-      noiseSrc.loop = true;
-      const noiseGain = ac.createGain();
-      noiseGain.gain.value = 0;
-      src.connect(filter);
-      filter.connect(gain);
-      gain.connect(ac.destination);
-      noiseSrc.connect(noiseGain);
-      noiseGain.connect(ac.destination);
-      const local = myPlayer();
-      if (local) {
-        const d = dist(local.x, local.y, sourcePos.x, sourcePos.y);
-        applyDistanceNodes(filter, gain, noiseGain, d, performance.now() * 0.001);
-      }
-      src.start();
-      noiseSrc.start();
-      src.onended = () => {
-        try {
-          noiseSrc.stop();
-        } catch {
-          /* ignore */
-        }
-      };
-    } catch {
-      /* ignore */
-    }
-  }
-
-  function handleMimicPlayback(msg: GameMsg): void {
-    if (!msg.buffer) return;
-    void playDecodedBuffer(msg.buffer, { x: msg.x ?? 0, y: msg.y ?? 0 });
-  }
-
-  // ── MIMIC CAPTURE + PLAYBACK UI ──────────────────────────────────────────────
-  function renderMimicPanel(): void {
-    if (localRole !== "mimic") return;
-    const captureList = $("capture-list");
-    captureList.innerHTML = "";
-    const candidates = [...players.values()].filter(
-      (p) => p.id !== myId && p.alive && rolesById.get(p.id) !== "mimic"
-    );
-    for (const p of candidates) {
-      const streamReady = incomingRawStreams.has(p.id);
-      const btn = document.createElement("button");
-      btn.className = "mini";
-      btn.textContent = `⏺ CAPTURE ${p.name}${streamReady ? "" : " (no signal yet)"}`;
-      btn.disabled = !streamReady || !!activeCapture;
-      btn.onclick = () => captureSnippet(p.id);
-      captureList.appendChild(btn);
-    }
-    const snippetList = $("snippet-list");
-    snippetList.innerHTML = "";
-    for (let i = 0; i < capturedSnippets.length; i++) {
-      const s = capturedSnippets[i];
-      if (!s) continue;
-      const b = document.createElement("button");
-      b.className = "snippet";
-      b.textContent = `[${s.name}] 3s snippet`;
-      b.disabled = Date.now() - lastPlaybackAt < PLAYBACK_COOLDOWN_MS;
-      b.onclick = () => playSnippet(i);
-      snippetList.appendChild(b);
-    }
-  }
-
-  function captureSnippet(fromId: string): void {
-    const stream = incomingRawStreams.get(fromId);
-    if (!stream || activeCapture) return;
-    const person = players.get(fromId);
-    const mime = MediaRecorder.isTypeSupported(MIME_OPUS_WEBM) ? MIME_OPUS_WEBM : MIME_WEBM;
-    const rec = new MediaRecorder(stream, { mimeType: mime });
-    const chunks: Blob[] = [];
-    activeCapture = rec;
-    renderMimicPanel();
-    rec.ondataavailable = (e) => {
-      if (e.data && e.data.size) chunks.push(e.data);
-    };
-    rec.onstop = async () => {
-      activeCapture = null;
-      const blob = new Blob(chunks, { type: mime });
-      const buffer = await blob.arrayBuffer();
-      capturedSnippets.push({
-        fromId,
-        name: person && person.name ? person.name : "OPERATIVE",
-        buffer,
-      });
-      renderMimicPanel();
-    };
-    rec.start();
-    setTimeout(() => {
-      if (rec.state !== "inactive") rec.stop();
-    }, SNIPPET_DURATION_MS);
-  }
-
-  function playSnippet(index: number): void {
-    const me = myPlayer();
-    if (!me) return;
-    if (Date.now() - lastPlaybackAt < PLAYBACK_COOLDOWN_MS) return;
-    const snippet = capturedSnippets[index];
-    if (!snippet) return;
-    lastPlaybackAt = Date.now();
-    sendToHost({
-      t: "mimicPlaybackRequest",
-      from: snippet.fromId,
-      x: me.x,
-      y: me.y,
-      buffer: snippet.buffer,
-    });
-    renderMimicPanel();
-  }
-
-  // ── GAME RULES ────────────────────────────────────────────────────────────────
-  function isIsolatedInDark(targetId: string): boolean {
-    return engineIsIsolated(targetId, players, rolesById, towers);
-  }
-
-  function updateHostSimulation(now: number): void {
-    const dt = Math.min(0.25, (now - lastHostSimTime) / 1000);
-    lastHostSimTime = now;
-    engineUpdateTowers(towers, players, rolesById, dt);
-    if (voteState && voteState.active && Date.now() >= voteState.endsAt) resolveVote();
-    if (now - lastTowerBroadcast > 1000) {
-      lastTowerBroadcast = now;
-      broadcast({ t: "towerSync", towers });
-    }
-    if (now - lastStateBroadcast > 100) {
-      lastStateBroadcast = now;
-      const snapshot = [...players.values()].map((p) => ({
-        id: p.id,
-        name: p.name,
-        color: p.color,
-        x: p.x,
-        y: p.y,
-        alive: p.alive,
-        spectator: p.spectator,
-      }));
-      const vote =
-        voteState && voteState.active
-          ? { active: true, endsAt: voteState.endsAt, votes: voteState.votes || {} }
-          : null;
-      broadcast({ t: "state", players: snapshot, towers, vote });
-    }
-    checkWinConditions();
-  }
-
-  function resolveVote() {
-    if (!voteState || !voteState.active) return;
-    const result = engineResolveVote(voteState, players, rolesById);
-    if (!result.tie && result.eliminated) {
-      const p = players.get(result.eliminated);
-      if (p) {
-        p.alive = false;
-        p.spectator = true;
-        broadcast({
-          t: "playerEliminated",
-          id: result.eliminated,
-          reason: result.correct ? "vote-correct" : "vote-wrong",
-        });
-        if (result.correct) {
-          endMatch("researchers");
-        }
-      }
-    }
-    voteState = null;
-    renderVotePanel();
-  }
-
-  function checkWinConditions() {
-    if (endState) return;
-    const winner = engineCheckWin(players, rolesById, towers);
-    if (winner) endMatch(winner);
-  }
-
-  function endMatch(winner: string): void {
-    if (endState) return;
-    endState = { winner };
-    const roles = [...players.values()].map((p) => ({
-      id: p.id,
-      name: p.name,
-      role: rolesById.get(p.id) ?? (p.id === myId ? localRole : "unknown"),
-    }));
-    broadcast({ t: "gameOver", winner, roles });
-    showEnd(winner, roles);
-  }
-
-  function showEnd(
-    winner: string,
-    roles: Array<{ id: string; name: string; role?: string | null }>
-  ): void {
-    $("status-pill").textContent = "TRANSMISSION LOST";
-    const validRoles = new Set<string>(["researchers", "mimic"]);
-    const isValidRole = (w: string): w is "researchers" | "mimic" => validRoles.has(w);
-    const winnerRole: "researchers" | "mimic" = isValidRole(winner) ? winner : "mimic";
-    endStateStore.set({
-      winner: winnerRole,
-      roles: roles.map((r) => ({ name: r.name, role: String(r.role ?? "").toUpperCase() })),
-    });
-  }
-
-  // ── RENDERING ────────────────────────────────────────────────────────────────
-  function resizeCanvas() {
-    const rect = canvas.getBoundingClientRect();
-    const w = Math.max(200, Math.floor(rect.width));
-    const h = Math.max(200, Math.floor(rect.height));
-    if (canvas.width !== w || canvas.height !== h) {
-      canvas.width = w;
-      canvas.height = h;
-    }
-  }
-
-  function worldToCanvas(x: number, y: number): { x: number; y: number; s: number } {
-    const s = Math.min(canvas.width / WORLD_W, canvas.height / WORLD_H);
-    const ox = (canvas.width - WORLD_W * s) * 0.5;
-    const oy = (canvas.height - WORLD_H * s) * 0.5;
-    return { x: ox + x * s, y: oy + y * s, s };
-  }
-
-  function drawMap(now: number): void {
-    resizeCanvas();
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#050810";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    const warm = worldToCanvas(WARM_X, WARM_Y);
-    const s = warm.s;
-    const warmGrad = ctx.createRadialGradient(warm.x, warm.y, 20 * s, warm.x, warm.y, WARM_R * s);
-    warmGrad.addColorStop(0, "rgba(255,184,0,0.42)");
-    warmGrad.addColorStop(1, "rgba(255,184,0,0)");
-    ctx.fillStyle = warmGrad;
-    ctx.beginPath();
-    ctx.arc(warm.x, warm.y, WARM_R * s, 0, Math.PI * 2);
-    ctx.fill();
-
-    for (const t of towers) {
-      const p = worldToCanvas(t.x, t.y);
-      const ratio = Math.max(0, Math.min(1, t.progress / TOWER_REQUIRED));
-      const litR = (70 + ratio * 170) * s;
-      const g = ctx.createRadialGradient(p.x, p.y, 8 * s, p.x, p.y, litR);
-      g.addColorStop(0, `rgba(120,255,220,${0.24 + ratio * 0.2})`);
-      g.addColorStop(1, "rgba(120,255,220,0)");
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, litR, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.strokeStyle = "#8fb3c0";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(p.x, p.y - 12 * s);
-      ctx.lineTo(p.x - 10 * s, p.y + 9 * s);
-      ctx.lineTo(p.x + 10 * s, p.y + 9 * s);
-      ctx.closePath();
-      ctx.stroke();
-
-      const barW = 74 * s;
-      const barH = 8 * s;
-      const bx = p.x - barW / 2;
-      const by = p.y - 28 * s;
-      ctx.fillStyle = "rgba(12,12,12,.8)";
-      ctx.fillRect(bx, by, barW, barH);
-      ctx.strokeStyle = "#4f4a38";
-      ctx.strokeRect(bx, by, barW, barH);
-      ctx.fillStyle = ratio >= 1 ? "#44ff88" : "#ffb800";
-      ctx.fillRect(bx + 1, by + 1, (barW - 2) * ratio, barH - 2);
-    }
-
-    ctx.fillStyle = "rgba(0,0,0,0.70)";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.globalCompositeOperation = "destination-out";
-
-    const warmCut = ctx.createRadialGradient(warm.x, warm.y, 30 * s, warm.x, warm.y, 220 * s);
-    warmCut.addColorStop(0, "rgba(255,255,255,0.95)");
-    warmCut.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.fillStyle = warmCut;
-    ctx.beginPath();
-    ctx.arc(warm.x, warm.y, 220 * s, 0, Math.PI * 2);
-    ctx.fill();
-
-    for (const t of towers) {
-      const p = worldToCanvas(t.x, t.y);
-      const ratio = Math.max(0, Math.min(1, t.progress / TOWER_REQUIRED));
-      if (ratio <= 0) continue;
-      const cut = ctx.createRadialGradient(p.x, p.y, 20 * s, p.x, p.y, (70 + ratio * 170) * s);
-      cut.addColorStop(0, "rgba(255,255,255,0.9)");
-      cut.addColorStop(1, "rgba(255,255,255,0)");
-      ctx.fillStyle = cut;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, (70 + ratio * 170) * s, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalCompositeOperation = "source-over";
-
-    for (const p of players.values()) {
-      const cp = worldToCanvas(p.x, p.y);
-      const isMe = p.id === myId;
-      const alive = p.alive;
-      ctx.beginPath();
-      ctx.fillStyle = alive ? p.color || "#ddd" : "#6d6659";
-      ctx.arc(cp.x, cp.y, 10 * s, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = isMe ? "#ffffffcc" : "#00000088";
-      ctx.lineWidth = 2;
-      ctx.stroke();
-      ctx.font = `${Math.max(10, Math.floor(12 * s))}px JetBrains Mono`;
-      ctx.textAlign = "center";
-      ctx.fillStyle = isMe ? "#ffdf89" : "#d8ccb0";
-      ctx.fillText(`${p.name}${isMe ? " (you)" : ""}`, cp.x, cp.y - 14 * s);
-    }
-
-    if (voteState && voteState.active) {
-      const remain = Math.max(0, Math.ceil((voteState.endsAt - Date.now()) / 1000));
-      ctx.fillStyle = "rgba(0,0,0,.65)";
-      ctx.fillRect(canvas.width / 2 - 110, 10, 220, 28);
-      ctx.strokeStyle = "#52472c";
-      ctx.strokeRect(canvas.width / 2 - 110, 10, 220, 28);
-      ctx.fillStyle = "#ffb800";
-      ctx.font = "12px JetBrains Mono";
-      ctx.textAlign = "center";
-      ctx.fillText(`VOTE ACTIVE: ${remain}s`, canvas.width / 2, 28);
-    }
-
-    if (localRole === "mimic") {
-      const e = Math.max(0, Math.ceil((lastElimAt + ELIM_COOLDOWN_MS - Date.now()) / 1000));
-      $("cooldown-pill").textContent = e > 0 ? `ELIM: ${e}s` : "ELIM: READY";
-    } else {
-      $("cooldown-pill").textContent = "ELIM: N/A";
-    }
-
+  function destroy(): void {
+    resetNet();
     if (audioCtx) {
-      const me = myPlayer();
-      if (me) {
-        const t = now * 0.001;
-        for (const [sourceId, pipe] of voicePipelines.entries()) {
-          const srcPlayer = players.get(sourceId);
-          if (!srcPlayer) continue;
-          const d = dist(me.x, me.y, srcPlayer.x, srcPlayer.y);
-          applyDistanceNodes(pipe.filter, pipe.gain, pipe.noiseGain, d, t + pipe.wobblePhase);
-        }
+      try {
+        void audioCtx.close();
+      } catch {
+        /* ignore */
       }
+      audioCtx = null;
     }
   }
 
-  function renderSidebar() {
-    const ul = $("players");
-    ul.innerHTML = "";
-    for (const p of players.values()) {
-      const li = document.createElement("li");
-      li.className = `${p.id === myId ? "you" : ""} ${p.alive ? "" : "dead"}`;
-      li.textContent = `${p.name}${p.id === myId ? " (you)" : ""}`;
-      ul.appendChild(li);
-    }
+  // Initial state callbacks.
+  callbacks.onPhase("lobby");
+  callbacks.onPreviewRemaining(previewRemaining);
+  pushRoster();
 
-    const tWrap = $("towers");
-    tWrap.innerHTML = "";
-    for (const t of towers) {
-      const ratio = Math.max(0, Math.min(1, t.progress / TOWER_REQUIRED));
-      const row = document.createElement("div");
-      row.className = "tower-row";
-      row.innerHTML = `
-        <div>Tower ${t.id} ${Math.round(ratio * 100)}%</div>
-        <div class="bar"><div class="fill ${ratio >= 1 ? "done" : ""}" style="width:${(ratio * 100).toFixed(1)}%"></div></div>
-      `;
-      tWrap.appendChild(row);
-    }
-
-    renderVotePanel();
-    renderMimicPanel();
-  }
-
-  function renderVotePanel(): void {
-    const show = !!(voteState && voteState.active);
-    $("vote-box").style.display = show ? "block" : "none";
-    if (!show || !voteState) return;
-    const vs = voteState;
-    const remain = Math.max(0, Math.ceil((vs.endsAt - Date.now()) / 1000));
-    $("vote-timer").textContent = `Time left: ${remain}s`;
-    const list = $("vote-list");
-    list.innerHTML = "";
-    const me = myPlayer();
-    const canVote = me && me.alive && localRole === "researcher";
-    const voted = vs.votes && myId ? vs.votes[myId] : undefined;
-    for (const p of players.values()) {
-      if (!p.alive) continue;
-      const b = document.createElement("button");
-      b.textContent = voted === p.id ? `✓ ${p.name}` : p.name;
-      b.disabled = !canVote;
-      b.onclick = () => sendToHost({ t: "castVote", target: p.id });
-      list.appendChild(b);
-    }
-  }
-
-  // ── UTILS ────────────────────────────────────────────────────────────────────
-  // clamp & dist imported from dead-air-engine
-
-  // ── MAIN LOOP ────────────────────────────────────────────────────────────────
-  let lastFrame = performance.now();
-  function loop(now: number): void {
-    const dt = Math.min(0.06, (now - lastFrame) / 1000);
-    lastFrame = now;
-
-    if (gameStarted && !endState) {
-      const me = myPlayer();
-      if (me && me.alive && !me.spectator) {
-        let dx = 0;
-        let dy = 0;
-        if (keys.has("KeyW") || keys.has("ArrowUp")) dy -= 1;
-        if (keys.has("KeyS") || keys.has("ArrowDown")) dy += 1;
-        if (keys.has("KeyA") || keys.has("ArrowLeft")) dx -= 1;
-        if (keys.has("KeyD") || keys.has("ArrowRight")) dx += 1;
-        if (dx || dy) {
-          const l = Math.hypot(dx, dy) || 1;
-          me.x = clamp(me.x + (dx / l) * PLAYER_SPEED * dt, 0, WORLD_W);
-          me.y = clamp(me.y + (dy / l) * PLAYER_SPEED * dt, 0, WORLD_H);
-        }
-      }
-      if (isHost) updateHostSimulation(now);
-      if (now - lastPositionSend > 100) {
-        lastPositionSend = now;
-        const p = myPlayer();
-        if (p) sendToHost({ t: "pos", x: p.x, y: p.y });
-      }
-    }
-
-    drawMap(now);
-    _raf = requestAnimationFrame(loop);
-  }
-
-  // ── EVENTS ───────────────────────────────────────────────────────────────────
-  $("host-btn").addEventListener("click", hostRoom);
-  $("join-btn").addEventListener("click", joinRoom);
-  $("start-btn").addEventListener("click", beginGame);
-
-  let _copyStatusTimer: ReturnType<typeof setTimeout> | null = null;
-  function flashCopyStatus(msg: string): void {
-    const el = $("copy-status");
-    el.textContent = msg;
-    if (_copyStatusTimer !== null) clearTimeout(_copyStatusTimer);
-    _copyStatusTimer = setTimeout(() => {
-      el.textContent = "";
-    }, 1600);
-  }
-  $("copy-code-btn").addEventListener("click", () => {
-    if (!roomCode) return;
-    void copyToClipboard(roomCode).then((ok) => {
-      flashCopyStatus(ok ? `Copied ${roomCode}` : "Copy failed");
-    });
-  });
-  $("copy-link-btn").addEventListener("click", () => {
-    if (!roomCode) return;
-    void copyToClipboard(buildRoomShareUrl(roomCode)).then((ok) => {
-      flashCopyStatus(ok ? "Copied invite link" : "Copy failed");
-    });
-  });
-
-  $("name").addEventListener("change", () => {
-    const name = ($input("name").value || "OPERATIVE").slice(0, 16);
-    $input("name").value = name;
-    const me = myId ? players.get(myId) : undefined;
-    if (me) me.name = name;
-    if (isHost) syncLobby();
-    else sendToHost({ t: "updateName", name });
-    renderLobbyPlayers();
-    renderSidebar();
-  });
-
-  $("call-vote").addEventListener("click", () => {
-    const me = myPlayer();
-    if (!me || !me.alive || localRole !== "researcher") return;
-    sendToHost({ t: "requestVote" });
-  });
-
-  $("elim-btn").addEventListener("click", () => {
-    if (localRole !== "mimic") return;
-    const targets = [...players.values()].filter((p) => p.id !== myId && p.alive);
-    if (!targets.length) return;
-    const selected = targets.find((p) => (isHost ? isIsolatedInDark(p.id) : true)) ?? targets[0];
-    if (selected) sendToHost({ t: "mimicElim", target: selected.id });
-  });
-
-  const _keydown = (e: KeyboardEvent) => {
-    if (
-      ["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowLeft", "ArrowDown", "ArrowRight"].includes(
-        e.code
-      )
-    ) {
-      keys.add(e.code);
-      e.preventDefault();
-    }
+  return {
+    hostGame,
+    joinGame,
+    setName,
+    startRound,
+    playDistorted,
+    playCleanPreview,
+    previewNote,
+    setGuessNote,
+    lockAnswer,
+    unlockAnswer,
+    nextRound,
+    destroy,
   };
-  const _keyup = (e: KeyboardEvent) => {
-    keys.delete(e.code);
-  };
-  window.addEventListener("keydown", _keydown);
-  window.addEventListener("keyup", _keyup);
-  window.addEventListener("resize", resizeCanvas);
-
-  _cleanupListeners = () => {
-    window.removeEventListener("keydown", _keydown);
-    window.removeEventListener("keyup", _keyup);
-    window.removeEventListener("resize", resizeCanvas);
-  };
-
-  renderLobbyPlayers();
-  _raf = requestAnimationFrame(loop);
-
-  const autoJoinCode = readRoomCodeFromUrl();
-  if (autoJoinCode) {
-    $input("join-code").value = autoJoinCode;
-    clearRoomCodeFromUrl();
-    joinRoom();
-  }
-})();
+}

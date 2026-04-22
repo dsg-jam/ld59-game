@@ -42,7 +42,7 @@ export const games: GameEntry[] = [
     title: "Dead Air",
     tag: "Multiplayer",
     path: "/games/dead-air",
-    description: "Voice-and-signal social deduction in a haunted facility.",
+    description: "Telephone puzzle — reconstruct a melody after it passes through noisy relays.",
   },
   {
     id: "signal-surge",
