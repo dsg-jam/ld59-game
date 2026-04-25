@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@threlte/core": "^8.5.9",
-    "@threlte/extras": "^9.14.8",
+    "@threlte/extras": "^9.14.9",
     "normalize.css": "^8.0.1",
     "peerjs": "^1.5.4",
     "three": "^0.184.0",
