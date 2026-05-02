@@ -14,7 +14,7 @@
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
   },
   "dependencies": {
-    "@threlte/core": "^8.5.9",
+    "@threlte/core": "^8.5.11",
     "@threlte/extras": "^9.14.8",
     "normalize.css": "^8.0.1",
     "peerjs": "^1.5.4",
